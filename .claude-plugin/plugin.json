@@ -1,0 +1,12 @@
+{
+  "name": "yamabiyori",
+  "displayName": "ヤマビヨリ",
+  "description": "MSM/ECMWFに基づく14日先までの登山特化型天気予報ツール。全国75座を横断比較する探索モード、1座を標高別に深掘りする診断モード、GPX登山計画書に沿ったルート診断を提供する。",
+  "version": "1.0.0",
+  "author": {
+    "name": "takemaru",
+    "email": "takemaru@takemaru.com"
+  },
+  "license": "MIT",
+  "keywords": ["weather", "mountain", "hiking", "climbing", "japan", "forecast", "登山", "天気"]
+}

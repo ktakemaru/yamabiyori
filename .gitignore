@@ -1,0 +1,28 @@
+# --- Python ---
+__pycache__/
+*.pyc
+venv/
+
+# --- Secrets / local config (none required today, but reserved for the future) ---
+.env
+.env.*
+*.local
+
+# --- Runtime-generated data (regenerable via the scripts; not meant to be published) ---
+cache/
+screenshots/
+maps/
+
+# --- Dev/debug scratch output (stale runs, not part of the product) ---
+detail_test.txt
+tsukuba_detail.txt
+mvp_output_new.txt
+mvp_output_new2.txt
+mvp_weekend.txt
+mvp_weekend2.txt
+mvp_weekend3.txt
+_baseline_*.txt
+
+# --- OS/editor cruft ---
+.DS_Store
+Thumbs.db

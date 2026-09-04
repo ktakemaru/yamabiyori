@@ -1,0 +1,15 @@
+{
+  "name": "yamabiyori-marketplace",
+  "description": "ヤマビヨリ(登山特化型天気予報ツール)のプライベートマーケットプレイス。",
+  "owner": {
+    "name": "takemaru",
+    "email": "takemaru@takemaru.com"
+  },
+  "plugins": [
+    {
+      "name": "yamabiyori",
+      "source": "./",
+      "description": "MSM/ECMWFに基づく14日先までの登山特化型天気予報ツール(探索モード・診断モード・GPXルート診断)。"
+    }
+  ]
+}
