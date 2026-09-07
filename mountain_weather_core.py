@@ -120,6 +120,7 @@ MOUNTAINS = [
     {"name": "高尾山",       "lat": 35.6253, "lon": 139.2436, "elevation_m": 599, "access": "ロープウェイ/ゴンドラ", "region": "関東甲信"},
     {"name": "陣馬山",       "lat": 35.6522, "lon": 139.1667, "elevation_m": 855, "access": "登山", "region": "関東甲信"},
     {"name": "御岳山",       "lat": 35.7829, "lon": 139.1495, "elevation_m": 929, "access": "ロープウェイ/ゴンドラ", "region": "関東甲信"},
+    {"name": "棒ノ折山(棒ノ嶺)", "lat": 35.85861, "lon": 139.15500, "elevation_m": 969, "access": "登山", "region": "関東甲信"},
     {"name": "笠取山",       "lat": 35.8653, "lon": 138.8197, "elevation_m": 1953, "access": "登山", "region": "関東甲信"},
     {"name": "燧ヶ岳",       "lat": 36.9758, "lon": 139.2864, "elevation_m": 2356, "access": "登山", "region": "関東甲信"},
     {"name": "至仏山",       "lat": 36.9269, "lon": 139.1875, "elevation_m": 2228, "access": "登山", "region": "関東甲信"},
@@ -301,11 +302,16 @@ def wind_penalty(speed_ms) -> float:
 WIND_PEAK_WARNING_MS = 15.0
 
 
-def cloud_penalty(ridge_cloud_pct) -> float:
-    """Cloud cover *at* the ridge band itself (not a "look up from below"
-    composite) -- i.e. are you actually standing in cloud/fog up there.
-    Used directly as the 0-100 penalty."""
-    return ridge_cloud_pct if ridge_cloud_pct is not None else 0.0
+def cloud_penalty(cloud_pct) -> float:
+    """Cloud cover *at* the mountain's own altitude band (not a "look up
+    from below" composite) -- i.e. are you actually standing in cloud/fog
+    up there. Used directly as the 0-100 penalty.
+
+    Caller passes the worse of the ridge-dwell window and the PM descent
+    window (2026-09 widening, see mountain_climb_score's docstring) so an
+    afternoon cloud-up doesn't go unscored just because the ridge window
+    itself was clear."""
+    return cloud_pct if cloud_pct is not None else 0.0
 
 
 def visibility_penalty(ridge_visibility_m) -> float:
@@ -324,27 +330,46 @@ def visibility_penalty(ridge_visibility_m) -> float:
     return min(100.0, 70 + (100 - ridge_visibility_m) / 100 * 30)
 
 
-def precip_penalty(prob, mm) -> float:
-    """Blends probability with intensity so a high-probability drizzle and a
-    lower-probability downpour aren't scored the same. mm is the AM-window
-    average precip rate; 5mm/h+ is treated as already at max penalty for the
-    intensity half."""
-    prob = prob or 0.0
+def precip_penalty(wet_pct, mm) -> float:
+    """Takes the *worse* of wet_pct and intensity, not a blend.
+
+    wet_pct (2026-09 widened, second pass): no longer a single hour's
+    probability -- see mountain_climb_score's docstring -- but the
+    percentage of the day's activity-window HOURS that are "wet"
+    (window_scores_by_day()'s/compute_day_scores()'s wet_fraction_pct). A
+    day that's rainy for most of the window (終日雨) scores high here even
+    if no single hour hit 100%; a single passing-shower hour among many dry
+    ones (通り雨) scores low even if that one hour's probability spiked,
+    matching how a climber actually experiences "was today wet" (confirmed
+    against real hiking reports for 槍ヶ岳9/5 and 立山9/5 -- both had one
+    isolated high-probability hour and were reported as good days; the
+    older peak-based version scored them down as if the rain had been
+    sustained). Originally (first pass, 唐松岳9/6) this was itself a single
+    hourly probability, worst-of-AM/PM; a persistent 90% chance of light
+    rain was already bad enough to matter even with low accumulation (that
+    day: ~1mm/day total, but the old 50/50-blended formula gave only
+    ~45/100, letting a genuinely wet, dangerous descent score as "fine") --
+    the max(wet_pct, intensity) combination below still captures that same
+    case now that wet_pct is duration-based instead of a single probability.
+    mm is the activity window's PEAK precip rate (mm/h); 5mm/h+ is treated
+    as already at max penalty for the intensity side."""
+    wet_pct = wet_pct or 0.0
     mm = mm or 0.0
-    return min(100.0, prob * 0.5 + min(mm / 5.0, 1.0) * 50)
+    return max(wet_pct, min(mm / 5.0, 1.0) * 100.0)
 
 
-def wet_chill_adjustment_c(precip_prob, precip_mm) -> float:
+def wet_chill_adjustment_c(precip_wet_pct, precip_mm) -> float:
     """Extra degrees to subtract from wind-chill before temp_penalty(),
-    when AM-window precipitation is both likely and non-trivial.
+    when the activity window's precipitation is both widespread and
+    non-trivial (precip_wet_pct/precip_mm, see precip_penalty's docstring).
     Hypothermia progresses fastest under a low-temp + wind + WET
     combination, but wind_chill_c() only models the dry (still-air-
     adjusted) component -- this is a deliberately simple single-step
     correction (not a continuous ramp) rather than a second full scoring
     axis; threshold and magnitude are a judgment call, easy to retune."""
-    prob = precip_prob or 0.0
+    wet_pct = precip_wet_pct or 0.0
     mm = precip_mm or 0.0
-    if prob >= 50.0 and mm >= 0.5:
+    if wet_pct >= 50.0 and mm >= 0.5:
         return -3.0
     return 0.0
 
@@ -364,41 +389,152 @@ def temp_penalty(chill_c) -> float:
     return 100.0
 
 
-# Weights: thunderstorm and wind are the two hazards that actually turn a
-# hike into an emergency, so they carry the most weight. Ridge cloud cover
-# and ridge visibility both cover view/whiteout risk and correlate
-# strongly, so their combined budget is unchanged from the old cloud-only
-# 20% -- just split 12/8 between them, since visibility is the more direct
-# whiteout signal but cloud% still catches band-level cloud cover
-# visibility itself doesn't measure. Precip and wind-chill unchanged.
-SCORE_WEIGHTS = {"thunder": 0.30, "wind": 0.25, "cloud": 0.12, "visibility": 0.08,
-                  "precip": 0.15, "temp": 0.10}
+# Weights (2026-09 redesign, third pass -- now exponents of a weighted
+# geometric mean, not a weighted sum): thunderstorm, wind, and
+# wind-chill/hypothermia used to carry weight in an additive blend here, but
+# a user incident (唐松岳 9/6: dry/calm morning and ridge window, score 100,
+# while rain and strong wind hit the actual descent) and the resulting
+# design discussion converged on a different split of responsibilities
+# instead of just re-tuning numbers:
+#   - This score now covers only "is the view/climb itself pleasant and dry"
+#     -- cloud, visibility, precip. It answers "should I go" for what the
+#     user explicitly wants the ranking based on: "seeing blue sky up there
+#     is the best case" (登山者目線では青空が見えるのが最高), which is an AND
+#     of all three, not a diluted average of them -- see
+#     mountain_climb_score's docstring for why that pushed the aggregation
+#     itself from a weighted sum to a weighted geometric mean.
+#   - Thunderstorm risk, wind, and cold/hypothermia are all threshold
+#     hazards, not everyday-comfort ones -- they're fine right up until
+#     they're suddenly not. Blending any of them into one number let a day
+#     with real danger hide behind otherwise-good conditions (exactly what
+#     happened 9/6), and the opposite failure mode too (a merely-cloudy day
+#     scoring lower than its actual danger level warranted). All three are
+#     now surfaced as their own explicit warning (see hazard_level()/
+#     mountain_hazards() below) that can't be diluted into a passing score.
+#   - Equal thirds (1/3 each) was the deliberate starting point, not a fitted
+#     value -- cloud/visibility/precip correlate as weather but represent
+#     distinct climber experiences (in-cloud / can't-see-far / getting-wet),
+#     and there wasn't a strong enough reason to weight one over another
+#     without real-day validation first.
+#   - **Retuned to precip 50% / cloud 25% / visibility 25% (2026-09, after
+#     real-day validation)**: re-testing the equal-thirds version against
+#     唐松岳9/6 (the incident that motivated this whole redesign, now scored
+#     with the duration-based precip_wet_pct -- see precip_penalty's
+#     docstring) still gave 81.1 -- technically a "go" above
+#     mvp.py's MIN_SCORE_THRESHOLD=80, despite the user's judgment that a day
+#     with 5 of 14 activity-window hours crossing 50% ground precip
+#     probability (ramping to 90% by evening) shouldn't score as a green
+#     light. Cloud (11%) and visibility (913m, barely over the whiteout
+#     threshold) happened to look good enough that equal weighting couldn't
+#     sink the geometric mean far enough on precip alone. Raising precip to
+#     50% is a direct response to that verified gap, not a theoretical
+#     preference -- see the "既知の精度傾向" / TODO sections of SKILL.md for
+#     the before/after scores this produced on 唐松岳9/6, 立山9/5, 槍ヶ岳9/5.
+# thunder_penalty/wind_penalty/temp_penalty (below) are unchanged and still
+# used -- just to build that separate warning now, not to weight this score.
+SCORE_WEIGHTS = {"cloud": 0.25, "visibility": 0.25, "precip": 0.50}
 
 
-def mountain_climb_score(*, ridge_wind_ms, ridge_cloud_pct, ridge_visibility_m, chill_c,
-                          am_precip_prob, am_precip_mm, pm_cape) -> float:
-    """Climbing-oriented score: 100 minus a weighted blend of thunderstorm
-    risk (PM CAPE), ridge wind, ridge cloud cover, ridge visibility, AM
-    precipitation, and ridge wind-chill (wet-adjusted -- see
-    wet_chill_adjustment_c). See SCORE_WEIGHTS and the penalty_* functions
-    above.
+def mountain_climb_score(*, cloud_pct, ridge_visibility_m, precip_wet_pct, precip_mm) -> float:
+    """Climbing-oriented score: a weighted GEOMETRIC mean (not a weighted
+    sum) of three "satisfaction" factors -- 1 minus each of cloud cover,
+    ridge visibility, and precipitation's 0-100 penalty, rescaled to 0-1 --
+    raised to SCORE_WEIGHTS' exponents and multiplied together, then scaled
+    back to 0-100. See SCORE_WEIGHTS and the penalty_* functions above.
+    Thunderstorm (CAPE), wind, and wind-chill/hypothermia risk are
+    deliberately NOT inputs here -- see SCORE_WEIGHTS' comment for why --
+    call mountain_hazards() alongside this for those three.
+
+    Geometric, not arithmetic (2026-09, third pass): the user's framing --
+    "登山者目線では、その場に行って青空が見えるのが最高" (seeing blue sky up
+    there is the peak experience) -- describes an AND of clear/visible/dry,
+    not conditions that trade off against each other. A weighted SUM lets a
+    great score on one axis buy back a bad score on another (exactly the
+    dilution problem this whole redesign has been chasing: thunder/wind
+    hiding behind good cloud/precip on 唐松岳 9/6, then precip's own
+    probability/intensity averaging hiding a bad half). A plain PRODUCT of
+    the three factors was tried first and rejected as too harsh (three
+    80%-satisfaction axes multiply to ~51%, punishing a merely-good day as
+    if it were bad); a weighted geometric mean fixes that -- since the
+    weights sum to 1, three equal 80%-satisfaction axes still average out to
+    80%, while one genuinely bad axis (near 0) still pulls the whole score
+    toward 0 the way a raw product does. Satisfaction is clamped to >=0
+    before exponentiation so a Python float's `0.0 ** (positive exponent)`
+    (which is well-defined, unlike `0 ** 0` or negative bases) is the only
+    edge case reached.
+
+    cloud_pct (2026-09 widened): the worse of the ridge-dwell window and the
+    PM descent window, not the ridge window alone. Confirmed against a real
+    incident (2026-09, 唐松岳 9/6): a morning that's completely dry and clear
+    can still score ~100 while rain moves in through the early afternoon,
+    because the PM window previously fed only CAPE into the score. Callers
+    (mvp.py's main(), detail.py's compute_day_scores()) take max(ridge_value,
+    pm_value) for cloud before calling this, so a bad PM cloud-up can no
+    longer be invisible to the score.
+
+    precip_wet_pct/precip_mm (2026-09, second pass -- see precip_penalty's
+    docstring): precip_wet_pct is no longer a single window's probability
+    either; it's the percentage of the whole activity window's HOURS that
+    are wet, and precip_mm is that window's peak hourly rate. Both already
+    span climb-through-typical-descent in one window (see
+    window_scores_by_day()'s "activity" / compute_day_scores()'s
+    activity_by_day), so there's no separate AM/PM max to take for precip
+    the way cloud still needs above.
 
     Takes plain scalars (not a windows/elevation structure) so the exact
     same function serves both mvp.py (fixed 1000/2000/3000m bands shared
     across all 75 mountains) and detail.py (the selected mountain's own
     exact pressure level) -- only how each script *derives* these inputs
     differs; the scoring itself is shared here."""
-    wet_chill_c = None if chill_c is None else chill_c + wet_chill_adjustment_c(am_precip_prob, am_precip_mm)
-    penalties = {
-        "thunder": thunder_penalty(pm_cape),
-        "wind": wind_penalty(ridge_wind_ms),
-        "cloud": cloud_penalty(ridge_cloud_pct),
-        "visibility": visibility_penalty(ridge_visibility_m),
-        "precip": precip_penalty(am_precip_prob, am_precip_mm),
-        "temp": temp_penalty(wet_chill_c),
+    satisfaction = {
+        "cloud": max(0.0, 1 - cloud_penalty(cloud_pct) / 100.0),
+        "visibility": max(0.0, 1 - visibility_penalty(ridge_visibility_m) / 100.0),
+        "precip": max(0.0, 1 - precip_penalty(precip_wet_pct, precip_mm) / 100.0),
     }
-    score = 100 - sum(SCORE_WEIGHTS[k] * penalties[k] for k in SCORE_WEIGHTS)
+    score = 100.0
+    for k, weight in SCORE_WEIGHTS.items():
+        score *= satisfaction[k] ** weight
     return max(0.0, round(score, 1))
+
+
+# Hazard levels for thunder/wind/cold, all kept out of mountain_climb_score
+# entirely (see SCORE_WEIGHTS' comment) and surfaced as their own explicit
+# warning instead. Built on top of thunder_penalty/wind_penalty/temp_penalty's
+# existing 0-100 severity curves rather than re-deriving new thresholds, so
+# the hazard bands stay anchored to the same judgment calls documented on
+# those functions.
+HAZARD_LEVELS = (
+    (0, "-"),
+    (40, "注意"),
+    (80, "警戒"),
+    (100.0001, "危険"),  # upper bound exclusive-below, so 100 itself lands here
+)
+
+
+def hazard_level(penalty_0_100: float) -> str:
+    """Maps a 0-100 penalty (from thunder_penalty/wind_penalty/temp_penalty)
+    to a 4-level warning label: "-" (none) / "注意" (caution) / "警戒"
+    (warning) / "危険" (danger)."""
+    for threshold, label in HAZARD_LEVELS:
+        if penalty_0_100 <= threshold:
+            return label
+    return "危険"
+
+
+def mountain_hazards(*, ridge_wind_ms, pm_cape, chill_c, precip_wet_pct, precip_mm) -> dict:
+    """Thunder/wind/cold(hypothermia) hazard levels, independent of
+    mountain_climb_score (see that function's docstring and SCORE_WEIGHTS'
+    comment for why these three were pulled out of the weighted score).
+    chill_c/precip_wet_pct/precip_mm feed the same wet-chill adjustment
+    (wet_chill_adjustment_c) temp_penalty always used, just computed here
+    instead of inside the score. Returns {"thunder": "-"/"注意"/"警戒"/"危険",
+    "wind": same, "cold": same, "any": bool}."""
+    wet_chill_c = None if chill_c is None else chill_c + wet_chill_adjustment_c(precip_wet_pct, precip_mm)
+    thunder = hazard_level(thunder_penalty(pm_cape))
+    wind = hazard_level(wind_penalty(ridge_wind_ms))
+    cold = hazard_level(temp_penalty(wet_chill_c))
+    return {"thunder": thunder, "wind": wind, "cold": cold,
+            "any": thunder != "-" or wind != "-" or cold != "-"}
 
 
 # Precip *timing* (which specific day/hour the peak rain lands) is

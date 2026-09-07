@@ -26,7 +26,8 @@ from mountain_weather_core import (
     MOUNTAINS, pad,
     FIXED_ALTITUDE_BANDS_M, ALTITUDE_BAND_HPA, BAND_VARS, WIND_SPEED_BAND_VARS,
     nearest_band, KMH_TO_MS, wind_chill_c, safe_avg, safe_avg_or_none,
-    WIND_PEAK_WARNING_MS, SCORE_WEIGHTS, mountain_climb_score,
+    SCORE_WEIGHTS, mountain_climb_score,
+    mountain_hazards,
     format_date_with_weekday,
     PRECIP_TIMING_UNCERTAIN_DAYS_OUT, PRECIP_TIMING_BOUNDARY_LOW,
     PRECIP_TIMING_BOUNDARY_HIGH, PRECIP_TIMING_NOTE,
@@ -65,6 +66,40 @@ RIDGE_START_HOUR = 8
 RIDGE_END_HOUR = 11
 PM_START_HOUR = 12
 PM_END_HOUR = 17
+
+# Precip duration window (2026-09 addition, revised once -- see below): a
+# climber's own mental model of "risky rain" turned out to be about how much
+# of the day is actually wet, not a single hour's probability --
+# "一日中天気が良いが16時に雨" gets largely shrugged off (a single late hour
+# out of many), "一日中降る雨"(rain all day) means don't go, and
+# "通り雨"(a brief passing shower) means go with caution even if that one
+# hour's probability looked just as high as the all-day-rain case.
+# ACTIVITY_END_HOUR (a fixed clock hour, like RIDGE/PM already are) is the
+# window's end for this purpose.
+#
+# **Revised from an initial 15 to 19** after re-testing against 唐松岳9/6
+# (the incident that motivated this whole redesign): a first attempt set
+# ACTIVITY_END_HOUR=15, reasoning "most parties are down by 15時, so later
+# rain barely counts" -- but 唐松岳9/6's real danger hours were 15-18時
+# (ground precip probability 73%->90%), and cutting the window there
+# excluded exactly the hours that made that day dangerous, sending its score
+# back up to ~91 (wrong direction for the incident this redesign exists to
+# fix). The "16時の雨はだいたい無視される" intuition doesn't need a separate
+# early cutoff to hold -- a WIDE window already produces it for free: one
+# rainy hour out of ~14 dilutes to just ~7% of the wet-fraction on its own.
+# A short cutoff and a long window both agree on "one late isolated hour
+# barely matters"; only the long window also correctly keeps registering
+# genuine multi-hour deterioration that happens to extend past 15時, so it's
+# the one that matches both the 唐松岳 case (rain builds and sustains into
+# evening, must score low) and the 槍ヶ岳/立山 cases (one isolated hour,
+# should score high) at once. 19 covers through 18:00 -- past PM_END_HOUR (17) with a one-hour
+# margin, since a fixed cutoff must land somewhere and this project doesn't
+# fetch sunset here (see PM_END_HOUR's own comment on that same tradeoff).
+# Deliberately distinct from PM_END_HOUR: PM_END_HOUR still governs the
+# thunder/wind hazard windows (mountain_hazards()), which have their own
+# reasons documented at that constant.
+ACTIVITY_END_HOUR = 19
+WET_HOUR_PRECIP_THRESHOLD_PCT = 50.0  # an hour "counts as rain" at/above this probability
 
 # Model priority: we query jma_msm and best_match separately, then merge
 # per-hour, preferring jma_msm wherever it has data (roughly the first few
@@ -149,18 +184,37 @@ def fetch_forecast(lat: float, lon: float, days: int = 15) -> dict:
 
 
 def window_scores_by_day(forecast: dict) -> dict:
-    """Compute per-day AM / ridge / PM window summaries, returned as
-    {date_str: {"am": {...}, "ridge": {...}, "pm": {...}, "day_peak": {...}}}.
+    """Compute per-day activity / ridge / PM window summaries, returned as
+    {date_str: {"activity": {...}, "ridge": {...}, "pm": {...}, "day_peak": {...}}}.
 
-    - am: precip probability/amount during the sunrise-relative climb
-      window (TRIP_START_OFFSET_HOURS/TRIP_DURATION_HOURS).
+    - activity: precip over the sunrise-relative climb-through-descent span
+      (AM start = TRIP_START_OFFSET_HOURS/TRIP_DURATION_HOURS's start, through
+      the fixed ACTIVITY_END_HOUR clock time). Reported as wet_fraction_pct
+      (2026-09 redesign, see ACTIVITY_END_HOUR/WET_HOUR_PRECIP_THRESHOLD_PCT's
+      comment) -- what fraction of that span's hours cross
+      WET_HOUR_PRECIP_THRESHOLD_PCT -- plus peak_mm, the highest hourly
+      accumulation in the same span. Replaces the old separate AM-average /
+      PM-peak probability split: a climber doesn't experience "the AM
+      average was low" or "the PM peak was high" as isolated numbers, they
+      experience how much of the day was actually wet, which is exactly
+      what a single duration-based window is built to answer, without
+      needing to reconcile two different windows' worth of numbers.
     - ridge: cloud cover, wind speed and temperature at each fixed altitude
       band, averaged over the fixed RIDGE_START_HOUR-RIDGE_END_HOUR clock
       window -- what the ridge/summit dwell actually feels like.
     - pm: peak (not average) CAPE over the fixed PM_START_HOUR-PM_END_HOUR
       clock window. Peak, not average, because thunderstorm risk is a
       threshold hazard -- a 2-hour spike matters even if the window's mean
-      looks tame.
+      looks tame. Also carries this same window's PEAK (not average)
+      per-band cloud cover, for the same reason (2026-09 addition,
+      confirmed against a real incident: 唐松岳 9/6 scored ~100 because the
+      AM climb window and ridge-dwell window were both dry and clear, while
+      rain moved in from midday through the descent). main() takes
+      max(ridge, pm) for cloud before calling mountain_climb_score(), so a
+      bad PM cloud-up can no longer hide behind a good ridge-window average.
+      (Precip used to work the same max(am, pm) way here too, until the
+      2026-09 duration-based redesign above replaced both with the single
+      "activity" window -- pm no longer carries precip fields.)
     - day_peak: per band, the single highest wind speed (km/h) and the hour
       it occurred at, over the wider AM-start..PM-end span (not just the
       ridge window). ridge_wind_ms above is an 8-11 average and can smooth
@@ -193,7 +247,7 @@ def window_scores_by_day(forecast: dict) -> dict:
     visibility_series = forecast["hourly"][VISIBILITY_VAR]
     daily_sunrise = forecast["_daily_sunrise"]
 
-    am_by_day: dict = {}
+    activity_by_day: dict = {}
     ridge_by_day: dict = {}
     pm_by_day: dict = {}
     day_by_day: dict = {}
@@ -204,16 +258,16 @@ def window_scores_by_day(forecast: dict) -> dict:
         t_dt = datetime.fromisoformat(t)
 
         # Unconditional (no window gate) -- every hour of the calendar day,
-        # unlike am_by_day/ridge_by_day/pm_by_day below.
+        # unlike activity_by_day/ridge_by_day/pm_by_day below.
         if precip_mm_series[idx] is not None:
             day_precip_by_day[day_str] = day_precip_by_day.get(day_str, 0.0) + precip_mm_series[idx]
 
         sunrise_iso = daily_sunrise.get(day_str)
         if sunrise_iso is not None:
             am_start = datetime.fromisoformat(sunrise_iso) + timedelta(hours=TRIP_START_OFFSET_HOURS)
-            am_end = am_start + timedelta(hours=TRIP_DURATION_HOURS)
-            if am_start <= t_dt < am_end:
-                entry = am_by_day.setdefault(day_str, {"precip_prob": [], "precip_mm": []})
+            activity_end = t_dt.replace(hour=ACTIVITY_END_HOUR, minute=0, second=0, microsecond=0)
+            if am_start <= t_dt < activity_end:
+                entry = activity_by_day.setdefault(day_str, {"precip_prob": [], "precip_mm": []})
                 entry["precip_prob"].append(precip_prob_series[idx])
                 entry["precip_mm"].append(precip_mm_series[idx])
 
@@ -247,11 +301,17 @@ def window_scores_by_day(forecast: dict) -> dict:
             entry["visibility"].append(visibility_series[idx])
 
         if PM_START_HOUR <= t_dt.hour < PM_END_HOUR:
-            pm_by_day.setdefault(day_str, {"cape": []})["cape"].append(cape_series[idx])
+            entry = pm_by_day.setdefault(
+                day_str,
+                {"cape": [], **{f"cloud_{a}m": [] for a in FIXED_ALTITUDE_BANDS_M}},
+            )
+            entry["cape"].append(cape_series[idx])
+            for alt in FIXED_ALTITUDE_BANDS_M:
+                entry[f"cloud_{alt}m"].append(cloud_band_series[alt][idx])
 
     summary = {}
-    for day_str in set(am_by_day) | set(ridge_by_day) | set(pm_by_day):
-        am_vals = am_by_day.get(day_str, {"precip_prob": [], "precip_mm": []})
+    for day_str in set(activity_by_day) | set(ridge_by_day) | set(pm_by_day):
+        activity_vals = activity_by_day.get(day_str, {"precip_prob": [], "precip_mm": []})
         ridge_vals = ridge_by_day.get(day_str, {})
         pm_vals = pm_by_day.get(day_str, {"cape": []})
 
@@ -273,13 +333,42 @@ def window_scores_by_day(forecast: dict) -> dict:
                 day_peak[alt] = {"wind_ms": None, "hour": None}
 
         cape_clean = [v for v in pm_vals["cape"] if v is not None]
+        # PM still uses the window's PEAK (not average) for cloud -- same
+        # reasoning CAPE already used (a threshold hazard can hide behind a
+        # mild average). Precip used to work the same way here, until the
+        # 2026-09 duration-based redesign moved it to the "activity" window
+        # below (see window_scores_by_day's docstring and
+        # ACTIVITY_END_HOUR's comment).
+        pm = {"cape": max(cape_clean) if cape_clean else None}
+        for alt in FIXED_ALTITUDE_BANDS_M:
+            clean_cloud = [v for v in pm_vals.get(f"cloud_{alt}m", []) if v is not None]
+            pm[f"cloud_{alt}m"] = max(clean_cloud) if clean_cloud else 0.0
+
+        # Duration-based precip (2026-09 redesign, see ACTIVITY_END_HOUR's
+        # comment): what fraction of the activity window's hours are "wet"
+        # (>=WET_HOUR_PRECIP_THRESHOLD_PCT), not a single averaged/peaked
+        # probability. A single passing-shower hour among many dry ones
+        # (通り雨) scores a low fraction; sustained rain through most of the
+        # window (終日雨) scores a high one -- even if both had the same
+        # peak hourly probability, which the old peak-based approach
+        # couldn't distinguish (confirmed against 槍ヶ岳9/5 and 立山9/5: both
+        # had one isolated high-probability hour surrounded by calm ones,
+        # and real hiking reports described them as good days despite the
+        # old approach scoring them down as if the rain had been sustained).
+        activity_probs = [v for v in activity_vals["precip_prob"] if v is not None]
+        activity_mm = [v for v in activity_vals["precip_mm"] if v is not None]
+        wet_hours = sum(1 for v in activity_probs if v >= WET_HOUR_PRECIP_THRESHOLD_PCT)
+        activity = {
+            "wet_fraction_pct": (100.0 * wet_hours / len(activity_probs)) if activity_probs else 0.0,
+            "peak_mm": max(activity_mm) if activity_mm else 0.0,
+            "wet_hours": wet_hours,
+            "total_hours": len(activity_probs),
+        }
+
         summary[day_str] = {
-            "am": {
-                "precip_prob": safe_avg(am_vals["precip_prob"]),
-                "precip_mm": safe_avg(am_vals["precip_mm"]),
-            },
+            "activity": activity,
             "ridge": ridge,
-            "pm": {"cape": max(cape_clean) if cape_clean else None},
+            "pm": pm,
             "day_peak": day_peak,
             "day_total_precip_mm": round(day_precip_by_day[day_str], 1) if day_str in day_precip_by_day else None,
         }
@@ -293,44 +382,68 @@ def fmt(val, ndigits: int = 1) -> str:
     return str(round(val, ndigits))
 
 
-def wind_peak_warning_cell(r) -> str:
-    """'⚠HH時 n.nm/s' when a day_peak gust hit WIND_PEAK_WARNING_MS+ outside
-    the scored ridge window (see main()'s wind_warning), else '-'."""
-    if not r["wind_warning"]:
+def hazard_warning_cell(r) -> str:
+    """Thunder/wind/cold(hypothermia) hazard level (see mountain_hazards()
+    in core.py) plus the numbers behind each -- CAPE, the day's peak gust
+    speed/hour, and wet-adjusted wind-chill -- so the level isn't just a
+    bare label. '-' when none are active. This supersedes the old wind-only
+    "⚠HH時n.nm/s" out-of-window flag: that only caught gusts outside the
+    8-11 ridge window (since inside it, wind fed the score); now that wind
+    isn't in the score at all, the peak gust for the whole day is what
+    mountain_hazards() itself is built from, so a single cell already
+    covers both cases."""
+    h = r["hazards"]
+    if not h["any"]:
         return "-"
-    return f"⚠{r['day_peak_wind_hour']:02d}時{fmt(r['day_peak_wind_ms'])}m/s"
+    parts = []
+    if h["thunder"] != "-":
+        parts.append(f"雷{h['thunder']}(CAPE{fmt(r['cape'], 0)})")
+    if h["wind"] != "-":
+        hour = r["day_peak_wind_hour"]
+        hour_label = f"{hour:02d}時" if hour is not None else ""
+        parts.append(f"強風{h['wind']}({hour_label}{fmt(r['day_peak_wind_ms'])}m/s)")
+    if h["cold"] != "-":
+        parts.append(f"低体温症{h['cold']}(体感{fmt(r['chill'])}℃)")
+    return f"⚠{'・'.join(parts)}"
 
 
 def precip_timing_note(day_index: int, rows: list):
     """PRECIP_TIMING_NOTE if this day is PRECIP_TIMING_UNCERTAIN_DAYS_OUT+
-    out (day_index is 0 for today), or any row's AM precip probability
-    falls inside the ambiguous 40-60% band, else None."""
+    out (day_index is 0 for today), or any row's precip_wet_pct (fraction of
+    the activity window's hours that are wet, see main()) falls inside the
+    ambiguous 40-60% band, else None."""
     if day_index >= PRECIP_TIMING_UNCERTAIN_DAYS_OUT:
         return PRECIP_TIMING_NOTE
     for r in rows:
-        prob = r["am_precip_prob"]
-        if prob is not None and PRECIP_TIMING_BOUNDARY_LOW <= prob <= PRECIP_TIMING_BOUNDARY_HIGH:
+        wet_pct = r["precip_wet_pct"]
+        if wet_pct is not None and PRECIP_TIMING_BOUNDARY_LOW <= wet_pct <= PRECIP_TIMING_BOUNDARY_HIGH:
             return PRECIP_TIMING_NOTE
     return None
 
 
 def print_ranking_table(rows):
+    # 危険信号 sits right after the mountain name -- deliberately the most
+    # visible position, not at the end -- because thunder/wind no longer
+    # factor into スコア at all (see SCORE_WEIGHTS' comment in core.py); a
+    # high score can no longer be trusted to mean "no storm/gust risk", so
+    # the warning has to be impossible to skim past.
     header = (
-        pad("順位", 5) + pad("山", 26) + pad("アクセス", 24)
+        pad("順位", 5) + pad("山", 26) + pad("アクセス", 24) + pad("危険信号(雷/強風/低体温症)", 34)
         + pad("スコア", 8) + pad("稜線風速m/s", 12)
-        + pad("雷リスクCAPE", 14) + pad("稜線雲量%", 10) + pad("視程m(稜線)", 10)
-        + pad("降水確率%(登り)", 16) + pad("体感温度℃(稜線)", 16)
-        + pad("強風注意(圏外)", 16) + pad("降水量mm(全日)", 14)
+        + pad("雷リスクCAPE", 14) + pad("雲量%(稜線/PM)", 14) + pad("視程m(稜線)", 10)
+        + pad("雨天割合%(活動時間)", 22) + pad("体感温度℃(稜線)", 16)
+        + pad("降水量mm(全日)", 14)
     )
     print(header)
     for i, r in enumerate(rows, start=1):
+        wet_cell = f"{fmt(r['precip_wet_pct'])}({r['precip_wet_hours']}/{r['precip_total_hours']}h)"
         row = (
             pad(str(i), 5) + pad(r["mountain"], 26) + pad(r["access"], 24)
+            + pad(hazard_warning_cell(r), 34)
             + pad(str(r["score"]), 8) + pad(fmt(r["ridge_wind_ms"]), 12)
-            + pad(fmt(r["cape"], 0), 14) + pad(fmt(r["ridge_cloud"]), 10)
+            + pad(fmt(r["cape"], 0), 14) + pad(fmt(r["cloud_pct"]), 14)
             + pad(fmt(r["ridge_visibility"], 0), 10)
-            + pad(fmt(r["am_precip_prob"]), 16) + pad(fmt(r["chill"]), 16)
-            + pad(wind_peak_warning_cell(r), 16)
+            + pad(wet_cell, 22) + pad(fmt(r["chill"]), 16)
             + pad(fmt(r.get("day_total_precip_mm"), 0), 14)
         )
         print(row)
@@ -358,27 +471,35 @@ def main():
             if d in by_day:
                 windows = by_day[d]
                 band = nearest_band(mtn["elevation_m"])
-                ridge, am, pm = windows["ridge"], windows["am"], windows["pm"]
+                ridge, activity, pm = windows["ridge"], windows["activity"], windows["pm"]
                 day_peak = windows["day_peak"][band]
                 ridge_wind_ms = ridge[f"wind_{band}m"] * KMH_TO_MS
                 chill = wind_chill_c(ridge[f"temp_{band}m"], ridge[f"wind_{band}m"])
+                # Precip is duration-based (% of the activity window's hours
+                # that are wet, see window_scores_by_day()'s docstring) --
+                # already spans climb-through-descent, no AM/PM max needed.
+                # Cloud still takes the worse of ridge-dwell/PM (a dry, clear
+                # ridge window shouldn't hide an afternoon that clouds up).
+                precip_wet_pct = activity["wet_fraction_pct"]
+                precip_mm = activity["peak_mm"]
+                cloud_pct = max(ridge[f"cloud_{band}m"], pm[f"cloud_{band}m"])
                 score = mountain_climb_score(
-                    ridge_wind_ms=ridge_wind_ms,
-                    ridge_cloud_pct=ridge[f"cloud_{band}m"],
+                    cloud_pct=cloud_pct,
                     ridge_visibility_m=ridge["visibility"],
-                    chill_c=chill,
-                    am_precip_prob=am["precip_prob"],
-                    am_precip_mm=am["precip_mm"],
-                    pm_cape=pm["cape"],
+                    precip_wet_pct=precip_wet_pct,
+                    precip_mm=precip_mm,
                 )
-                # Flag a day_peak gust only when it's both above the danger
-                # threshold AND sitting outside the scored ridge window --
-                # inside the window it's already reflected in ridge_wind_ms/
-                # the score, so a separate flag there would just be noise.
-                wind_warning = (
-                    day_peak["wind_ms"] is not None
-                    and day_peak["wind_ms"] >= WIND_PEAK_WARNING_MS
-                    and not (RIDGE_START_HOUR <= day_peak["hour"] < RIDGE_END_HOUR)
+                # Thunder/wind/cold no longer feed the score (see
+                # SCORE_WEIGHTS' comment) -- surfaced instead as an explicit
+                # hazard level. Wind uses the day's PEAK gust (not the 8-11
+                # ridge average), since a threshold hazard like a gust is
+                # missed by an average and previously needed a separate
+                # "outside the window" flag (wind_warning) to catch it; using
+                # the peak here supersedes that older, narrower check
+                # entirely.
+                hazards = mountain_hazards(
+                    ridge_wind_ms=day_peak["wind_ms"], pm_cape=pm["cape"],
+                    chill_c=chill, precip_wet_pct=precip_wet_pct, precip_mm=precip_mm,
                 )
                 by_date[d].append(
                     {
@@ -388,13 +509,15 @@ def main():
                         "score": score,
                         "ridge_wind_ms": round(ridge_wind_ms, 1),
                         "cape": pm["cape"],
-                        "ridge_cloud": round(ridge[f"cloud_{band}m"], 1),
+                        "cloud_pct": round(cloud_pct, 1),
                         "ridge_visibility": round(ridge["visibility"]) if ridge["visibility"] is not None else None,
-                        "am_precip_prob": round(am["precip_prob"], 1),
+                        "precip_wet_pct": round(precip_wet_pct, 1),
+                        "precip_wet_hours": activity["wet_hours"],
+                        "precip_total_hours": activity["total_hours"],
                         "chill": round(chill, 1) if chill is not None else None,
                         "day_peak_wind_ms": round(day_peak["wind_ms"], 1) if day_peak["wind_ms"] is not None else None,
                         "day_peak_wind_hour": day_peak["hour"],
-                        "wind_warning": wind_warning,
+                        "hazards": hazards,
                         "day_total_precip_mm": windows["day_total_precip_mm"],
                     }
                 )
@@ -403,12 +526,11 @@ def main():
     count_label = "すべて" if TOP_N_PER_DAY is None else f"上位{TOP_N_PER_DAY}件"
     print(f"\n【対象地域: {region_label} / 1日あたり{count_label} / "
           f"score{MIN_SCORE_THRESHOLD}以上のみ / "
-          f"登山向け総合スコア(雷{int(SCORE_WEIGHTS['thunder']*100)}%・風{int(SCORE_WEIGHTS['wind']*100)}%・"
-          f"稜線雲量{int(SCORE_WEIGHTS['cloud']*100)}%・視程{int(SCORE_WEIGHTS['visibility']*100)}%・"
-          f"降水{int(SCORE_WEIGHTS['precip']*100)}%・"
-          f"体感温度{int(SCORE_WEIGHTS['temp']*100)}%) / "
+          f"登山向け総合スコア=雲量(稜線/PM)・視程・降水(活動時間中の雨天割合)の重み付き幾何平均(各{SCORE_WEIGHTS['cloud']:.2f}) / "
+          f"雷・強風・低体温症はスコアに含めず「危険信号」列で別枠警告 / "
           f"AM:日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜{TRIP_DURATION_HOURS}時間 "
-          f"稜線帯:{RIDGE_START_HOUR}-{RIDGE_END_HOUR}時 PM(雷):{PM_START_HOUR}-{PM_END_HOUR}時】")
+          f"稜線帯:{RIDGE_START_HOUR}-{RIDGE_END_HOUR}時 活動時間(降水判定):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜{ACTIVITY_END_HOUR}時 "
+          f"PM(雷/雲):{PM_START_HOUR}-{PM_END_HOUR}時】")
 
     for week_label, day_range in (("=== 今週 (0-6日先) ===", range(0, 7)),
                                    ("=== 来週以降 (7-14日先) ===", range(7, 15))):
