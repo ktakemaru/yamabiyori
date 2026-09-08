@@ -177,26 +177,48 @@ HOURLY_VARS = ["cloudcover", "cloudcover_low", "cloudcover_mid",
 # EARLY_START_OFFSET_HOURS today but the two are conceptually independent --
 # don't assume changing one changes the other.
 TRIP_START_OFFSET_HOURS = -1
-TRIP_DURATION_HOURS = 6
-RIDGE_START_HOUR = 8
-RIDGE_END_HOUR = 11
 PM_START_HOUR = 12
-PM_END_HOUR = 17
 
-# Precip duration window (2026-09 addition, mirrors mvp.py's constant of the
-# same name -- see that file for the full rationale, including why
-# ACTIVITY_END_HOUR was revised from an initial 15 to 19 after it clipped
-# 唐松岳9/6's real 15-18時 danger hours). A climber's own mental model of
-# "risky rain" is about how much of the day is actually wet, not one hour's
-# probability -- a late isolated rainy hour naturally dilutes to a small
-# fraction of a wide window (no separate early cutoff needed for that),
-# sustained rain through much of the window means don't go, and a brief
-# passing shower means go with caution even if that hour's probability
-# looked identical to the sustained case. Deliberately distinct from
-# PM_END_HOUR (17): PM_END_HOUR still governs the thunder/wind hazard
-# windows (mountain_hazards()), which have their own reasons documented at
-# that constant.
-ACTIVITY_END_HOUR = 19
+# Ridge-dwell window (2026-09 redesign, sunrise-relative -- mirrors mvp.py's
+# constants of the same name, see that file for the full rationale). Replaces
+# the old fixed RIDGE_START_HOUR=8/RIDGE_END_HOUR=11 clock hours, which gave
+# only 3 hourly forecast points and, being unrelated to sunrise, drifted out
+# of sync with when a climber is actually near the ridge/summit as day length
+# changes across the season.
+#
+# Built from the user's own "main climbing time" framing:
+# 「日の出から14時ころまでが登山のメインタイム」, trimmed by
+# RIDGE_DWELL_TRIM_HOURS on each end (excludes the still-climbing-up start
+# and the already-descending end):
+#   main_start = sunrise + TRIP_START_OFFSET_HOURS
+#   main_end   = MAIN_TIME_END_HOUR (fixed clock hour -- deliberately NOT
+#                sunset-relative like the activity/PM windows, which were
+#                widened for a different job: keep catching afternoon/evening
+#                hazards, not "when is the view worth having")
+#   ridge_start = main_start + RIDGE_DWELL_TRIM_HOURS
+#   ridge_end   = main_end - RIDGE_DWELL_TRIM_HOURS
+# ~sunrise+1h through a fixed 12:00 with RIDGE_DWELL_TRIM_HOURS=2 -- about
+# 5-6 hours/hourly points in September, versus the old window's fixed 3.
+MAIN_TIME_END_HOUR = 14
+RIDGE_DWELL_TRIM_HOURS = 2
+
+# Activity/PM window end line (2026-09 redesign, sunset-based -- mirrors
+# mvp.py's constant of the same name, see that file for the full rationale).
+# Replaces the old fixed ACTIVITY_END_HOUR=19 (precip window)/PM_END_HOUR=17
+# (CAPE/cloud window) clock hours, which were wrong by 2+ hours at the
+# solstices (9月の日没は18時前後・12月は16時半ごろ・7月は19時近く) -- a 19時
+# cutoff in December kept scoring well after dark as "activity time," and a
+# 17時 cutoff in July would clip real danger hours the same way the original
+# 唐松岳9/6 incident did (15-18時 rain, sunset ~18時 in September). The two
+# former end lines are now ONE (PM_END_HOUR and ACTIVITY_END_HOUR never had a
+# real reason to differ -- both were "roughly when the climbing day ends,"
+# just approximated with different round numbers), measured from this file's
+# own `_daily_sunset` (already fetched below, unlike mvp.py which needed a
+# new sunset fetch added for this same redesign). +30min accounts for a
+# descent already underway continuing into civil twilight rather than
+# snapping to "activity" at the instant of sunset -- a starting judgment
+# call, not a fitted value, easy to retune.
+ACTIVITY_END_GRACE_MINUTES = 30
 WET_HOUR_PRECIP_THRESHOLD_PCT = 50.0  # an hour "counts as rain" at/above this probability
 
 # get_with_retry/REQUEST_TIMEOUT/MAX_RETRIES and the raw-JSON response cache
@@ -317,7 +339,8 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
     precip_wet_pct/precip_mm (2026-09, second pass) replace what used to be
     a similar AM/PM-max probability with a duration-based measure instead:
     the percentage of the activity_by_day window's (climb start through
-    ACTIVITY_END_HOUR) HOURS that are "wet" (>=WET_HOUR_PRECIP_THRESHOLD_PCT),
+    sunset+ACTIVITY_END_GRACE_MINUTES -- see that constant's comment) HOURS
+    that are "wet" (>=WET_HOUR_PRECIP_THRESHOLD_PCT),
     and that window's peak mm/h. A day that's rainy for most of the window
     scores high even without a single 100% hour; a single passing-shower
     hour among many dry ones scores low even if that hour spiked -- matching
@@ -350,30 +373,52 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
         if precip_mm_series[idx] is not None:
             day_precip_by_day[day_str] = day_precip_by_day.get(day_str, 0.0) + precip_mm_series[idx]
 
+        # activity_end (2026-09 redesign): sunset + ACTIVITY_END_GRACE_MINUTES,
+        # the single end line that replaced the old fixed ACTIVITY_END_HOUR
+        # (precip)/PM_END_HOUR (CAPE/cloud) clock hours -- see that
+        # constant's comment. Independent of day_by_day's own wind-peak
+        # window just below, which already used actual sunset (no grace)
+        # with EARLY_START_OFFSET_HOURS and is unchanged here.
         sunrise_iso = daily_sunrise.get(day_str)
-        if sunrise_iso is not None:
-            am_start = datetime.fromisoformat(sunrise_iso) + timedelta(hours=TRIP_START_OFFSET_HOURS)
-            activity_end = t_dt.replace(hour=ACTIVITY_END_HOUR, minute=0, second=0, microsecond=0)
-            if am_start <= t_dt < activity_end:
+        sunset_iso = daily_sunset.get(day_str)
+        activity_end = (
+            datetime.fromisoformat(sunset_iso) + timedelta(minutes=ACTIVITY_END_GRACE_MINUTES)
+            if sunset_iso is not None else None
+        )
+
+        # main_start (2026-09 redesign): also the ridge-dwell window's own
+        # anchor -- see MAIN_TIME_END_HOUR/RIDGE_DWELL_TRIM_HOURS's comment.
+        # Computed here (needs only sunrise, not sunset) so the ridge window
+        # below doesn't depend on sunset data being present.
+        main_start = (
+            datetime.fromisoformat(sunrise_iso) + timedelta(hours=TRIP_START_OFFSET_HOURS)
+            if sunrise_iso is not None else None
+        )
+
+        if main_start is not None and activity_end is not None:
+            if main_start <= t_dt < activity_end:
                 e = activity_by_day.setdefault(day_str, {"precip_prob": [], "precip_mm": []})
                 e["precip_prob"].append(precip_prob_series[idx])
                 e["precip_mm"].append(precip_mm_series[idx])
 
-        sunset_iso = daily_sunset.get(day_str)
         if sunrise_iso is not None and sunset_iso is not None:
             day_start = datetime.fromisoformat(sunrise_iso) + timedelta(hours=EARLY_START_OFFSET_HOURS)
             day_end = datetime.fromisoformat(sunset_iso)
             if day_start <= t_dt < day_end and wind_speed_series and wind_speed_series[idx] is not None:
                 day_by_day.setdefault(day_str, []).append((wind_speed_series[idx], t_dt.hour))
 
-        if RIDGE_START_HOUR <= t_dt.hour < RIDGE_END_HOUR:
-            e = ridge_by_day.setdefault(day_str, {"wind_kmh": [], "cloud": [], "temp": [], "visibility": []})
-            e["wind_kmh"].append(wind_speed_series[idx] if wind_speed_series else None)
-            e["cloud"].append(summit_cloud_series[idx] if summit_cloud_series else None)
-            e["temp"].append(temp_series[idx] if temp_series else None)
-            e["visibility"].append(visibility_series[idx] if visibility_series else None)
+        if main_start is not None:
+            main_end = t_dt.replace(hour=MAIN_TIME_END_HOUR, minute=0, second=0, microsecond=0)
+            ridge_start = main_start + timedelta(hours=RIDGE_DWELL_TRIM_HOURS)
+            ridge_end = main_end - timedelta(hours=RIDGE_DWELL_TRIM_HOURS)
+            if ridge_start <= t_dt < ridge_end:
+                e = ridge_by_day.setdefault(day_str, {"wind_kmh": [], "cloud": [], "temp": [], "visibility": []})
+                e["wind_kmh"].append(wind_speed_series[idx] if wind_speed_series else None)
+                e["cloud"].append(summit_cloud_series[idx] if summit_cloud_series else None)
+                e["temp"].append(temp_series[idx] if temp_series else None)
+                e["visibility"].append(visibility_series[idx] if visibility_series else None)
 
-        if PM_START_HOUR <= t_dt.hour < PM_END_HOUR:
+        if activity_end is not None and PM_START_HOUR <= t_dt.hour and t_dt < activity_end:
             e = pm_by_day.setdefault(day_str, {"cape": [], "cloud": []})
             e["cape"].append(cape_series[idx])
             e["cloud"].append(summit_cloud_series[idx] if summit_cloud_series else None)
@@ -402,7 +447,7 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
         # reasoning CAPE already used (a threshold hazard can hide behind a
         # mild average). Precip used to work the same way here, until the
         # 2026-09 duration-based redesign above moved it to the activity
-        # window (climb start through ACTIVITY_END_HOUR).
+        # window (climb start through sunset+ACTIVITY_END_GRACE_MINUTES).
         ridge_wind_kmh = safe_avg(ridge["wind_kmh"])
         ridge_cloud = safe_avg(ridge["cloud"])
         pm_cloud = max((v for v in pm["cloud"] if v is not None), default=0.0)
@@ -798,9 +843,9 @@ def print_day_score_table(mtn: dict, day_scores: dict):
     mountains for a given day, here shown across all forecast days for just
     this one mountain."""
     print(f"\n=== {mtn['name']}({mtn['elevation_m']}m) 登山向け総合スコア(日別) ===")
-    print(f"(AM(登り):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜{TRIP_DURATION_HOURS}時間 "
-          f"稜線帯:{RIDGE_START_HOUR}-{RIDGE_END_HOUR}時 PM(下山・雷/雲):{PM_START_HOUR}-{PM_END_HOUR}時 "
-          f"活動時間(降水判定):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜{ACTIVITY_END_HOUR}時 / "
+    print(f"(稜線帯:日の出{TRIP_START_OFFSET_HOURS + RIDGE_DWELL_TRIM_HOURS:+.0f}h〜{MAIN_TIME_END_HOUR - RIDGE_DWELL_TRIM_HOURS}時 "
+          f"PM(下山・雷/雲)開始:{PM_START_HOUR}時 "
+          f"活動時間(降水判定・PM共通の終了):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜日没+{ACTIVITY_END_GRACE_MINUTES}分 / "
           f"雲量(稜線/PM)・視程・降水(活動時間中の雨天割合)の重み付き幾何平均(各{SCORE_WEIGHTS['cloud']:.2f}) / "
           f"雷・強風・低体温症はスコアに含めず「危険信号」列で別枠警告)\n")
     header = (
@@ -2190,7 +2235,7 @@ def combine_confidence(cloud_c, precip_c, temp_c) -> float:
 
 
 def compute_ensemble_confidence_by_day(lat: float, lon: float, cloud_var: str, temp_var: str,
-                                        days: int = FORECAST_DAYS) -> dict:
+                                        daily_sunrise: dict, days: int = FORECAST_DAYS) -> dict:
     """Per-day ECMWF ensemble confidence for one mountain's own
     elevation-matched pressure level (cloud_var/temp_var -- same variable
     names wind_vars_for_elevation()/temp_var_for_elevation() give the
@@ -2200,12 +2245,20 @@ def compute_ensemble_confidence_by_day(lat: float, lon: float, cloud_var: str, t
     everywhere in this file, matching precip_penalty()'s own surface-only
     input), so it always uses the base "precipitation" variable.
 
+    daily_sunrise: the same {date_str: ISO sunrise} dict compute_day_scores()
+    uses (forecast["_daily_sunrise"]), passed in by the caller rather than
+    fetched again here -- the deterministic fetch_forecast() call already
+    happens earlier in main_single_mountain(), and sunrise is astronomical
+    (model-independent), so there's no reason to hit the network twice for
+    the same value.
+
     For each day (skipping the first CONFIDENCE_MIN_DAYS_OUT -- see that
-    constant's comment) and each hour in the RIDGE_START_HOUR..
-    RIDGE_END_HOUR window (matching the score's own ridge-window scope,
-    since that's the window the score's cloud/temp inputs are drawn from),
-    computes that hour's cloud/precip/temp confidence, then averages each
-    across the window and combines them (combine_confidence()). Also
+    constant's comment) and each hour in the sunrise-relative ridge-dwell
+    window (see MAIN_TIME_END_HOUR/RIDGE_DWELL_TRIM_HOURS's comment,
+    matching the score's own ridge-window scope, since that's the window the
+    score's cloud/temp inputs are drawn from), computes that hour's
+    cloud/precip/temp confidence, then averages each across the window and
+    combines them (combine_confidence()). Also
     returns a representative cloud%/precip_prob-proxy/precip_mm for the
     window -- built from the ensemble's own member spread (wet_fraction*100
     standing in for a precip probability, since the ensemble doesn't
@@ -2236,7 +2289,15 @@ def compute_ensemble_confidence_by_day(lat: float, lon: float, cloud_var: str, t
         t_dt = datetime.fromisoformat(t)
         if t_dt.date() < cutoff_date:
             continue
-        if not (RIDGE_START_HOUR <= t_dt.hour < RIDGE_END_HOUR):
+        day_str = t_dt.date().isoformat()
+        sunrise_iso = daily_sunrise.get(day_str)
+        if sunrise_iso is None:
+            continue
+        main_start = datetime.fromisoformat(sunrise_iso) + timedelta(hours=TRIP_START_OFFSET_HOURS)
+        main_end = t_dt.replace(hour=MAIN_TIME_END_HOUR, minute=0, second=0, microsecond=0)
+        ridge_start = main_start + timedelta(hours=RIDGE_DWELL_TRIM_HOURS)
+        ridge_end = main_end - timedelta(hours=RIDGE_DWELL_TRIM_HOURS)
+        if not (ridge_start <= t_dt < ridge_end):
             continue
 
         cloud_vals = [hourly[m][idx] for m in cloud_members if m in hourly and hourly[m][idx] is not None]
@@ -2254,7 +2315,6 @@ def compute_ensemble_confidence_by_day(lat: float, lon: float, cloud_var: str, t
             if p10 is not None and p90 is not None:
                 temp_width = p90 - p10
 
-        day_str = t_dt.date().isoformat()
         e = by_day.setdefault(day_str, {
             "cloud_conf": [], "precip_conf": [], "temp_conf": [],
             "cloud_pct": [], "precip_prob": [], "precip_mm": [],
@@ -2294,7 +2354,8 @@ def print_ensemble_confidence_table(mtn: dict, confidence_by_day: dict):
         print(f"\n(ECMWF確信度: {CONFIDENCE_MIN_DAYS_OUT}日先以降のデータがありませんでした)")
         return
     print(f"\n=== {mtn['name']}({mtn['elevation_m']}m) ECMWFアンサンブル確信度"
-          f"({CONFIDENCE_MIN_DAYS_OUT}日先以降、稜線帯{RIDGE_START_HOUR}-{RIDGE_END_HOUR}時、51メンバー) ===")
+          f"({CONFIDENCE_MIN_DAYS_OUT}日先以降、稜線帯(日の出{TRIP_START_OFFSET_HOURS + RIDGE_DWELL_TRIM_HOURS:+.0f}h〜"
+          f"{MAIN_TIME_END_HOUR - RIDGE_DWELL_TRIM_HOURS}時)、51メンバー) ===")
     print("(参考値: mountain_climb_scoreには含まれていません。予報のブレの大きさの目安です)\n")
     header = pad("日付", 18) + pad("予報", 8) + pad("確信度", 8) + pad("雲量/降水/気温内訳", 20)
     print(header)
@@ -2447,7 +2508,7 @@ def main_single_mountain():
 
     try:
         confidence_by_day = compute_ensemble_confidence_by_day(
-            mtn["lat"], mtn["lon"], f"cloudcover_{wind_hpa}hPa", temp_var
+            mtn["lat"], mtn["lon"], f"cloudcover_{wind_hpa}hPa", temp_var, forecast["_daily_sunrise"]
         )
         print_ensemble_confidence_table(mtn, confidence_by_day)
     except requests.exceptions.RequestException as e:

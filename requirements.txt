@@ -2,11 +2,12 @@
 # mountain_weather_detail.py (Open-Meteo API calls + retry logic).
 requests
 
-# --- Optional dependencies (mountain_weather_detail.py only) ---
-# Uncomment/install only if you use the corresponding feature. Both are
+# --- Optional dependencies ---
+# Uncomment/install only if you use the corresponding feature. All are
 # lazily imported inside their respective functions, so the core scripts
 # run fine without them.
 #
-# playwright   # fetch_jma_weather_map() -- JMA weather-map screenshot.
+# playwright   # mountain_weather_detail.py: fetch_jma_weather_map() -- JMA weather-map screenshot.
 #              # After installing, also run: playwright install chromium
-# Pillow       # render_route_weather_map() -- GPX route weather-map PNG.
+# Pillow       # mountain_weather_detail.py: render_route_weather_map() -- GPX route weather-map PNG.
+#              # mountain_weather_core.py: fetch_himawari_image() -- JMA himawari satellite image mosaic.

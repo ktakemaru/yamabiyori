@@ -48,57 +48,85 @@ MIN_SCORE_THRESHOLD = 80.0  # see mountain_climb_score(): thunder/wind/cloud/pre
 # mountain_weather_detail.py, see mountain_weather_core.py (imported above).
 # ---------------------------------------------------------------------------
 
-# Three evaluation windows per day, matching the phases of a typical day
-# hike rather than just "the morning":
-#   AM (登り)      -- sunrise-relative, as before. Precip during the climb.
-#   RIDGE (稜線帯滞在) -- fixed clock hours. Wind/visibility/wind-chill at the
-#                       altitude band nearest the summit, i.e. what you'd
-#                       actually feel while up there.
-#   PM (下山/対流リスク) -- fixed clock hours, later than RIDGE. Convective
+# Evaluation windows per day, matching the phases of a typical day hike
+# rather than just "the morning" -- all now anchored to sunrise/sunset
+# (2026-09 redesign, see each constant's own comment below) rather than the
+# original fixed clock hours:
+#   ACTIVITY (登り〜下山、降水判定) -- sunrise-relative start, sunset+grace
+#                       end. Precip across the whole climb-through-descent
+#                       span.
+#   RIDGE (稜線帯滞在)  -- sunrise-relative, narrower "main climbing time"
+#                       window. Cloud/visibility/wind-chill at the altitude
+#                       band nearest the summit, i.e. what you'd actually
+#                       feel while up there.
+#   PM (下山/対流リスク) -- starts at a fixed clock hour, ends at the same
+#                       sunset+grace line as ACTIVITY. Convective
 #                       thunderstorm risk (CAPE) typically builds through
 #                       the afternoon; scoring this window is what makes the
 #                       classic "early start, early finish" advice show up
 #                       as a lower score for days where afternoon storms are
 #                       likely, even if the AM/ridge periods look clear.
 TRIP_START_OFFSET_HOURS = -1
-TRIP_DURATION_HOURS = 6
-RIDGE_START_HOUR = 8
-RIDGE_END_HOUR = 11
 PM_START_HOUR = 12
-PM_END_HOUR = 17
 
-# Precip duration window (2026-09 addition, revised once -- see below): a
-# climber's own mental model of "risky rain" turned out to be about how much
-# of the day is actually wet, not a single hour's probability --
-# "一日中天気が良いが16時に雨" gets largely shrugged off (a single late hour
-# out of many), "一日中降る雨"(rain all day) means don't go, and
-# "通り雨"(a brief passing shower) means go with caution even if that one
-# hour's probability looked just as high as the all-day-rain case.
-# ACTIVITY_END_HOUR (a fixed clock hour, like RIDGE/PM already are) is the
-# window's end for this purpose.
+# Ridge-dwell window (2026-09 redesign, sunrise-relative -- replaces the old
+# fixed RIDGE_START_HOUR=8/RIDGE_END_HOUR=11 clock hours, which gave only 3
+# hourly forecast points and, being unrelated to sunrise, drifted out of sync
+# with when a climber is actually near the ridge/summit as day length changes
+# across the season).
 #
-# **Revised from an initial 15 to 19** after re-testing against 唐松岳9/6
-# (the incident that motivated this whole redesign): a first attempt set
-# ACTIVITY_END_HOUR=15, reasoning "most parties are down by 15時, so later
-# rain barely counts" -- but 唐松岳9/6's real danger hours were 15-18時
-# (ground precip probability 73%->90%), and cutting the window there
-# excluded exactly the hours that made that day dangerous, sending its score
-# back up to ~91 (wrong direction for the incident this redesign exists to
-# fix). The "16時の雨はだいたい無視される" intuition doesn't need a separate
-# early cutoff to hold -- a WIDE window already produces it for free: one
-# rainy hour out of ~14 dilutes to just ~7% of the wet-fraction on its own.
-# A short cutoff and a long window both agree on "one late isolated hour
-# barely matters"; only the long window also correctly keeps registering
-# genuine multi-hour deterioration that happens to extend past 15時, so it's
-# the one that matches both the 唐松岳 case (rain builds and sustains into
-# evening, must score low) and the 槍ヶ岳/立山 cases (one isolated hour,
-# should score high) at once. 19 covers through 18:00 -- past PM_END_HOUR (17) with a one-hour
-# margin, since a fixed cutoff must land somewhere and this project doesn't
-# fetch sunset here (see PM_END_HOUR's own comment on that same tradeoff).
-# Deliberately distinct from PM_END_HOUR: PM_END_HOUR still governs the
-# thunder/wind hazard windows (mountain_hazards()), which have their own
-# reasons documented at that constant.
-ACTIVITY_END_HOUR = 19
+# Built from a "main climbing time" concept -- the user's own framing:
+# 「日の出から14時ころまでが登山のメインタイム」(from sunrise to around 14時
+# is the main climbing window) -- trimmed by RIDGE_DWELL_TRIM_HOURS on each
+# end (the user's own proposal) to exclude the still-climbing-up start and
+# the already-descending end, leaving the middle stretch when the climber is
+# actually on/near the ridge:
+#   main_start = sunrise + TRIP_START_OFFSET_HOURS (same anchor as the
+#                activity window's own start)
+#   main_end   = MAIN_TIME_END_HOUR (fixed clock hour, 14時 -- deliberately
+#                NOT sunset-relative like the activity/PM windows: those were
+#                widened specifically to keep catching afternoon/evening
+#                hazards (唐松岳9/6), a different job from "when is the view
+#                worth having," which this window is for)
+#   ridge_start = main_start + RIDGE_DWELL_TRIM_HOURS
+#   ridge_end   = main_end - RIDGE_DWELL_TRIM_HOURS
+# With RIDGE_DWELL_TRIM_HOURS=2 this comes out to roughly sunrise+1h through
+# a fixed 12:00 (main_end - 2h, itself fixed since main_end is a fixed clock
+# hour) -- about 5-6 hours and 5-6 hourly points in September, versus the old
+# window's fixed 3. Confirmed against real September sunrise/sunset data
+# (2026-09-08 session) before adopting: e.g. sunrise 05:25 -> main time
+# 04:25-14:00 -> ridge window 06:25-12:00 (5.6h). Widening this window also
+# gives any future duration/ratio-based diagnostic (e.g. a ClearViewRatio,
+# see the ViewQuality investigation from this same session) far more hourly
+# points to work with than the old 3-point window could ever provide.
+MAIN_TIME_END_HOUR = 14
+RIDGE_DWELL_TRIM_HOURS = 2
+
+# Activity/PM window end line (2026-09 redesign, sunset-based -- replaces the
+# separate fixed ACTIVITY_END_HOUR=19/PM_END_HOUR=17 clock hours this project
+# used to carry). Both of those were fixed clock hours chosen when this file
+# had no daily sunset data of its own (see fetch_forecast()'s docstring for
+# the sunset fetch this redesign added) -- fine near the equinox, but wrong
+# by 2+ hours at the solstices (9月の日没は18時前後・12月は16時半ごろ・7月は
+# 19時近く): a 19時 cutoff in December scored well after dark as still
+# "activity time," while a 17時 cutoff in July would have re-created the
+# original 唐松岳9/6 bug this project already fixed once (see the git history
+# of this constant) by clipping off real 15-18時 danger hours whenever
+# sunset falls after 17時.
+#
+# ACTIVITY_END_GRACE_MINUTES=30 (not a bare sunset cutoff) accounts for a
+# descent that's already underway continuing a bit past sunset into civil
+# twilight (still-usable ambient light, no headlamp needed yet) rather than
+# snapping to "activity" at the very instant of sunset -- 30 minutes was a
+# starting judgment call, not a fitted value, easy to retune.
+#
+# The two former windows are now ONE end line, not two: PM_END_HOUR and
+# ACTIVITY_END_HOUR never had a real reason to differ (both were "roughly
+# when the climbing day ends," just approximated with different round
+# numbers at different times) -- see window_scores_by_day()'s docstring for
+# where this single line now governs both the precip/"activity" window and
+# the PM cloud/CAPE window.
+ACTIVITY_END_GRACE_MINUTES = 30
 WET_HOUR_PRECIP_THRESHOLD_PCT = 50.0  # an hour "counts as rain" at/above this probability
 
 # Model priority: we query jma_msm and best_match separately, then merge
@@ -133,7 +161,7 @@ def fetch_single_model(lat: float, lon: float, model, days: int, with_sunrise: b
                    + list(WIND_SPEED_BAND_VARS.values()) + list(TEMP_BAND_VARS.values()))
     if extra_hourly:
         hourly_vars = hourly_vars + extra_hourly
-    daily_vars = ["sunrise"] if with_sunrise else None
+    daily_vars = ["sunrise", "sunset"] if with_sunrise else None
     return fetch_open_meteo(lat, lon, hourly=hourly_vars, daily=daily_vars, days=days, model=model)
 
 
@@ -142,9 +170,12 @@ def fetch_forecast(lat: float, lon: float, days: int = 15) -> dict:
     speed and temperature at the fixed 1000/2000/3000m altitude bands (same
     bands for every mountain) -- merging JMA MSM (preferred, where available)
     with ECMWF IFS 0.25° (fallback for hours MSM doesn't cover, up to 15
-    days). Also fetches daily sunrise times (astronomical, not model-
-    dependent) from the ECMWF call, since it covers the full day range we
-    need. Visibility is fetched via a third, separate best_match call
+    days). Also fetches daily sunrise/sunset times (astronomical, not
+    model-dependent) from the ECMWF call, since it covers the full day range
+    we need -- sunset (2026-09 addition) is what ACTIVITY_END_GRACE_MINUTES
+    is now measured from (see that constant's comment), replacing the old
+    fixed-clock-hour ACTIVITY_END_HOUR/PM_END_HOUR. Visibility is fetched via
+    a third, separate best_match call
     (model=None) since jma_msm/ecmwf_ifs025 return null for it -- see
     VISIBILITY_VAR's comment. All three calls go through fetch_single_model
     -> fetch_open_meteo, so repeat runs within CACHE_TTL_SECONDS hit the
@@ -180,7 +211,8 @@ def fetch_forecast(lat: float, lon: float, days: int = 15) -> dict:
     ]
 
     daily_sunrise = dict(zip(fallback["daily"]["time"], fallback["daily"]["sunrise"]))
-    return {"hourly": merged_hourly, "_daily_sunrise": daily_sunrise}
+    daily_sunset = dict(zip(fallback["daily"]["time"], fallback["daily"]["sunset"]))
+    return {"hourly": merged_hourly, "_daily_sunrise": daily_sunrise, "_daily_sunset": daily_sunset}
 
 
 def window_scores_by_day(forecast: dict) -> dict:
@@ -188,10 +220,11 @@ def window_scores_by_day(forecast: dict) -> dict:
     {date_str: {"activity": {...}, "ridge": {...}, "pm": {...}, "day_peak": {...}}}.
 
     - activity: precip over the sunrise-relative climb-through-descent span
-      (AM start = TRIP_START_OFFSET_HOURS/TRIP_DURATION_HOURS's start, through
-      the fixed ACTIVITY_END_HOUR clock time). Reported as wet_fraction_pct
-      (2026-09 redesign, see ACTIVITY_END_HOUR/WET_HOUR_PRECIP_THRESHOLD_PCT's
-      comment) -- what fraction of that span's hours cross
+      (AM start = TRIP_START_OFFSET_HOURS's start, through sunset +
+      ACTIVITY_END_GRACE_MINUTES -- 2026-09 redesign, replaces the old fixed
+      ACTIVITY_END_HOUR clock time; see that constant's comment). Reported as
+      wet_fraction_pct (see WET_HOUR_PRECIP_THRESHOLD_PCT's comment) -- what
+      fraction of that span's hours cross
       WET_HOUR_PRECIP_THRESHOLD_PCT -- plus peak_mm, the highest hourly
       accumulation in the same span. Replaces the old separate AM-average /
       PM-peak probability split: a climber doesn't experience "the AM
@@ -200,10 +233,14 @@ def window_scores_by_day(forecast: dict) -> dict:
       what a single duration-based window is built to answer, without
       needing to reconcile two different windows' worth of numbers.
     - ridge: cloud cover, wind speed and temperature at each fixed altitude
-      band, averaged over the fixed RIDGE_START_HOUR-RIDGE_END_HOUR clock
-      window -- what the ridge/summit dwell actually feels like.
-    - pm: peak (not average) CAPE over the fixed PM_START_HOUR-PM_END_HOUR
-      clock window. Peak, not average, because thunderstorm risk is a
+      band, averaged over the sunrise-relative ridge-dwell window (see
+      MAIN_TIME_END_HOUR/RIDGE_DWELL_TRIM_HOURS's comment) -- what the
+      ridge/summit dwell actually feels like.
+    - pm: peak (not average) CAPE over the PM_START_HOUR-to-sunset+grace
+      window (PM_END_HOUR, a fixed clock hour, was retired in the same
+      2026-09 redesign as ACTIVITY_END_HOUR -- see that constant's comment;
+      the two former end lines are now one). Peak, not average, because
+      thunderstorm risk is a
       threshold hazard -- a 2-hour spike matters even if the window's mean
       looks tame. Also carries this same window's PEAK (not average)
       per-band cloud cover, for the same reason (2026-09 addition,
@@ -216,7 +253,7 @@ def window_scores_by_day(forecast: dict) -> dict:
       2026-09 duration-based redesign above replaced both with the single
       "activity" window -- pm no longer carries precip fields.)
     - day_peak: per band, the single highest wind speed (km/h) and the hour
-      it occurred at, over the wider AM-start..PM-end span (not just the
+      it occurred at, over the wider AM-start..sunset+grace span (not just the
       ridge window). ridge_wind_ms above is an 8-11 average and can smooth
       away a real gust that happens outside that window -- e.g. a pre-dawn
       squall a 4am early-starter would actually walk into. This doesn't
@@ -246,6 +283,7 @@ def window_scores_by_day(forecast: dict) -> dict:
     temp_band_series = {alt: forecast["hourly"][var] for alt, var in TEMP_BAND_VARS.items()}
     visibility_series = forecast["hourly"][VISIBILITY_VAR]
     daily_sunrise = forecast["_daily_sunrise"]
+    daily_sunset = forecast["_daily_sunset"]
 
     activity_by_day: dict = {}
     ridge_by_day: dict = {}
@@ -262,45 +300,68 @@ def window_scores_by_day(forecast: dict) -> dict:
         if precip_mm_series[idx] is not None:
             day_precip_by_day[day_str] = day_precip_by_day.get(day_str, 0.0) + precip_mm_series[idx]
 
+        # activity_end (2026-09 redesign): sunset + ACTIVITY_END_GRACE_MINUTES,
+        # the single end line that replaced the old fixed ACTIVITY_END_HOUR
+        # (precip) / PM_END_HOUR (CAPE/cloud, wind-peak span) clock hours --
+        # see ACTIVITY_END_GRACE_MINUTES's comment. Requires actual sunset
+        # data for day_str; skip this hour's activity/PM/day-peak
+        # accumulation (not the whole day -- other hours of the same day_str
+        # still get their own sunset_iso lookup) if that's missing, same
+        # graceful-degradation behavior the old sunrise_iso check already had.
         sunrise_iso = daily_sunrise.get(day_str)
-        if sunrise_iso is not None:
-            am_start = datetime.fromisoformat(sunrise_iso) + timedelta(hours=TRIP_START_OFFSET_HOURS)
-            activity_end = t_dt.replace(hour=ACTIVITY_END_HOUR, minute=0, second=0, microsecond=0)
-            if am_start <= t_dt < activity_end:
+        sunset_iso = daily_sunset.get(day_str)
+        activity_end = (
+            datetime.fromisoformat(sunset_iso) + timedelta(minutes=ACTIVITY_END_GRACE_MINUTES)
+            if sunset_iso is not None else None
+        )
+
+        # main_start (2026-09 redesign): also the ridge-dwell window's own
+        # anchor -- see MAIN_TIME_END_HOUR/RIDGE_DWELL_TRIM_HOURS's comment.
+        # Computed here (needs only sunrise, not sunset) so the ridge window
+        # below doesn't depend on sunset data being present.
+        main_start = (
+            datetime.fromisoformat(sunrise_iso) + timedelta(hours=TRIP_START_OFFSET_HOURS)
+            if sunrise_iso is not None else None
+        )
+        if main_start is not None:
+            main_end = t_dt.replace(hour=MAIN_TIME_END_HOUR, minute=0, second=0, microsecond=0)
+            ridge_start = main_start + timedelta(hours=RIDGE_DWELL_TRIM_HOURS)
+            ridge_end = main_end - timedelta(hours=RIDGE_DWELL_TRIM_HOURS)
+            if ridge_start <= t_dt < ridge_end:
+                entry = ridge_by_day.setdefault(
+                    day_str,
+                    {**{f"cloud_{a}m": [] for a in FIXED_ALTITUDE_BANDS_M},
+                     **{f"wind_{a}m": [] for a in FIXED_ALTITUDE_BANDS_M},
+                     **{f"temp_{a}m": [] for a in FIXED_ALTITUDE_BANDS_M},
+                     "visibility": []},
+                )
+                for alt in FIXED_ALTITUDE_BANDS_M:
+                    entry[f"cloud_{alt}m"].append(cloud_band_series[alt][idx])
+                    entry[f"wind_{alt}m"].append(wind_band_series[alt][idx])
+                    entry[f"temp_{alt}m"].append(temp_band_series[alt][idx])
+                # Visibility is a single surface-ish value at the mountain's
+                # own coordinates (Open-Meteo doesn't serve it per
+                # pressure-level band like cloud/wind/temp), so it isn't
+                # split by altitude band.
+                entry["visibility"].append(visibility_series[idx])
+
+        if main_start is not None and activity_end is not None:
+            if main_start <= t_dt < activity_end:
                 entry = activity_by_day.setdefault(day_str, {"precip_prob": [], "precip_mm": []})
                 entry["precip_prob"].append(precip_prob_series[idx])
                 entry["precip_mm"].append(precip_mm_series[idx])
 
-            # Wider span for day_peak wind detection: AM start through
-            # PM_END_HOUR the same day (covers early starts *and* the
-            # descent), independent of the narrower RIDGE window used for
-            # scoring. No daily sunset is fetched in this file, so PM_END_HOUR
-            # (a fixed clock hour, like RIDGE/PM already are) stands in for
-            # "end of the climbing day" rather than actual sunset.
-            day_end = t_dt.replace(hour=PM_END_HOUR, minute=0, second=0, microsecond=0)
-            if am_start <= t_dt < day_end:
+                # Wind-peak detection shares the exact same AM-start..
+                # activity_end span as the precip window above (both used to
+                # independently approximate "the climbing day," now that
+                # PM_END_HOUR/ACTIVITY_END_HOUR are unified there's no reason
+                # left for them to differ) -- narrower than nothing, wider
+                # than the RIDGE window alone used for scoring.
                 entry = day_by_day.setdefault(day_str, {f"wind_{a}m": [] for a in FIXED_ALTITUDE_BANDS_M})
                 for alt in FIXED_ALTITUDE_BANDS_M:
                     entry[f"wind_{alt}m"].append((wind_band_series[alt][idx], t_dt.hour))
 
-        if RIDGE_START_HOUR <= t_dt.hour < RIDGE_END_HOUR:
-            entry = ridge_by_day.setdefault(
-                day_str,
-                {**{f"cloud_{a}m": [] for a in FIXED_ALTITUDE_BANDS_M},
-                 **{f"wind_{a}m": [] for a in FIXED_ALTITUDE_BANDS_M},
-                 **{f"temp_{a}m": [] for a in FIXED_ALTITUDE_BANDS_M},
-                 "visibility": []},
-            )
-            for alt in FIXED_ALTITUDE_BANDS_M:
-                entry[f"cloud_{alt}m"].append(cloud_band_series[alt][idx])
-                entry[f"wind_{alt}m"].append(wind_band_series[alt][idx])
-                entry[f"temp_{alt}m"].append(temp_band_series[alt][idx])
-            # Visibility is a single surface-ish value at the mountain's own
-            # coordinates (Open-Meteo doesn't serve it per pressure-level
-            # band like cloud/wind/temp), so it isn't split by altitude band.
-            entry["visibility"].append(visibility_series[idx])
-
-        if PM_START_HOUR <= t_dt.hour < PM_END_HOUR:
+        if activity_end is not None and PM_START_HOUR <= t_dt.hour and t_dt < activity_end:
             entry = pm_by_day.setdefault(
                 day_str,
                 {"cape": [], **{f"cloud_{a}m": [] for a in FIXED_ALTITUDE_BANDS_M}},
@@ -338,13 +399,13 @@ def window_scores_by_day(forecast: dict) -> dict:
         # mild average). Precip used to work the same way here, until the
         # 2026-09 duration-based redesign moved it to the "activity" window
         # below (see window_scores_by_day's docstring and
-        # ACTIVITY_END_HOUR's comment).
+        # ACTIVITY_END_GRACE_MINUTES's comment).
         pm = {"cape": max(cape_clean) if cape_clean else None}
         for alt in FIXED_ALTITUDE_BANDS_M:
             clean_cloud = [v for v in pm_vals.get(f"cloud_{alt}m", []) if v is not None]
             pm[f"cloud_{alt}m"] = max(clean_cloud) if clean_cloud else 0.0
 
-        # Duration-based precip (2026-09 redesign, see ACTIVITY_END_HOUR's
+        # Duration-based precip (2026-09 redesign, see ACTIVITY_END_GRACE_MINUTES's
         # comment): what fraction of the activity window's hours are "wet"
         # (>=WET_HOUR_PRECIP_THRESHOLD_PCT), not a single averaged/peaked
         # probability. A single passing-shower hour among many dry ones
@@ -528,9 +589,9 @@ def main():
           f"score{MIN_SCORE_THRESHOLD}以上のみ / "
           f"登山向け総合スコア=雲量(稜線/PM)・視程・降水(活動時間中の雨天割合)の重み付き幾何平均(各{SCORE_WEIGHTS['cloud']:.2f}) / "
           f"雷・強風・低体温症はスコアに含めず「危険信号」列で別枠警告 / "
-          f"AM:日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜{TRIP_DURATION_HOURS}時間 "
-          f"稜線帯:{RIDGE_START_HOUR}-{RIDGE_END_HOUR}時 活動時間(降水判定):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜{ACTIVITY_END_HOUR}時 "
-          f"PM(雷/雲):{PM_START_HOUR}-{PM_END_HOUR}時】")
+          f"稜線帯:日の出{TRIP_START_OFFSET_HOURS + RIDGE_DWELL_TRIM_HOURS:+.0f}h〜{MAIN_TIME_END_HOUR - RIDGE_DWELL_TRIM_HOURS}時 "
+          f"活動時間(降水判定・PM雷雲共通):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜"
+          f"日没+{ACTIVITY_END_GRACE_MINUTES}分 PM開始:{PM_START_HOUR}時】")
 
     for week_label, day_range in (("=== 今週 (0-6日先) ===", range(0, 7)),
                                    ("=== 来週以降 (7-14日先) ===", range(7, 15))):

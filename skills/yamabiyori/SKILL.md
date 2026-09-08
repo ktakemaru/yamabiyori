@@ -22,7 +22,7 @@ description: Design/implementation reference for "ヤマビヨリ"(ヤマビヨ�
 
 回答の根拠にしてよいのは次の4つだけ:
 1. **Open Data**: Open-Meteo経由で取得するMSM(気象庁)+ECMWF IFS(全球)の数値予報。
-2. **気象庁自身の実況・予想天気図**(`fetch_jma_weather_map()`)— これは他社の予報サービスではなく気象庁のOpen Dataそのものなので、診断モードの標準フロー内での利用は禁止事項に含まれない。
+2. **気象庁自身の実況・予想天気図**(`fetch_jma_weather_map()`)および**気象衛星ひまわり画像**(`fetch_himawari_image()`、後述「気象衛星ひまわり画像取得機能」節)— これは他社の予報サービスではなく気象庁のOpen Dataそのものなので、診断モードの標準フロー内での利用は禁止事項に含まれない。
 3. **このSKILL.mdに蓄積された設計知見**(スコアの重み・閾値、過去の不具合修正の経緯など、後述の各セクション)。
 4. **Claude自身が持つ気象・登山に関する一般知識**(天気図の読み方など定性的な補足のみ。数値予報そのものの代替にはしない)。
 
@@ -44,13 +44,13 @@ description: Design/implementation reference for "ヤマビヨリ"(ヤマビヨ�
 
 ## ファイル構成
 
-- `mountain_weather_core.py`(2026-09追加) — mvp.py/detail.pyが共有する土台モジュール。`MOUNTAINS`リスト、気圧面/固定高度バンドの変換ロジック(`PRESSURE_LEVELS_HPA`/`pressure_level_altitude_m`/`nearest_pressure_level`/`FIXED_ALTITUDE_BANDS_M`/`ALTITUDE_BAND_HPA`/`BAND_VARS`/`WIND_SPEED_BAND_VARS`/`nearest_band`)、スコア算出ロジック(penalty関数群/`wet_chill_adjustment_c`/`SCORE_WEIGHTS`/`mountain_climb_score`/雷・強風の危険信号判定`hazard_level`/`mountain_hazards`/`hazard_cell`/`safe_avg`/`safe_avg_or_none`/`wind_chill_c`/`KMH_TO_MS`/`WIND_PEAK_WARNING_MS`)、生JSONキャッシュ層(`fetch_open_meteo`/`_cache_path`/`_load_cache`/`_save_cache`/`get_with_retry`/`CACHE_DIR`/`CACHE_TTL_SECONDS`/`OPEN_METEO_URL`)、日付/表示ヘルパー(`display_width`/`pad`/`WEEKDAY_JA`/`format_date_with_weekday`)、`PRECIP_TIMING_*`定数を1箇所で定義する。単体では実行しない(`if __name__ == "__main__"`を持たない)、mvp.py/detail.pyから`from mountain_weather_core import (...)`されるだけのモジュール。**2026-09より前はこれら全てが2ファイルへ手でコピーされていたが、この移行で単一のソースに統合した**(詳細は各セクション参照)。
+- `mountain_weather_core.py`(2026-09追加) — mvp.py/detail.pyが共有する土台モジュール。`MOUNTAINS`リスト、気圧面/固定高度バンドの変換ロジック(`PRESSURE_LEVELS_HPA`/`pressure_level_altitude_m`/`nearest_pressure_level`/`FIXED_ALTITUDE_BANDS_M`/`ALTITUDE_BAND_HPA`/`BAND_VARS`/`WIND_SPEED_BAND_VARS`/`nearest_band`)、スコア算出ロジック(penalty関数群/`wet_chill_adjustment_c`/`SCORE_WEIGHTS`/`mountain_climb_score`/雷・強風の危険信号判定`hazard_level`/`mountain_hazards`/`hazard_cell`/`safe_avg`/`safe_avg_or_none`/`wind_chill_c`/`KMH_TO_MS`/`WIND_PEAK_WARNING_MS`)、生JSONキャッシュ層(`fetch_open_meteo`/`_cache_path`/`_load_cache`/`_save_cache`/`get_with_retry`/`CACHE_DIR`/`CACHE_TTL_SECONDS`/`OPEN_METEO_URL`)、日付/表示ヘルパー(`display_width`/`pad`/`WEEKDAY_JA`/`format_date_with_weekday`)、`PRECIP_TIMING_*`定数、気象衛星ひまわり画像取得(`fetch_himawari_image`/`fetch_himawari_tile`/`himawari_latest_basetime`/`latlon_to_tile_xy`/`HIMAWARI_IMG_TYPES`、後述「気象衛星ひまわり画像取得機能」節)を1箇所で定義する。単体では実行しない(`if __name__ == "__main__"`を持たない)、mvp.py/detail.pyから`from mountain_weather_core import (...)`されるだけのモジュール。**2026-09より前はこれら全てが2ファイルへ手でコピーされていたが、この移行で単一のソースに統合した**(詳細は各セクション参照)。
 - `mountain_weather_mvp.py` — 候補となる山76座を、指定期間内で登山向け総合スコア(`mountain_climb_score`、後述)が高い順にランキング表示する非対話スクリプト。Open-Meteoレスポンスのディスクキャッシュも実装済み(core.py経由)。
 - `mountain_weather_detail.py` — 山を1つ対話的に選び、(1)登山向け総合スコアの日別サマリーと(2)14日分の1時間ごと詳細(雲量・風など)の2段構成で表示する。Open-Meteoレスポンスのディスクキャッシュも実装済み(core.py経由)。
 - `requirements.txt` — 中核機能の依存(`requests`)を記載。オプション機能(`playwright`/`Pillow`)は別途コメントで案内(後述のオプション依存セクション参照)。
 - `venv/` — Python仮想環境。実行は `./venv/Scripts/python.exe <script>.py`。
 - `cache/` — 両スクリプト共通の生JSONキャッシュ置き場(後述)。同じディレクトリだが、ファイル名キーに`days`(mvp.py=15、detail.py=14)が含まれるため衝突はしない。
-- `screenshots/` — detail.py の `fetch_jma_weather_map()`(後述)が保存する気象庁天気図のPNG置き場。自動プルーニングなし(手動クリーンアップ前提)。
+- `screenshots/` — detail.py の `fetch_jma_weather_map()`(後述)が保存する気象庁天気図のPNG置き場、および core.py の `fetch_himawari_image()`(後述「気象衛星ひまわり画像取得機能」節)が保存するひまわり衛星画像のJPEG置き場(同じディレクトリを共用)。自動プルーニングなし(手動クリーンアップ前提)。
 - `maps/` — detail.py の `render_route_weather_map()`(後述、2026-09追加)が保存するルート天気マップPNG置き場。自動プルーニングなし。
 
 mvp.py/detail.pyは**それぞれの独自機能については引き続き意図的に独立**しており(各ファイルのdocstring参照)、GPX診断・地図PNG・ECMWFアンサンブル確信度・気象庁天気図スクリーンショット・雲海検出などdetail.py固有の機能はcore.pyに含めていない。風向・実標高ベースの風速、`past_days`を使った過去日付の一回限り取得なども引き続きdetail.py側にしかない。一方で、**`MOUNTAINS`リスト・気圧面/固定バンド変換・スコア算出ロジック・生JSONキャッシュ層は2026-09にcore.pyへ統合済み**で、もう2ファイルに手でコピーされてはいない(下記の各セクションはこの統合後の状態に更新済み)。`fmt()`(ndigits=0のとき、mvp.pyは`round(val,0)`で"1234.0"、detail.pyは`round(val)`で"1234"を返す)と`wind_peak_warning_cell()`/`precip_timing_note()`(渡す引数の形が2ファイルで異なる)は、この差異ゆえに意図的に各ファイルへ残してある — 数値自体の食い違いではなく表示コードの違いなので、統合の対象外とした。core.pyを変更する場合は自動的に両スクリプトへ反映されるが、mvp.py/detail.py固有のコードを片方だけ直すと従来通り乖離するので注意。
@@ -97,7 +97,8 @@ mvp.py/detail.pyは**それぞれの独自機能については引き続き意�
 
 - **新しい入力(`wet_fraction_pct`)**: AM開始(日の出+`TRIP_START_OFFSET_HOURS`)〜`ACTIVITY_END_HOUR`固定時刻という単一の「活動時間」窓の中で、**降水確率が`WET_HOUR_PRECIP_THRESHOLD_PCT`(50%)以上の時間が何時間あるか / 窓の全時間数**を計算する(`wet_hours`/`total_hours`としてテーブルにも表示)。同じ窓内の降水量(mm/h)の**ピーク値**(`precip_mm`)も従来通り保持し、`precip_penalty`は`max(wet_fraction_pct, mm由来のペナルティ)`を返す(式自体は変更なし、渡す値の意味が変わった)。
 - **旧来のAM(平均)/PM(ピーク)という2つの窓は統合**され、`window_scores_by_day()`(mvp.py)/`compute_day_scores()`(detail.py)とも`activity_by_day`という単一の窓に置き換わった。雲量はこの変更の対象外(引き続き稜線帯平均とPMピークの悪い方、次段落「既知の限界」参照)。
-- **`ACTIVITY_END_HOUR`は当初15(下山目安時刻)としたが19に修正した**。理由: 15時で窓を切ると、唐松岳9/6の本当の危険時間帯(15-18時、降水確率73%→90%)がまるごと窓の外に出てしまい、スコアが90点台まで戻ってしまった(このインシデントの再発防止という本来の目的に反する)。「16時の雨はだいたい無視される」という直感は、窓を短く切らなくても**広い窓を使えば自然に実現される**(14時間の窓なら遅い時間の1時間だけの雨は約7%にしか寄与しない)。広い窓は「通り雨は薄まる」「持続的な悪化はきちんと拾う」を両立できるが、短い窓は後者を壊してしまう。`PM_END_HOUR`(17、雷・強風の危険信号判定に引き続き使用)より1時間長い19を採用し、日没時刻を取得しないmvp.py/detail.py双方の固定時刻方式に合わせた。
+- **`ACTIVITY_END_HOUR`は当初15(下山目安時刻)としたが19に修正した**(2026-09第4段階時点)。理由: 15時で窓を切ると、唐松岳9/6の本当の危険時間帯(15-18時、降水確率73%→90%)がまるごと窓の外に出てしまい、スコアが90点台まで戻ってしまった(このインシデントの再発防止という本来の目的に反する)。「16時の雨はだいたい無視される」という直感は、窓を短く切らなくても**広い窓を使えば自然に実現される**(14時間の窓なら遅い時間の1時間だけの雨は約7%にしか寄与しない)。広い窓は「通り雨は薄まる」「持続的な悪化はきちんと拾う」を両立できるが、短い窓は後者を壊してしまう。当時は`PM_END_HOUR`(17、雷・強風の危険信号判定に引き続き使用)より1時間長い19を採用し、日没時刻を取得しないmvp.py/detail.py双方の固定時刻方式に合わせていた。
+- **`ACTIVITY_END_HOUR`(固定19時)・`PM_END_HOUR`(固定17時)は2026-09-08、日没ベースの単一の終了ライン`ACTIVITY_END_GRACE_MINUTES`(日没+30分、両窓で共通)に置き換えられ、両定数とも廃止された**。理由: 固定時刻は季節でズレる(9月の日没は18時前後・12月は16時半ごろ・7月は19時近くと2時間以上の差)。冬場は19時が日没後の真っ暗な時間帯まで「活動時間」として評価してしまい、逆に17時のような早い固定値では夏場に唐松岳9/6のような15-18時台の危険な悪天候を再び窓の外に逃してしまう(この定数の存在理由そのものである、まさにそのインシデントを再発させかねない)。また`ACTIVITY_END_HOUR`(降水判定)と`PM_END_HOUR`(雷・雲判定)を別々の固定値にしていたことに意図的な理由はなく(前者が後者より2時間広いだけで、両方とも「行動時間の終わり」を近似する値だった)、単一の終了ラインに統一した。mvp.pyはこれまで日没データを取得していなかったため、この変更に合わせて`fetch_forecast()`に`sunset`の取得を追加した(detail.pyは`_daily_sunset`を元々取得済み)。+30分の猶予は、下山が日没直後まで続いても即座に「活動時間外」にはしないための余裕(市民薄明相当、ユーザー提案値)。唐松岳9/6で再検証済み(9月・日没18:11時点、スコア77.9・80点未満のまま=インシデント再発防止の効果は維持)。
 - **`SCORE_WEIGHTS`を降水50%・雲量25%・視程25%に retune**(2026-09第5段階、上記経緯5参照)。等分(各1/3)のままだと、唐松岳9/6のように雲量・視程が良好な日は降水の悪さだけでは80点を割りきれないことが実データで判明したため。retune後の実測: 唐松岳9/6=76.5(80未満に)、立山9/5=88.6、槍ヶ岳9/5=75.4(いずれも雨天割合は正しく反映、次段落参照)。
 - **既知の限界(次回への持ち越し)**: retune後に槍ヶ岳9/5を再検証したところ、雨天割合は14.3%(2/14h、通り雨相当)と低いにもかかわらず、スコアは75.4のまま80を割っている。原因は**雲量**: 稜線帯(8-11時、3時間窓)の平均が9時81%・10時72%という朝の一時的な曇りで58%程度まで押し上げられていた。降水と同じ「持続性」の考え方(単一の平均/ピークではなく時間帯内の割合を見る)を雲量にも適用すべきかもしれないが、9-10時に実際にガスっていた可能性も否定できず断定はできない。**次回の検証候補としてここに記録**(ユーザー了承済み、2026-09時点で未着手)。
 
@@ -124,11 +125,11 @@ mvp.py/detail.pyは**それぞれの独自機能については引き続き意�
 
 登山の行動全体(登り・稜線滞在・下山)をカバーする設計。当初はAM(登り)/稜線帯滞在/PM(下山・雷リスク)の3区間で、PM区間は雷リスク評価専用だったが、2026-09の再設計(上記「スコア計算式」参照)を経て、現在は**降水専用の「活動時間」窓**が別途追加され、計4つの時間区分になっている。
 
-- **活動時間**(降水専用、2026-09第4段階で追加): `TRIP_START_OFFSET_HOURS`(日の出基準の開始、デフォルト日の出-1h)〜`ACTIVITY_END_HOUR`(デフォルト19時、固定時刻) — 降水の`wet_fraction_pct`(活動時間内で降水確率50%以上だった時間の割合)評価に使用。旧来のAM(平均)窓とPM(ピーク)窓を統合したもの。
-- 稜線帯滞在: `RIDGE_START_HOUR`〜`RIDGE_END_HOUR`(デフォルト8-11時、固定時刻) — 稜線雲量(平均)・体感温度評価に使用。風はもうスコアに使わないが、体感温度の計算にはこの区間の平均風速を引き続き使う。
-- PM(下山・対流雷リスク/雲): `PM_START_HOUR`〜`PM_END_HOUR`(デフォルト12-17時、固定時刻) — CAPE最大値(雷、スコア外・危険信号用)に加え、この区間の雲量のピーク値(スコア用、稜線帯平均と比べて悪い方が採用される)を評価。降水はもうここでは評価しない(上記「活動時間」に統合済み)。
+- **活動時間**(降水専用、2026-09第4段階で追加): `TRIP_START_OFFSET_HOURS`(日の出基準の開始、デフォルト日の出-1h)〜**日没+`ACTIVITY_END_GRACE_MINUTES`(デフォルト30分、2026-09-08より日没ベース)** — 降水の`wet_fraction_pct`(活動時間内で降水確率50%以上だった時間の割合)評価に使用。旧来のAM(平均)窓とPM(ピーク)窓を統合したもの。
+- 稜線帯滞在: **2026-09-08、日の出基準の窓に再設計**(旧`RIDGE_START_HOUR`=8/`RIDGE_END_HOUR`=11固定時刻を廃止)。ユーザー自身の登山感覚「日の出から14時ころまでが登山のメインタイム」を出発点に、その前後を`RIDGE_DWELL_TRIM_HOURS`(デフォルト2時間)ずつ削った範囲 — `main_start`(=活動時間と同じ日の出+`TRIP_START_OFFSET_HOURS`)+2h 〜 `MAIN_TIME_END_HOUR`(固定14時)−2h。9月の実測で日の出5:25の場合、06:25〜12:00(約5.6時間)相当になり、旧来の固定3時間(3時間ごとの点のみ)より季節に連動し、かつ時間点数も増える。稜線雲量(平均)・体感温度評価に使用。風はもうスコアに使わないが、体感温度の計算にはこの区間の平均風速を引き続き使う。
+- PM(下山・対流雷リスク/雲): `PM_START_HOUR`(デフォルト12時、固定時刻)〜**上記と同じ日没+`ACTIVITY_END_GRACE_MINUTES`** — CAPE最大値(雷、スコア外・危険信号用)に加え、この区間の雲量のピーク値(スコア用、稜線帯平均と比べて悪い方が採用される)を評価。降水はもうここでは評価しない(上記「活動時間」に統合済み)。
 
-「活動時間」窓は`PM_END_HOUR`(17)より2時間長い`ACTIVITY_END_HOUR`(19)まで続く点に注意 — 意図的に別々の終了時刻(用語上の混同に注意: 危険信号のPM窓と、降水専用の活動時間窓は別物)。
+**「活動時間」窓とPM窓は、2026-09-08より終了ラインを完全に統一した**(旧`ACTIVITY_END_HOUR`=19時/`PM_END_HOUR`=17時という別々の固定時刻を廃止 — 経緯は上記「降水の再設計」節参照)。2つの窓の違いは開始時刻(活動時間は日の出基準、PMは正午固定)だけになった。
 
 detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOURS`〜日の入り」の**表示用**時間帯(1時間ごとテーブル、後述)も持つ。両者は独立した概念で、たまたま開始オフセットが同じ値(-1h)なだけ。
 
@@ -247,11 +248,11 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
   - `temp_confidence(p10_p90_width_c)`: メンバー間気温の10-90パーセンタイル幅(℃、`_percentile()`で線形補間、標準ライブラリの`statistics`モジュールのみ使用・新規依存追加なし)。0〜8℃を100〜0に線形マッピング。
   - `combine_confidence()`: 3つを**単純平均**(指示にある「重み付き平均」は未実装。実データでの比較材料が無いため、まずは等重みからスタートという判断)。
 - **対象期間の判定(`CONFIDENCE_MIN_DAYS_OUT = 2`)**: 今日から2日先(=day2、明日の翌日)以降のみ確信度を出す。MSMの約39時間という守備範囲が「今日」と「明日の午前」にかかりうるため、決定論パイプラインのマージ後(どの時刻がMSM由来かECMWF由来かを個別に追跡していない)からは正確な切り分けができない。保守的に日0・日1を丸ごとスキップする簡略化として実装(コード内コメントに明記)。
-- **稜線帯(8-11時)ウィンドウ限定**: `mountain_climb_score`の稜線雲量・体感温度が使っているのと同じ時間帯(`RIDGE_START_HOUR`〜`RIDGE_END_HOUR`)だけを対象に確信度を平均する。スコアの入力と同じ時間帯の"ブレ"を見ている、という対応関係を保つため。
+- **稜線帯ウィンドウ限定**: `mountain_climb_score`の稜線雲量・体感温度が使っているのと同じ、日の出基準の稜線帯滞在窓(2026-09-08再設計、上記「3つの評価期間」節参照)だけを対象に確信度を平均する。スコアの入力と同じ時間帯の"ブレ"を見ている、という対応関係を保つため。窓が日の出基準になったのに伴い、`compute_ensemble_confidence_by_day()`は`daily_sunrise`(呼び出し元の`fetch_forecast()`が既に取得済みの`forecast["_daily_sunrise"]`)を引数で受け取るようになった(このためだけの新規APIコールは追加していない)。
 - **「予報」ラベル(晴れ/曇り/雨)**: `compute_day_scores()`(mvp.py/detail.py共通の決定論スコア関数)は一切変更せず、代わりにアンサンブル自身のコントロールラン雲量・`wet_fraction*100`(降水確率の代用)・メンバー平均降水量を`pick_weather_icon()`(GPX地図機能で新設した晴れ/曇り/雨判定、既存のまま流用)に渡してラベルを作る。確信度の数値と同じデータソースから一貫して作っているので、「予報」ラベルと「確信度」が別々の入力から来て食い違う、という事態を避けている。
 - **出力例**(`print_ensemble_confidence_table()`):
   ```
-  === 唐松岳(2696m) ECMWFアンサンブル確信度(2日先以降、稜線帯8-11時、51メンバー) ===
+  === 唐松岳(2696m) ECMWFアンサンブル確信度(2日先以降、稜線帯(日の出+1h〜12時)、51メンバー) ===
   (参考値: mountain_climb_scoreには含まれていません。予報のブレの大きさの目安です)
 
   日付              予報    確信度  雲量/降水/気温内訳
@@ -275,6 +276,25 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 - **保存先・ファイル名**: `screenshots/jma_weathermap_<YYYY-MM-DD>_<HHMM>.png`(取得時刻はローカル時刻)。予想天気図は同じタイムスタンプに`_plus24h`/`_plus48h`を付けたファイル名(例: `jma_weathermap_2026-09-02_0007_plus24h.png`)。
 - **利用規約**: 気象庁サイトに`robots.txt`は存在せず(404)、利用規約ページ(https://www.jma.go.jp/jma/kishou/info/coment.html )にも自動アクセス自体を禁じる記載はない(2026-09確認)。ただしコンテンツ利用時は「公共データ利用規約(第1.0版)」に基づき**出典表記(例: 出典:気象庁ホームページ https://www.jma.go.jp/bosai/weather_map/ )が必要**。また気象業務法第17条・第23条により、この天気図を元にした独自予報・警報をあたかも気象庁発表であるかのように見せる利用は禁止されている(ヤマビヨリの通常利用 = 個人の登山判断の参考にする範囲では問題にならない想定)。
 - **運用ルール(節度を持ったアクセス)**: 気象庁の本番サイトに毎回ブラウザで直接アクセスする機能なので、Open-Meteo側のような3時間キャッシュ層は今のところ持たせていない。**1回の診断につき1回程度の取得にとどめ、ループ処理や短時間の連続呼び出しはしないこと**(自動リトライで無限に叩き直すような実装もしないこと)。頻繁な取得が必要になった場合は、まずキャッシュ層(取得済みファイルの再利用)を検討すること。
+
+## 気象衛星ひまわり画像取得機能(core.py、オプション、2026-09追加)
+
+`fetch_himawari_image(lat, lon, imgtype="ir"|"strengthen")` — 気象庁の統合地図ページ(https://www.jma.go.jp/bosai/map.html 、気象衛星ひまわり)が使っているのと同じタイルURLを直接`requests`で叩き、指定した緯度経度を中心とする3x3タイル(既定、768x768px)のモザイク画像を合成してJPEG保存する。`fetch_jma_weather_map()`と違い**Playwright不要**(下記「仕組み」参照)。Open-Meteoの予報パイプラインとは完全に別系統(スコア計算には使わない、目視で実況の雲を確認するための補助機能)。`mountain_weather_core.py`にあるため`MOUNTAINS`や他の依存なしに緯度経度だけで呼び出せる(他プロジェクトからの再利用を想定)。
+
+- **依存**: `Pillow`(`venv/`に導入済み、`render_route_weather_map()`と共通)。関数内で遅延import、モジュール先頭ではimportしない。
+- **画像種別(`imgtype`)**: `HIMAWARI_IMG_TYPES`で2種のみ対応(2026-09時点でブラウザのNetwork tabで実測確認済みのものだけ、後述)。
+  - `"ir"` — 赤外画像。夜間も撮影可能(温度ベースのセンサーのため太陽光不要)。日の出前の稜線・山頂の実況確認に使える。
+  - `"strengthen"` — 雲頂強調画像(色分けされた雲頂温度、対流の強さの目安)。CAPE数値(雷リスク)の視覚的ダブルチェックに使える。
+  - 気象庁のページ自体はこの他に可視画像(vis)・水蒸気画像(vap)・トゥルーカラー(color)・夜雲解析(nightmicro)・日中自然色(naturalcolor)・日中雪霧(snowfog)・昼雲解析(daymicro)も提供しているが、それらの内部タイルパスコードは実測確認していないため`HIMAWARI_IMG_TYPES`に**含めていない**。追加する場合は下記と同じ手順(ブラウザで該当メニューをクリックし、`performance.getEntriesByType('resource')`で実際のリクエストURLを読む)で確認してから追加すること。パターンから類推して追加しない(実測せず「多分`vis/xxx`だろう」と決め打ちしたコードは過去に404を出して機能しなかった、後述「仕組み」参照)。
+- **仕組み**: 気象庁の統合地図ページは天気図スクリーンショット機能(`fetch_jma_weather_map()`)と違い、ひまわり画像を**固定URLの静的タイル画像**として配信している(`<canvas>`描画ではなくLeafletの通常のタイルレイヤー)。そのため素の`requests.get()`で直接取得できる。ただし2点、ページのUI表示だけでは分からない実装詳細があり、2026-09にブラウザのDevTools Network tabで実際の通信を確認して初めて判明した:
+  1. **ドロップダウンの表示コードとタイルURLの内部コードは別物**。UIの`elem=ir`(URLハッシュのクエリ)がそのままタイルパスに使われるわけではなく、`ir`→`B13/TBB`、`strengthen`→`SND/ETC`という別の内部パスコードに変換されている。ここを素直に`elem`の値のまま組み立てると404になる(実際に試して確認済み)。
+  2. **日本域("jp")タイルはズーム固定(z=6)**。ページ自身のタイルレイヤー設定で`minZoom=maxZoom=6`に固定されており、地図をどれだけズームしても同じz=6のタイルが使い回される(全球版"fd"は別のズーム範囲を使うが、今回は日本域のみ対応のため未実装)。z=6の1タイルは経度換算で約5.6度四方 — 山頂ピンポイントというよりは「この山の周辺に本当に雲があるか」を確認する広域的な粒度である。
+  - URL形式: `https://www.jma.go.jp/bosai/himawari/data/satimg/{basetime}/jp/{basetime}/{内部パスコード}/6/{x}/{y}.jpg`(`basetime`はJST「YYYYMMDDHHMMSS」形式、`targetTimes_jp.json`から取得)。
+- **タイル座標**: `latlon_to_tile_xy(lat, lon)` が緯度経度から標準Web Mercatorのスリッピータイル座標(x, y)を計算(Leaflet/OSM/JMA自身の地図と同じ方式)。`fetch_himawari_image()`は対象地点を中心に3x3タイル取得し、モザイク画像内の正確なピクセル位置に赤い丸印を重ねて場所を明示する。
+- **保存先・ファイル名**: `screenshots/himawari_<imgtype>_<basetime>.jpg`(`fetch_jma_weather_map()`と同じ`screenshots/`ディレクトリを共用)。
+- **利用規約**: `fetch_jma_weather_map()`と同じ「公共データ利用規約(第1.0版)」の扱い(前セクション参照) — **出典表記が必要**(戻り値の`attribution`キー、`HIMAWARI_ATTRIBUTION`定数 = 「出典:気象庁ホームページ (https://www.jma.go.jp/bosai/map.html)」をそのまま画像と一緒に提示すること)。気象業務法第17条・第23条により、これを元にした独自予報・警報を気象庁発表であるかのように見せる利用は禁止(ヤマビヨリの通常利用の範囲では問題にならない想定)。
+- **運用ルール(節度を持ったアクセス)**: `fetch_jma_weather_map()`と同じ判断で、持続的なディスクキャッシュは持たせていない。**1回の診断につき1回程度の取得にとどめ、ループ処理や短時間の連続呼び出しはしないこと**。
+- **`main()`には未接続**(手動呼び出し用途)。診断モードで使う場合は、次節「診断モードの標準フロー」の天気図読解と同じ判断基準(判断に迷うスコア域・ユーザーの明示的な要求など)で、`fetch_jma_weather_map()`と合わせて/代わりに呼び出すことを想定(状況に応じてどちらか一方でも両方でもよい — 天気図は広域の気圧配置、ひまわり画像はその地点の実際の雲の有無、という補完関係)。
 
 ## 診断モードの標準フロー(天気図読解つき、2026-09追加)
 
@@ -406,8 +426,8 @@ echo "12" | ./venv/Scripts/python.exe mountain_weather_detail.py   # 非対話(1
 
 `mountain_weather_core.py`は直接実行しない(mvp.py/detail.pyからimportされるだけのモジュール)。
 
-`mountain_weather_mvp.py` 側の主な調整パラメータ: `REGION_FILTER`(空=全地域)、`TOP_N_PER_DAY`(Noneで無制限)、`MIN_SCORE_THRESHOLD`(デフォルト80.0)、`TRIP_START_OFFSET_HOURS`/`TRIP_DURATION_HOURS`(AM/登り)、`RIDGE_START_HOUR`/`RIDGE_END_HOUR`(稜線帯滞在)、`PM_START_HOUR`/`PM_END_HOUR`(下山・対流雷リスク)、`SCORE_WEIGHTS`(雲量/視程/降水の3軸、加重幾何平均の指数。現在は等分で各1/3。雷・強風・体感温度はスコア外、`mountain_hazards()`参照)、`CACHE_TTL_SECONDS`(キャッシュ有効期間、デフォルト3時間)。
-`mountain_weather_detail.py` 側: `FORECAST_DAYS`(14)、`EARLY_START_OFFSET_HOURS`(表示用テーブルの開始オフセット)、`TRIP_START_OFFSET_HOURS`/`TRIP_DURATION_HOURS`/`RIDGE_START_HOUR`/`RIDGE_END_HOUR`/`PM_START_HOUR`/`PM_END_HOUR`(スコア用の3区間、mvp.pyと同じ意味)、`SCORE_WEIGHTS`、`CACHE_TTL_SECONDS`。
+`mountain_weather_mvp.py` 側の主な調整パラメータ: `REGION_FILTER`(空=全地域)、`TOP_N_PER_DAY`(Noneで無制限)、`MIN_SCORE_THRESHOLD`(デフォルト80.0)、`TRIP_START_OFFSET_HOURS`(活動時間・稜線帯滞在の共通の起点オフセット、日の出基準)、`MAIN_TIME_END_HOUR`/`RIDGE_DWELL_TRIM_HOURS`(稜線帯滞在、2026-09-09より日の出基準に再設計。デフォルト14時/2時間)、`PM_START_HOUR`(下山・対流雷リスク開始)、`ACTIVITY_END_GRACE_MINUTES`(活動時間・PM窓共通の終了ライン=日没+この分数、デフォルト30分、2026-09-08より日没ベース)、`SCORE_WEIGHTS`(雲量/視程/降水の3軸、加重幾何平均の指数。現在は降水50%・雲量25%・視程25%。雷・強風・体感温度はスコア外、`mountain_hazards()`参照)、`CACHE_TTL_SECONDS`(キャッシュ有効期間、デフォルト3時間)。`TRIP_DURATION_HOURS`(登りの目安時間)は2026-09-09に削除済み — 表示テキストにしか使われておらず、どの窓の判定にも実際には効いていなかった(活動時間はとうに日没まで伸びており、6時間という値と乖離していた)ため。
+`mountain_weather_detail.py` 側: `FORECAST_DAYS`(14)、`EARLY_START_OFFSET_HOURS`(表示用テーブルの開始オフセット)、`TRIP_START_OFFSET_HOURS`/`MAIN_TIME_END_HOUR`/`RIDGE_DWELL_TRIM_HOURS`/`PM_START_HOUR`/`ACTIVITY_END_GRACE_MINUTES`(スコア用の区間、mvp.pyと同じ意味)、`SCORE_WEIGHTS`、`CACHE_TTL_SECONDS`。
 
 ## 出力フォーマット
 

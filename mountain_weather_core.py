@@ -48,7 +48,9 @@ real, non-cosmetic ways between the two scripts):
 Not meant to be run directly.
 """
 
+import io
 import json
+import math
 import os
 import time as time_module
 import unicodedata
@@ -693,3 +695,173 @@ def fetch_open_meteo(lat: float, lon: float, hourly: list = None, daily: list = 
     merged["_fetched_at"] = time_module.time()
     _save_cache(path, merged)
     return merged
+
+
+# ---------------------------------------------------------------------------
+# JMA himawari satellite imagery (Japan-area tiles) -- optional, 2026-09
+# addition. Same role as fetch_jma_weather_map() in mountain_weather_detail.py
+# (an "eyeball the real thing" corroboration source, not fed into
+# mountain_climb_score), but for cloud imagery specifically: the infrared
+# band works at night, unlike a forecast cloudcover% -- useful for confirming
+# there's actually cloud on the ridge right now before a pre-dawn start.
+# 雲頂強調画像(cloud-top enhanced) doubles as a rough visual cross-check on a
+# high CAPE reading (mountain_hazards()' thunder threshold).
+#
+# Placed here rather than mountain_weather_detail.py because it's
+# lat/lon-only with no dependency on MOUNTAINS or the Open-Meteo pipeline
+# (2026-09 request: keep it callable standalone from other projects).
+#
+# Unlike fetch_jma_weather_map(), this needs no Playwright: the page
+# (https://www.jma.go.jp/bosai/map.html, 気象衛星ひまわり) renders tiles via
+# plain <img> tags at fixed URLs, not a canvas/JS-only draw -- confirmed
+# live (2026-09) by opening that page in a browser, switching the image-type
+# dropdown, and reading performance.getEntriesByType('resource') for the
+# actual tile requests, rather than guessing the URL shape. Two things
+# that request inspection surfaced and aren't obvious from the page's own
+# UI labels:
+#   - The dropdown's element code (e.g. "ir") is NOT the path segment the
+#     tile URL uses -- HIMAWARI_IMG_TYPES below maps the public code to the
+#     real one (e.g. "ir" -> "B13/TBB"). Only the two this project needed
+#     were confirmed this way; the dropdown also offers vis/vap/color/
+#     nightmicro/naturalcolor/snowfog/daymicro, whose real path codes are
+#     NOT in the dict below (not verified against real traffic -- add them
+#     the same way, don't guess from the pattern of the two known ones).
+#   - Japan-area ("jp") tiles are served at a single fixed zoom (z=6 --
+#     confirmed both by the page's own tile-layer config, which pins
+#     minZoom=maxZoom=6 for "jp", and by every request captured regardless
+#     of the map's on-screen zoom level). This is coarser than
+#     fetch_jma_weather_map()'s screenshot (that one crops JMA's own
+#     already-rendered <img>, at whatever resolution JMA draws it) -- each
+#     256x256 z=6 tile spans roughly 5.6 degrees, so this is regional cloud
+#     context (tens of km/pixel), not summit-precise imagery.
+# This module covers "jp" (Japan-area) tiles only, per this feature's scope
+# -- the full-disk/global ("fd") tile set uses a different zoom range and
+# was not exercised through this same verification, so it's intentionally
+# not supported here.
+#
+# 利用規約: 気象庁の公共データ利用規約に基づく扱いは
+# fetch_jma_weather_map()と同じ(mountain_weather_detail.pyのそちらの
+# docstring、SKILL.mdの「気象庁天気図スクリーンショット機能」節を参照) --
+# 出典表記必須(HIMAWARI_ATTRIBUTION)、気象業務法17条・23条によりこれを元に
+# した独自予報・警報の公表は禁止、節度あるアクセス(ループ処理や短時間の
+# 連続呼び出しはしない)。持続的なディスクキャッシュは持たせていない
+# (fetch_jma_weather_map()と同じ判断)。
+# ---------------------------------------------------------------------------
+HIMAWARI_BASE_URL = "https://www.jma.go.jp/bosai/himawari/data/satimg"
+HIMAWARI_ZOOM = 6  # fixed for the "jp" area -- see banner comment
+HIMAWARI_TILE_PX = 256
+HIMAWARI_ATTRIBUTION = "出典:気象庁ホームページ (https://www.jma.go.jp/bosai/map.html)"
+HIMAWARI_OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "screenshots")
+
+# Public dropdown code -> real tile-path code (see banner comment; only
+# these two are confirmed against live traffic).
+HIMAWARI_IMG_TYPES = {
+    "ir": "B13/TBB",          # 赤外画像 (infrared) -- usable day and night
+    "strengthen": "SND/ETC",  # 雲頂強調画像 (cloud-top enhanced)
+}
+
+
+def himawari_latest_basetime(area: str = "jp") -> str:
+    """Most recent basetime (JST, "YYYYMMDDHHMMSS") with imagery available
+    for `area` ("jp" updates every ~2.5-10 minutes). No persistent cache
+    (mirrors fetch_jma_weather_map()'s own no-cache stance) -- call
+    sparingly, not in a loop; a caller doing several fetches for the same
+    moment should call this once and pass the result as basetime= to
+    fetch_himawari_tile()/fetch_himawari_image() rather than calling this
+    again for each."""
+    resp = get_with_retry(f"{HIMAWARI_BASE_URL}/targetTimes_{area}.json", params=None)
+    return max(t["basetime"] for t in resp.json())
+
+
+def latlon_to_tile_xy(lat: float, lon: float, zoom: int = HIMAWARI_ZOOM) -> tuple:
+    """Standard Web Mercator slippy-map tile (x, y) containing (lat, lon) at
+    `zoom` -- the same scheme Leaflet/OSM/JMA's own map use, and what the
+    tile URL's {x}/{y} are."""
+    lat_rad = math.radians(lat)
+    n = 2 ** zoom
+    x = int((lon + 180.0) / 360.0 * n)
+    y = int((1.0 - math.log(math.tan(lat_rad) + 1.0 / math.cos(lat_rad)) / math.pi) / 2.0 * n)
+    return x, y
+
+
+def fetch_himawari_tile(x: int, y: int, imgtype: str = "ir", basetime: str = None) -> bytes:
+    """Raw JPEG bytes of one z=6 "jp"-area himawari tile at slippy-map
+    coordinate (x, y) -- see latlon_to_tile_xy() to get (x, y) from a
+    lat/lon. basetime defaults to the latest available
+    (himawari_latest_basetime()); pass an explicit one (itself from
+    himawari_latest_basetime(), or a "basetime" value out of
+    targetTimes_jp.json) to look at a specific past moment within JMA's own
+    retention window."""
+    if imgtype not in HIMAWARI_IMG_TYPES:
+        raise ValueError(f"imgtype must be one of {list(HIMAWARI_IMG_TYPES)}, got {imgtype!r}")
+    basetime = basetime or himawari_latest_basetime("jp")
+    path_code = HIMAWARI_IMG_TYPES[imgtype]
+    url = f"{HIMAWARI_BASE_URL}/{basetime}/jp/{basetime}/{path_code}/{HIMAWARI_ZOOM}/{x}/{y}.jpg"
+    resp = get_with_retry(url, params=None)
+    return resp.content
+
+
+def fetch_himawari_image(lat: float, lon: float, imgtype: str = "ir", basetime: str = None,
+                          tile_span: int = 3, out_path: str = None) -> dict:
+    """Small mosaic of tile_span x tile_span himawari tiles (default 3x3,
+    768x768px) centered on (lat, lon), with a red crosshair marking that
+    exact point, saved as a JPEG. tile_span must be odd, so the target
+    point's own tile lands in the mosaic's center.
+
+    Each z=6 tile spans roughly 5.6 degrees (see banner comment) -- this
+    gives regional cloud context around the point ("is there cloud near
+    this mountain right now"), not summit-precise imagery. Widen tile_span
+    for more surrounding context (e.g. tracking an approaching system), or
+    leave at the default for a tighter crop.
+
+    Requires Pillow (lazy import, same convention as
+    render_route_weather_map()'s own PIL dependency in
+    mountain_weather_detail.py -- not part of this project's core
+    `pip install requests` dependency; see SKILL.md).
+
+    Returns {"path": saved JPEG path, "basetime": the JST
+    "YYYYMMDDHHMMSS" actually used, "attribution": HIMAWARI_ATTRIBUTION}
+    -- keep that attribution string alongside the image wherever it's
+    shown/shared (see banner comment's 利用規約 note)."""
+    from PIL import Image, ImageDraw
+
+    if tile_span % 2 == 0:
+        raise ValueError(f"tile_span must be odd, got {tile_span}")
+
+    basetime = basetime or himawari_latest_basetime("jp")
+    cx, cy = latlon_to_tile_xy(lat, lon)
+    half = tile_span // 2
+
+    mosaic = Image.new("RGB", (tile_span * HIMAWARI_TILE_PX, tile_span * HIMAWARI_TILE_PX))
+    for row, ty in enumerate(range(cy - half, cy + half + 1)):
+        for col, tx in enumerate(range(cx - half, cx + half + 1)):
+            try:
+                tile_bytes = fetch_himawari_tile(tx, ty, imgtype=imgtype, basetime=basetime)
+                tile_img = Image.open(io.BytesIO(tile_bytes)).convert("RGB")
+            except requests.exceptions.RequestException:
+                # Off the edge of JMA's jp tile grid, or a transient error --
+                # fall back to a flat gray tile rather than failing the
+                # whole mosaic over one missing corner.
+                tile_img = Image.new("RGB", (HIMAWARI_TILE_PX, HIMAWARI_TILE_PX), (32, 32, 32))
+            mosaic.paste(tile_img, (col * HIMAWARI_TILE_PX, row * HIMAWARI_TILE_PX))
+
+    # Sub-tile pixel position of (lat, lon) within the mosaic -- same
+    # projection as latlon_to_tile_xy(), kept in float instead of floored to
+    # the tile index, so the crosshair lands on the exact point rather than
+    # just its tile's corner.
+    n = 2 ** HIMAWARI_ZOOM
+    lat_rad = math.radians(lat)
+    fx = (lon + 180.0) / 360.0 * n
+    fy = (1.0 - math.log(math.tan(lat_rad) + 1.0 / math.cos(lat_rad)) / math.pi) / 2.0 * n
+    px = (fx - (cx - half)) * HIMAWARI_TILE_PX
+    py = (fy - (cy - half)) * HIMAWARI_TILE_PX
+
+    draw = ImageDraw.Draw(mosaic)
+    r = 10
+    draw.ellipse([px - r, py - r, px + r, py + r], outline=(255, 0, 0), width=3)
+
+    out_path = os.path.abspath(out_path or os.path.join(HIMAWARI_OUT_DIR, f"himawari_{imgtype}_{basetime}.jpg"))
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    mosaic.save(out_path, "JPEG", quality=90)
+
+    return {"path": out_path, "basetime": basetime, "attribution": HIMAWARI_ATTRIBUTION}
