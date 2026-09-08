@@ -38,6 +38,8 @@ from mountain_weather_core import (
     PRECIP_TIMING_BOUNDARY_HIGH, PRECIP_TIMING_NOTE,
     get_with_retry, CACHE_DIR, CACHE_TTL_SECONDS, _load_cache, _save_cache,
     fetch_open_meteo,
+    WET_HOUR_PRECIP_THRESHOLD_PCT, WET_HOUR_MSM_PRECIP_MM, WET_HOUR_RH_PCT, WET_HOUR_MOIST_CLOUD_PCT,
+    MSM_PRECIP_VAR, wet_fraction, any_layer_moist, slope_pressure_level,
 )
 
 # ---------------------------------------------------------------------------
@@ -97,6 +99,17 @@ def wind_vars_for_elevation(elevation_m: float):
     corresponding wind speed/direction hourly variable names."""
     hpa = nearest_pressure_level(elevation_m)
     return hpa, f"windspeed_{hpa}hPa", f"winddirection_{hpa}hPa"
+
+
+def moisture_vars_for_summit(summit_hpa: int) -> list:
+    """Hourly variable names the moisture rule of core.is_wet_hour() needs
+    for a mountain whose own level is summit_hpa: RH + cloud at that level
+    and at the slope level below it (core.slope_pressure_level). Pass these
+    as extra_vars to fetch_forecast() -- the fixed 925/850/700hPa cloud/RH
+    are always fetched anyway, so this only adds anything for summits
+    outside those (e.g. 富士山's 600hPa)."""
+    levels = [summit_hpa] + ([slope_pressure_level(summit_hpa)] if slope_pressure_level(summit_hpa) else [])
+    return [f"{kind}_{h}hPa" for h in levels for kind in ("relative_humidity", "cloudcover")]
 
 
 def temp_var_for_elevation(elevation_m: float) -> str:
@@ -219,7 +232,9 @@ RIDGE_DWELL_TRIM_HOURS = 2
 # snapping to "activity" at the instant of sunset -- a starting judgment
 # call, not a fitted value, easy to retune.
 ACTIVITY_END_GRACE_MINUTES = 30
-WET_HOUR_PRECIP_THRESHOLD_PCT = 50.0  # an hour "counts as rain" at/above this probability
+# WET_HOUR_PRECIP_THRESHOLD_PCT / WET_HOUR_MSM_PRECIP_MM / is_wet_hour(): the
+# per-hour wet judgment now lives in mountain_weather_core.py (2026-09-09,
+# MSM-first redesign -- see the banner comment there).
 
 # get_with_retry/REQUEST_TIMEOUT/MAX_RETRIES and the raw-JSON response cache
 # (CACHE_DIR/CACHE_TTL_SECONDS/_load_cache/_save_cache/fetch_open_meteo) are
@@ -297,6 +312,12 @@ def fetch_forecast(lat: float, lon: float, days: int = FORECAST_DAYS, extra_vars
         for t in msm["hourly"]["time"]
     ]
 
+    # Raw MSM precipitation, un-merged (None beyond MSM's ~3-day range) --
+    # the MSM-first wet-hour judgment (core.is_wet_hour) needs to know
+    # which hours MSM actually covered, which the merged "precipitation"
+    # column above can no longer tell it.
+    merged_hourly[MSM_PRECIP_VAR] = list(msm["hourly"].get("precipitation", []))
+
     daily_sunrise = dict(zip(fallback["daily"]["time"], fallback["daily"]["sunrise"]))
     daily_sunset = dict(zip(fallback["daily"]["time"], fallback["daily"]["sunset"]))
     return {"hourly": merged_hourly, "_daily_sunrise": daily_sunrise, "_daily_sunset": daily_sunset}
@@ -354,6 +375,16 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
     times = forecast["hourly"]["time"]
     precip_prob_series = forecast["hourly"]["precipitation_probability"]
     precip_mm_series = forecast["hourly"]["precipitation"]
+    # .get(): scratch_past_date.py-style model=None forecasts have no MSM
+    # column, in which case every hour falls back to the probability rule.
+    msm_mm_series = forecast["hourly"].get(MSM_PRECIP_VAR) or [None] * len(times)
+    # Moisture rule layers (core.is_wet_hour()): summit level + slope level.
+    # .get(): missing columns just mean that layer can't vote.
+    slope_hpa = slope_pressure_level(summit_hpa) if summit_hpa else None
+    moist_layer_series = []
+    for hpa in [h for h in (summit_hpa, slope_hpa) if h]:
+        moist_layer_series.append((forecast["hourly"].get(f"relative_humidity_{hpa}hPa") or [None] * len(times),
+                                   forecast["hourly"].get(f"cloudcover_{hpa}hPa") or [None] * len(times)))
     cape_series = forecast["hourly"]["cape"]
     wind_speed_series = forecast["hourly"].get(wind_speed_var)
     summit_cloud_series = forecast["hourly"].get(f"cloudcover_{summit_hpa}hPa") if summit_hpa else None
@@ -397,9 +428,11 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
 
         if main_start is not None and activity_end is not None:
             if main_start <= t_dt < activity_end:
-                e = activity_by_day.setdefault(day_str, {"precip_prob": [], "precip_mm": []})
+                e = activity_by_day.setdefault(day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": []})
                 e["precip_prob"].append(precip_prob_series[idx])
                 e["precip_mm"].append(precip_mm_series[idx])
+                e["msm_mm"].append(msm_mm_series[idx])
+                e["moist"].append(any_layer_moist(*[(rh[idx], c[idx]) for rh, c in moist_layer_series]))
 
         if sunrise_iso is not None and sunset_iso is not None:
             day_start = datetime.fromisoformat(sunrise_iso) + timedelta(hours=EARLY_START_OFFSET_HOURS)
@@ -425,7 +458,7 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
 
     scores = {}
     for day_str in sorted(set(activity_by_day) | set(ridge_by_day) | set(pm_by_day)):
-        activity = activity_by_day.get(day_str, {"precip_prob": [], "precip_mm": []})
+        activity = activity_by_day.get(day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": []})
         ridge = ridge_by_day.get(day_str, {"wind_kmh": [], "cloud": [], "temp": [], "visibility": []})
         pm = pm_by_day.get(day_str, {"cape": [], "cloud": []})
 
@@ -437,10 +470,14 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
         # of the window (終日雨) scores a high one, even with the same peak
         # hourly probability -- confirmed against 槍ヶ岳9/5 and 立山9/5, both
         # reported as good days despite one isolated high-probability hour.
-        activity_probs = [v for v in activity["precip_prob"] if v is not None]
+        # MSM-first (2026-09-09): inside MSM's range an hour is wet on MSM's
+        # own 5km precipitation (>=WET_HOUR_MSM_PRECIP_MM), with the ECMWF
+        # probability kept as a backstop; beyond it, probability only. See
+        # core.is_wet_hour()'s banner comment for the rule and why.
         activity_mm = [v for v in activity["precip_mm"] if v is not None]
-        wet_hours = sum(1 for v in activity_probs if v >= WET_HOUR_PRECIP_THRESHOLD_PCT)
-        precip_wet_pct = (100.0 * wet_hours / len(activity_probs)) if activity_probs else 0.0
+        wf = wet_fraction(activity["precip_prob"], activity["msm_mm"], activity["moist"])
+        wet_hours = wf["wet_hours"]
+        precip_wet_pct = wf["wet_fraction_pct"]
         precip_mm = max(activity_mm) if activity_mm else 0.0
 
         # PM still uses the window's PEAK (not average) for cloud -- same
@@ -495,7 +532,9 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
             "ridge_visibility": round(ridge_visibility) if ridge_visibility is not None else None,
             "precip_wet_pct": round(precip_wet_pct, 1),
             "precip_wet_hours": wet_hours,
-            "precip_total_hours": len(activity_probs),
+            "precip_total_hours": wf["total_hours"],
+            "precip_msm_hours": wf["msm_hours"],
+            "precip_moist_hours": wf["moist_hours"],
             "chill": round(chill, 1) if chill is not None else None,
             "day_peak_wind_ms": round(day_peak_wind_ms, 1) if day_peak_wind_ms is not None else None,
             "day_peak_wind_hour": peak_hour,
@@ -837,6 +876,19 @@ def precip_timing_note(day_scores: dict):
     return None
 
 
+def wet_fraction_cell(r) -> str:
+    """'35.7(5/14h M 湿5)' -- M = every hour judged on MSM (precipitation +
+    moisture rule), 'M9' = 9 of the hours were, nothing = ECMWF probability
+    only; '湿n' = n of the wet hours came from the moisture rule alone (no
+    MSM rain). See core.is_wet_hour()."""
+    msm, total = r.get("precip_msm_hours", 0), r["precip_total_hours"]
+    tag = "" if not msm else (" M" if msm == total else f" M{msm}")
+    moist = r.get("precip_moist_hours", 0)
+    if moist:
+        tag += f" 湿{moist}"
+    return f"{fmt(r['precip_wet_pct'])}({r['precip_wet_hours']}/{r['precip_total_hours']}h{tag})"
+
+
 def print_day_score_table(mtn: dict, day_scores: dict):
     """Day-by-day mountain_climb_score for the selected mountain -- the same
     scoring formula/weights mountain_weather_mvp.py uses to rank all 75
@@ -847,7 +899,8 @@ def print_day_score_table(mtn: dict, day_scores: dict):
           f"PM(下山・雷/雲)開始:{PM_START_HOUR}時 "
           f"活動時間(降水判定・PM共通の終了):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜日没+{ACTIVITY_END_GRACE_MINUTES}分 / "
           f"雲量(稜線/PM)・視程・降水(活動時間中の雨天割合)の重み付き幾何平均(各{SCORE_WEIGHTS['cloud']:.2f}) / "
-          f"雷・強風・低体温症はスコアに含めず「危険信号」列で別枠警告)\n")
+          f"雷・強風・低体温症はスコアに含めず「危険信号」列で別枠警告 / "
+          f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂面/その下の面でRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上、湿n表記)、MSM範囲外はECMWF降水確率{WET_HOUR_PRECIP_THRESHOLD_PCT:.0f}%以上)\n")
     header = (
         pad("日付", 18) + pad("危険信号(雷/強風/低体温症)", 34) + pad("スコア", 8) + pad("稜線風速m/s", 12)
         + pad("雷リスクCAPE", 14) + pad("雲量%(稜線/PM)", 14) + pad("視程m(稜線)", 10)
@@ -857,7 +910,7 @@ def print_day_score_table(mtn: dict, day_scores: dict):
     print(header)
     for day_str in sorted(day_scores):
         r = day_scores[day_str]
-        wet_cell = f"{fmt(r['precip_wet_pct'])}({r['precip_wet_hours']}/{r['precip_total_hours']}h)"
+        wet_cell = wet_fraction_cell(r)
         row = (
             pad(format_date_with_weekday(day_str), 18) + pad(hazard_warning_cell(r), 34)
             + pad(str(r["score"]), 8)
@@ -1211,6 +1264,7 @@ def fetch_waypoint_hourly(wp: dict, target_date: str):
     # print_hourly_table wants) -- same extra_vars main_single_mountain()
     # passes for the single-mountain flow.
     extra_vars = ([wind_speed_var, wind_dir_var, temp_var, cloud_var]
+                  + moisture_vars_for_summit(hpa)
                   + list(WIND_SPEED_BAND_VARS.values()) + list(WIND_DIR_BAND_VARS.values()))
 
     forecast = fetch_forecast(wp["lat"], wp["lon"], extra_vars=extra_vars)
@@ -2487,6 +2541,7 @@ def main_single_mountain():
     wind_hpa, wind_speed_var, wind_dir_var = wind_vars_for_elevation(mtn["elevation_m"])
     temp_var = temp_var_for_elevation(mtn["elevation_m"])
     extra_vars = ([wind_speed_var, wind_dir_var, temp_var, f"cloudcover_{wind_hpa}hPa"]
+                  + moisture_vars_for_summit(wind_hpa)
                   + list(WIND_SPEED_BAND_VARS.values()) + list(WIND_DIR_BAND_VARS.values()))
 
     try:

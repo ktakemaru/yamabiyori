@@ -539,6 +539,127 @@ def mountain_hazards(*, ridge_wind_ms, pm_cape, chill_c, precip_wet_pct, precip_
             "any": thunder != "-" or wind != "-" or cold != "-"}
 
 
+# ---------------------------------------------------------------------------
+# Per-hour "wet" judgment for the activity window's wet_fraction_pct
+# (2026-09-09, MSM-first redesign; moisture rule added the same day).
+# Shared by mvp.py's window_scores_by_day() and detail.py's
+# compute_day_scores().
+#
+# Background: Open-Meteo's jma_msm serves NO precipitation_probability, cape,
+# lifted_index or convective_inhibition (all-null, confirmed live 2026-09-09
+# against the API). Before this change every "wet hour" -- 50% of the score
+# -- came from ecmwf_ifs025's ensemble-derived probability (~25km grid) even
+# inside MSM's own ~3-day range, while MSM's 5km precipitation (which IS
+# served) was only used for the peak-mm/h side.
+#
+# Rule, per hour:
+#   - MSM available (inside MSM's range, roughly today+2):
+#       wet if  MSM mm/h >= WET_HOUR_MSM_PRECIP_MM
+#           or  a "moist layer" is on the mountain: relative humidity >=
+#               WET_HOUR_RH_PCT AND cloud cover >= WET_HOUR_MOIST_CLOUD_PCT at
+#               the summit's own pressure level OR at the next standard level
+#               below it (the slope the climber walks up/down through --
+#               slope_pressure_level()). This is the mountain-meteorology
+#               reading: "is saturated air sitting on the ridge/slope," which
+#               a 5km deterministic model resolves even when it converts
+#               none of it into mm (drizzle, ridge fog, orographic stratus).
+#           (ECMWF probability is NOT consulted here unless
+#            WET_HOUR_KEEP_ECMWF_PROB_IN_MSM_RANGE is flipped on -- kept as
+#            an A/B switch.)
+#   - No MSM value (beyond its range, or model=None past-date lookups):
+#       wet if probability >= WET_HOUR_PRECIP_THRESHOLD_PCT, as before.
+#       (TODO: ecmwf_ifs025 serves the same pressure-level RH/cloud, so the
+#       moisture rule could replace the probability there too once
+#       validated.)
+#   - Neither available: None (the hour is excluded from the fraction).
+#
+# Why (validated 2026-09-09 on past-date MSM data, see CHANGELOG):
+#   - 唐松岳9/6 (the incident this scoring redesign exists for; rain on the
+#     descent, ~1mm/day): MSM precipitation was 0.0mm at the point AND on all
+#     25 grid cells within +-10km for every activity hour -- a neighborhood
+#     probability would have scored the day ~97 (a miss). But MSM's 850hPa
+#     layer (the descent) moistened 80->96% RH with cloud 37->58% from 13時,
+#     wind veering SW/W: the moisture rule flags 14-18時.
+#   - 立山9/5 and 槍ヶ岳9/5 (reported fine days): ECMWF probability put
+#     50-80% on hours where MSM's 700hPa RH was 14-29% (dry aloft, likely
+#     false alarms); the moisture rule leaves 立山 with ~1h and 槍 with the
+#     one 15時 hour where RH700 hit 94% / cloud 56% (a real late-afternoon
+#     summit cloud-up, after most people were down).
+#   Thresholds: RH 90 / cloud 40 reproduce the user's own call that
+#   唐松岳9/6 must stay below 80 (5/14h wet -> 77.9, same as before);
+#   cloud 50 would drop 14時 and lift it to 82.1. Judgment calls, easy to
+#   retune -- re-run scratch validation on the three reference days after
+#   touching any of them.
+# ---------------------------------------------------------------------------
+WET_HOUR_PRECIP_THRESHOLD_PCT = 50.0  # beyond MSM: an hour "counts as rain" at/above this probability
+WET_HOUR_MSM_PRECIP_MM = 0.1          # MSM: ... at/above this MSM hourly precipitation (mm/h)
+WET_HOUR_RH_PCT = 90.0                # MSM: ... or a moist layer: RH at/above this ...
+WET_HOUR_MOIST_CLOUD_PCT = 40.0       #      ... AND cloud cover at/above this, at summit or slope level
+WET_HOUR_KEEP_ECMWF_PROB_IN_MSM_RANGE = False  # A/B switch: also count ECMWF prob>=50% inside MSM range
+MSM_PRECIP_VAR = "precipitation_msm"  # raw jma_msm precipitation, None beyond MSM's range
+
+
+def slope_pressure_level(summit_hpa: int):
+    """The next standard pressure level BELOW summit_hpa's altitude (i.e. the
+    next larger hPa in PRESSURE_LEVELS_HPA), or None if summit_hpa is already
+    the lowest. The "slope layer" the moisture rule checks alongside the
+    summit's own level."""
+    lower = [h for h in PRESSURE_LEVELS_HPA if h > summit_hpa]
+    return min(lower) if lower else None
+
+
+def layer_is_moist(rh_pct, cloud_pct):
+    """True/False for one layer at one hour; None if either input is missing."""
+    if rh_pct is None or cloud_pct is None:
+        return None
+    return rh_pct >= WET_HOUR_RH_PCT and cloud_pct >= WET_HOUR_MOIST_CLOUD_PCT
+
+
+def any_layer_moist(*rh_cloud_pairs):
+    """any() over layer_is_moist() for (rh, cloud) pairs, ignoring layers with
+    missing data; None if no layer had data."""
+    flags = [layer_is_moist(rh, c) for rh, c in rh_cloud_pairs]
+    flags = [f for f in flags if f is not None]
+    return any(flags) if flags else None
+
+
+def is_wet_hour(prob_pct, msm_mm, moist=None):
+    """True/False per the rule above; None when nothing is usable. `moist`
+    is any_layer_moist()'s result for this hour (only consulted inside MSM's
+    range, i.e. when msm_mm is not None)."""
+    if msm_mm is not None:
+        wet = msm_mm >= WET_HOUR_MSM_PRECIP_MM
+        if moist:
+            wet = True
+        if WET_HOUR_KEEP_ECMWF_PROB_IN_MSM_RANGE and prob_pct is not None:
+            wet = wet or prob_pct >= WET_HOUR_PRECIP_THRESHOLD_PCT
+        return wet
+    if prob_pct is not None:
+        return prob_pct >= WET_HOUR_PRECIP_THRESHOLD_PCT
+    return None
+
+
+def wet_fraction(prob_series: list, msm_mm_series: list, moist_series: list = None) -> dict:
+    """Aggregate is_wet_hour() over one activity window. Returns
+    {"wet_hours", "total_hours", "msm_hours", "moist_hours",
+    "wet_fraction_pct"}; msm_hours is how many of total_hours had an MSM
+    value (an MSM-judged day vs an ECMWF-probability-only one), moist_hours
+    how many wet hours came from the moisture rule alone (no MSM mm)."""
+    moist_series = moist_series or [None] * len(prob_series)
+    wet = total = msm = moist_only = 0
+    for prob, mm, moist in zip(prob_series, msm_mm_series, moist_series):
+        w = is_wet_hour(prob, mm, moist)
+        if w is None:
+            continue
+        total += 1
+        wet += 1 if w else 0
+        msm += 1 if mm is not None else 0
+        if w and mm is not None and mm < WET_HOUR_MSM_PRECIP_MM and moist:
+            moist_only += 1
+    return {"wet_hours": wet, "total_hours": total, "msm_hours": msm, "moist_hours": moist_only,
+            "wet_fraction_pct": (100.0 * wet / total) if total else 0.0}
+
+
 # Precip *timing* (which specific day/hour the peak rain lands) is
 # genuinely uncertain at this lead time and in this probability band -- not
 # something this tool's methodology can resolve further. Confirmed 2026-09
