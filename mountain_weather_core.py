@@ -316,6 +316,37 @@ def cloud_penalty(cloud_pct) -> float:
     return cloud_pct if cloud_pct is not None else 0.0
 
 
+# PM cloud "sustained peak" (2026-09-09): how many consecutive hours a
+# cloud-up has to last before it counts at full strength as the PM window's
+# cloud value. The PM window used to take the single highest hour, and
+# because cloud_penalty() feeds the geometric mean directly, ONE
+# interpolated 100% hour (ECMWF's 3-6h values beyond MSM's range, smeared to
+# hourly) zeroed the whole day -- 塔ノ岳9/12 in the 2026-09-09 cache: ridge
+# cloud 30%, wet 0%, visibility 7.9km, score 0.0. Meanwhile a real
+# afternoon cloud-up (唐松岳9/6-style) lasts for hours, so requiring the
+# peak to be the mean over PM_CLOUD_PERSIST_HOURS consecutive hours keeps
+# that case intact and only damps the one-hour blips. 2h, not 3h, because
+# the PM window is ~6h long (12時〜日没+30分) and a 3h requirement would start
+# averaging away genuine 2-hour squalls. A judgment call, easy to retune --
+# re-run the three reference days (see wet_hour_weight's banner) plus
+# 塔ノ岳9/12 after touching it. Thunder (CAPE) deliberately stays a
+# single-hour peak: it's a threshold hazard, not a score input.
+PM_CLOUD_PERSIST_HOURS = 2
+
+
+def sustained_peak(values: list, hours: int = PM_CLOUD_PERSIST_HOURS):
+    """Highest mean over any run of `hours` consecutive samples (None
+    samples are dropped first, so the run is over the hours that have
+    data). Fewer samples than `hours` -> mean of all of them; no samples ->
+    None. With hours=1 this is a plain max()."""
+    clean = [v for v in values if v is not None]
+    if not clean:
+        return None
+    if len(clean) <= hours:
+        return sum(clean) / len(clean)
+    return max(sum(clean[i:i + hours]) / hours for i in range(len(clean) - hours + 1))
+
+
 def visibility_penalty(ridge_visibility_m) -> float:
     """Ridge-band visibility (m), Open-Meteo's own visibility variable
     averaged over the ridge window -- a direct measure of whiteout/gas risk,
@@ -330,6 +361,14 @@ def visibility_penalty(ridge_visibility_m) -> float:
     if ridge_visibility_m >= 100:
         return (1000 - ridge_visibility_m) / (1000 - 100) * 70
     return min(100.0, 70 + (100 - ridge_visibility_m) / 100 * 30)
+
+
+# Activity-window precipitation total (mm) at/above which the intensity side
+# of precip_penalty() is at full penalty (see its docstring). JMA calls
+# 10-20mm/h "やや強い雨" and 20mm+/h "強い雨"; 20mm over a climbing day means
+# either one such hour or a genuinely wet afternoon, both of which a climber
+# would call a washout. Round number, not a fitted value -- easy to retune.
+PRECIP_FULL_PENALTY_TOTAL_MM = 20.0
 
 
 def precip_penalty(wet_pct, mm) -> float:
@@ -353,11 +392,24 @@ def precip_penalty(wet_pct, mm) -> float:
     ~45/100, letting a genuinely wet, dangerous descent score as "fine") --
     the max(wet_pct, intensity) combination below still captures that same
     case now that wet_pct is duration-based instead of a single probability.
-    mm is the activity window's PEAK precip rate (mm/h); 5mm/h+ is treated
-    as already at max penalty for the intensity side."""
+
+    mm (2026-09-09, third pass) is the activity window's TOTAL precipitation
+    (mm summed over the window's hours), no longer its PEAK hourly rate.
+    The peak version hit full penalty at 5mm/h, so a single hour at 5mm/h
+    (a passing shower on an otherwise dry day) zeroed the whole day's
+    score -- 119 of the 1140 mountain-days in the 2026-09-09 cache were
+    at that cap, most of them one-hour ECMWF-interpolated spikes -- which
+    is the same single-hour-peak failure the wet_pct side was already
+    redesigned away from. The window total is what a climber actually
+    carries home ("how much rain fell on me today"): a 1h/5mm shower is
+    5mm -> 25% penalty (the day is dented, not destroyed), a sustained
+    afternoon of 2h x 8mm/h is 16mm -> 80%, and anything at or above
+    PRECIP_FULL_PENALTY_TOTAL_MM is a washout. Sustained light rain
+    (0.5mm/h x 14h = 7mm) is caught by the wet_pct side anyway, which is
+    why the intensity side only needs to answer "short but heavy"."""
     wet_pct = wet_pct or 0.0
     mm = mm or 0.0
-    return max(wet_pct, min(mm / 5.0, 1.0) * 100.0)
+    return max(wet_pct, min(mm / PRECIP_FULL_PENALTY_TOTAL_MM, 1.0) * 100.0)
 
 
 def wet_chill_adjustment_c(precip_wet_pct, precip_mm) -> float:
@@ -368,7 +420,10 @@ def wet_chill_adjustment_c(precip_wet_pct, precip_mm) -> float:
     combination, but wind_chill_c() only models the dry (still-air-
     adjusted) component -- this is a deliberately simple single-step
     correction (not a continuous ramp) rather than a second full scoring
-    axis; threshold and magnitude are a judgment call, easy to retune."""
+    axis; threshold and magnitude are a judgment call, easy to retune.
+    precip_mm is the activity window's TOTAL mm since 2026-09-09 (it was
+    the peak mm/h before); the 0.5mm gate was kept as-is -- it only exists
+    to rule out a "wet" half-day that is all ridge fog and no rain."""
     wet_pct = precip_wet_pct or 0.0
     mm = precip_mm or 0.0
     if wet_pct >= 50.0 and mm >= 0.5:
@@ -472,12 +527,15 @@ def mountain_climb_score(*, cloud_pct, ridge_visibility_m, precip_wet_pct, preci
     because the PM window previously fed only CAPE into the score. Callers
     (mvp.py's main(), detail.py's compute_day_scores()) take max(ridge_value,
     pm_value) for cloud before calling this, so a bad PM cloud-up can no
-    longer be invisible to the score.
+    longer be invisible to the score. pm_value is the PM window's
+    sustained peak (sustained_peak() over PM_CLOUD_PERSIST_HOURS, 2026-09-09
+    -- see that constant's comment), not its single worst hour.
 
     precip_wet_pct/precip_mm (2026-09, second pass -- see precip_penalty's
     docstring): precip_wet_pct is no longer a single window's probability
     either; it's the percentage of the whole activity window's HOURS that
-    are wet, and precip_mm is that window's peak hourly rate. Both already
+    are wet, and precip_mm is that window's total mm (2026-09-09; was the
+    peak hourly rate -- see precip_penalty's docstring). Both already
     span climb-through-typical-descent in one window (see
     window_scores_by_day()'s "activity" / compute_day_scores()'s
     activity_by_day), so there's no separate AM/PM max to take for precip
@@ -541,7 +599,8 @@ def mountain_hazards(*, ridge_wind_ms, pm_cape, chill_c, precip_wet_pct, precip_
 
 # ---------------------------------------------------------------------------
 # Per-hour "wet" judgment for the activity window's wet_fraction_pct
-# (2026-09-09, MSM-first redesign; moisture rule added the same day).
+# (2026-09-09, MSM-first redesign; moisture rule added the same day; the
+# beyond-MSM expected-value rule added the same evening).
 # Shared by mvp.py's window_scores_by_day() and detail.py's
 # compute_day_scores().
 #
@@ -552,9 +611,10 @@ def mountain_hazards(*, ridge_wind_ms, pm_cape, chill_c, precip_wet_pct, precip_
 # inside MSM's own ~3-day range, while MSM's 5km precipitation (which IS
 # served) was only used for the peak-mm/h side.
 #
-# Rule, per hour:
-#   - MSM available (inside MSM's range, roughly today+2):
-#       wet if  MSM mm/h >= WET_HOUR_MSM_PRECIP_MM
+# Rule, per hour -- wet_hour_weight() returns a 0..1 "wetness" weight, and
+# wet_fraction_pct is the mean of those weights over the window:
+#   - MSM available (inside MSM's range, roughly today+2): weight 1.0 if
+#       MSM mm/h >= WET_HOUR_MSM_PRECIP_MM
 #           or  a "moist layer" is on the mountain: relative humidity >=
 #               WET_HOUR_RH_PCT AND cloud cover >= WET_HOUR_MOIST_CLOUD_PCT at
 #               the summit's own pressure level OR at the next standard level
@@ -563,14 +623,25 @@ def mountain_hazards(*, ridge_wind_ms, pm_cape, chill_c, precip_wet_pct, precip_
 #               reading: "is saturated air sitting on the ridge/slope," which
 #               a 5km deterministic model resolves even when it converts
 #               none of it into mm (drizzle, ridge fog, orographic stratus).
-#           (ECMWF probability is NOT consulted here unless
-#            WET_HOUR_KEEP_ECMWF_PROB_IN_MSM_RANGE is flipped on -- kept as
-#            an A/B switch.)
+#       else 0.0. (ECMWF probability is NOT consulted here unless
+#       WET_HOUR_KEEP_ECMWF_PROB_IN_MSM_RANGE is flipped on -- kept as an
+#       A/B switch.)
 #   - No MSM value (beyond its range, or model=None past-date lookups):
-#       wet if probability >= WET_HOUR_PRECIP_THRESHOLD_PCT, as before.
-#       (TODO: ecmwf_ifs025 serves the same pressure-level RH/cloud, so the
-#       moisture rule could replace the probability there too once
-#       validated.)
+#       weight = ECMWF probability / 100 -- the hour's EXPECTED wetness,
+#       so the window's fraction is the expected fraction of wet hours
+#       (E[wet hours] = sum of per-hour probabilities). Until 2026-09-09
+#       this was a hard >= WET_HOUR_PRECIP_THRESHOLD_PCT (50%) cut, which
+#       scored a day of 30-49% every hour (丹沢9/12 in the 2026-09-09 cache:
+#       12 of 14 hours) as bone dry, and a day of 50% every hour as fully
+#       wet -- a cliff with nothing between. Why the probability rather
+#       than extending the moisture rule to ECMWF's own pressure-level
+#       RH/cloud: at 4+ days out a single deterministic run's hourly mm
+#       or RH is noise, and the ensemble probability is precisely the
+#       tool built for that lead time (the false alarms that motivated the
+#       MSM rule were all inside MSM's range, where MSM now overrides). The
+#       moisture rule on ECMWF levels remains a future candidate once it
+#       can be validated (SKILL.md TODO). The old 50% cut is kept as an A/B
+#       switch (WET_HOUR_BEYOND_MSM_USE_THRESHOLD).
 #   - Neither available: None (the hour is excluded from the fraction).
 #
 # Why (validated 2026-09-09 on past-date MSM data, see CHANGELOG):
@@ -591,11 +662,12 @@ def mountain_hazards(*, ridge_wind_ms, pm_cape, chill_c, precip_wet_pct, precip_
 #   retune -- re-run scratch validation on the three reference days after
 #   touching any of them.
 # ---------------------------------------------------------------------------
-WET_HOUR_PRECIP_THRESHOLD_PCT = 50.0  # beyond MSM: an hour "counts as rain" at/above this probability
-WET_HOUR_MSM_PRECIP_MM = 0.1          # MSM: ... at/above this MSM hourly precipitation (mm/h)
+WET_HOUR_PRECIP_THRESHOLD_PCT = 50.0  # beyond MSM, A/B only: hard cut at/above this probability
+WET_HOUR_MSM_PRECIP_MM = 0.1          # MSM: an hour is wet at/above this MSM hourly precipitation (mm/h)
 WET_HOUR_RH_PCT = 90.0                # MSM: ... or a moist layer: RH at/above this ...
 WET_HOUR_MOIST_CLOUD_PCT = 40.0       #      ... AND cloud cover at/above this, at summit or slope level
 WET_HOUR_KEEP_ECMWF_PROB_IN_MSM_RANGE = False  # A/B switch: also count ECMWF prob>=50% inside MSM range
+WET_HOUR_BEYOND_MSM_USE_THRESHOLD = False      # A/B switch: beyond MSM, the pre-2026-09-09 hard 50% cut instead of prob/100
 MSM_PRECIP_VAR = "precipitation_msm"  # raw jma_msm precipitation, None beyond MSM's range
 
 
@@ -623,41 +695,57 @@ def any_layer_moist(*rh_cloud_pairs):
     return any(flags) if flags else None
 
 
-def is_wet_hour(prob_pct, msm_mm, moist=None):
-    """True/False per the rule above; None when nothing is usable. `moist`
-    is any_layer_moist()'s result for this hour (only consulted inside MSM's
-    range, i.e. when msm_mm is not None)."""
+def wet_hour_weight(prob_pct, msm_mm, moist=None):
+    """0..1 wetness weight for one hour per the rule above (1.0/0.0 inside
+    MSM's range, probability/100 beyond it); None when nothing is usable.
+    `moist` is any_layer_moist()'s result for this hour (only consulted
+    inside MSM's range, i.e. when msm_mm is not None)."""
     if msm_mm is not None:
         wet = msm_mm >= WET_HOUR_MSM_PRECIP_MM
         if moist:
             wet = True
         if WET_HOUR_KEEP_ECMWF_PROB_IN_MSM_RANGE and prob_pct is not None:
             wet = wet or prob_pct >= WET_HOUR_PRECIP_THRESHOLD_PCT
-        return wet
+        return 1.0 if wet else 0.0
     if prob_pct is not None:
-        return prob_pct >= WET_HOUR_PRECIP_THRESHOLD_PCT
+        if WET_HOUR_BEYOND_MSM_USE_THRESHOLD:
+            return 1.0 if prob_pct >= WET_HOUR_PRECIP_THRESHOLD_PCT else 0.0
+        return max(0.0, min(1.0, prob_pct / 100.0))
     return None
 
 
+def is_wet_hour(prob_pct, msm_mm, moist=None):
+    """Boolean view of wet_hour_weight() (weight >= 0.5); None when nothing
+    is usable. Kept for callers that want a yes/no per hour."""
+    w = wet_hour_weight(prob_pct, msm_mm, moist)
+    return None if w is None else w >= 0.5
+
+
 def wet_fraction(prob_series: list, msm_mm_series: list, moist_series: list = None) -> dict:
-    """Aggregate is_wet_hour() over one activity window. Returns
-    {"wet_hours", "total_hours", "msm_hours", "moist_hours",
-    "wet_fraction_pct"}; msm_hours is how many of total_hours had an MSM
-    value (an MSM-judged day vs an ECMWF-probability-only one), moist_hours
-    how many wet hours came from the moisture rule alone (no MSM mm)."""
+    """Aggregate wet_hour_weight() over one activity window. Returns
+    {"wet_hours", "total_hours", "msm_hours", "moist_hours", "prob_hours",
+    "wet_fraction_pct"}; wet_hours is the SUM of weights (a whole number
+    inside MSM's range, fractional -- expected wet hours -- beyond it);
+    msm_hours is how many of total_hours had an MSM value, prob_hours how
+    many were judged on the ECMWF probability instead, moist_hours how many
+    MSM-judged wet hours came from the moisture rule alone (no MSM mm)."""
     moist_series = moist_series or [None] * len(prob_series)
-    wet = total = msm = moist_only = 0
+    wet = 0.0
+    total = msm = moist_only = prob_hours = 0
     for prob, mm, moist in zip(prob_series, msm_mm_series, moist_series):
-        w = is_wet_hour(prob, mm, moist)
+        w = wet_hour_weight(prob, mm, moist)
         if w is None:
             continue
         total += 1
-        wet += 1 if w else 0
-        msm += 1 if mm is not None else 0
-        if w and mm is not None and mm < WET_HOUR_MSM_PRECIP_MM and moist:
-            moist_only += 1
-    return {"wet_hours": wet, "total_hours": total, "msm_hours": msm, "moist_hours": moist_only,
-            "wet_fraction_pct": (100.0 * wet / total) if total else 0.0}
+        wet += w
+        if mm is not None:
+            msm += 1
+            if w and mm < WET_HOUR_MSM_PRECIP_MM and moist:
+                moist_only += 1
+        else:
+            prob_hours += 1
+    return {"wet_hours": round(wet, 1), "total_hours": total, "msm_hours": msm, "moist_hours": moist_only,
+            "prob_hours": prob_hours, "wet_fraction_pct": (100.0 * wet / total) if total else 0.0}
 
 
 # Precip *timing* (which specific day/hour the peak rain lands) is

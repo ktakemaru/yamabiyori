@@ -40,6 +40,7 @@ from mountain_weather_core import (
     fetch_open_meteo,
     WET_HOUR_PRECIP_THRESHOLD_PCT, WET_HOUR_MSM_PRECIP_MM, WET_HOUR_RH_PCT, WET_HOUR_MOIST_CLOUD_PCT,
     MSM_PRECIP_VAR, wet_fraction, any_layer_moist, slope_pressure_level,
+    sustained_peak, PM_CLOUD_PERSIST_HOURS, PRECIP_FULL_PENALTY_TOTAL_MM,
 )
 
 # ---------------------------------------------------------------------------
@@ -361,8 +362,10 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
     a similar AM/PM-max probability with a duration-based measure instead:
     the percentage of the activity_by_day window's (climb start through
     sunset+ACTIVITY_END_GRACE_MINUTES -- see that constant's comment) HOURS
-    that are "wet" (>=WET_HOUR_PRECIP_THRESHOLD_PCT),
-    and that window's peak mm/h. A day that's rainy for most of the window
+    that are "wet" (per core.wet_hour_weight(): MSM data inside its range,
+    ECMWF probability/100 as an expected value beyond it -- 2026-09-09),
+    and that window's TOTAL mm (2026-09-09; was the peak mm/h -- see
+    precip_penalty's docstring in core.py). A day that's rainy for most of the window
     scores high even without a single 100% hour; a single passing-shower
     hour among many dry ones scores low even if that hour spiked -- matching
     how a climber actually experiences "was today wet" (confirmed against
@@ -471,23 +474,30 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
         # hourly probability -- confirmed against 槍ヶ岳9/5 and 立山9/5, both
         # reported as good days despite one isolated high-probability hour.
         # MSM-first (2026-09-09): inside MSM's range an hour is wet on MSM's
-        # own 5km precipitation (>=WET_HOUR_MSM_PRECIP_MM), with the ECMWF
-        # probability kept as a backstop; beyond it, probability only. See
-        # core.is_wet_hour()'s banner comment for the rule and why.
+        # own 5km precipitation (>=WET_HOUR_MSM_PRECIP_MM) or the moisture
+        # rule; beyond it, the ECMWF probability/100 is the hour's expected
+        # wetness (so the fraction is an expected value, not a 50% cut). See
+        # core.wet_hour_weight()'s banner comment for the rule and why.
+        # precip_mm (2026-09-09) is the window's summed precipitation (was
+        # the single-hour peak -- see precip_penalty's docstring in core.py).
         activity_mm = [v for v in activity["precip_mm"] if v is not None]
         wf = wet_fraction(activity["precip_prob"], activity["msm_mm"], activity["moist"])
         wet_hours = wf["wet_hours"]
         precip_wet_pct = wf["wet_fraction_pct"]
-        precip_mm = max(activity_mm) if activity_mm else 0.0
+        precip_mm = round(sum(activity_mm), 1) if activity_mm else 0.0
 
-        # PM still uses the window's PEAK (not average) for cloud -- same
-        # reasoning CAPE already used (a threshold hazard can hide behind a
-        # mild average). Precip used to work the same way here, until the
+        # CAPE keeps the window's single-hour PEAK (a threshold hazard can
+        # hide behind a mild average). Cloud (2026-09-09) uses the SUSTAINED
+        # peak -- the highest PM_CLOUD_PERSIST_HOURS-hour mean -- so one
+        # interpolated 100% hour no longer zeroes the day while a real
+        # multi-hour cloud-up still counts in full (see PM_CLOUD_PERSIST_HOURS'
+        # comment in core.py). Precip used to be peaked here too, until the
         # 2026-09 duration-based redesign above moved it to the activity
         # window (climb start through sunset+ACTIVITY_END_GRACE_MINUTES).
         ridge_wind_kmh = safe_avg(ridge["wind_kmh"])
         ridge_cloud = safe_avg(ridge["cloud"])
-        pm_cloud = max((v for v in pm["cloud"] if v is not None), default=0.0)
+        pm_cloud_sustained = sustained_peak(pm["cloud"])
+        pm_cloud = pm_cloud_sustained if pm_cloud_sustained is not None else 0.0
         ridge_temp = safe_avg(ridge["temp"])
         ridge_visibility = safe_avg_or_none(ridge["visibility"])
         cape_clean = [v for v in pm["cape"] if v is not None]
@@ -535,6 +545,8 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
             "precip_total_hours": wf["total_hours"],
             "precip_msm_hours": wf["msm_hours"],
             "precip_moist_hours": wf["moist_hours"],
+            "precip_prob_hours": wf["prob_hours"],
+            "precip_total_mm": precip_mm,
             "chill": round(chill, 1) if chill is not None else None,
             "day_peak_wind_ms": round(day_peak_wind_ms, 1) if day_peak_wind_ms is not None else None,
             "day_peak_wind_hour": peak_hour,
@@ -877,16 +889,27 @@ def precip_timing_note(day_scores: dict):
 
 
 def wet_fraction_cell(r) -> str:
-    """'35.7(5/14h M 湿5)' -- M = every hour judged on MSM (precipitation +
-    moisture rule), 'M9' = 9 of the hours were, nothing = ECMWF probability
-    only; '湿n' = n of the wet hours came from the moisture rule alone (no
-    MSM rain). See core.is_wet_hour()."""
+    """'35.7(5/14h M 湿5 0.6mm)' -- M = every hour judged on MSM (precipitation
+    + moisture rule), 'M9' = 9 of the hours were, '確n' = n hours beyond
+    MSM's range judged on the ECMWF probability as an expected value
+    (wet_hours is then fractional: expected wet hours); '湿n' = n of the
+    MSM-judged wet hours came from the moisture rule alone (no MSM rain);
+    the trailing mm is the activity window's total precipitation (the
+    intensity side of precip_penalty, shown only when non-zero). See
+    core.wet_hour_weight()."""
     msm, total = r.get("precip_msm_hours", 0), r["precip_total_hours"]
     tag = "" if not msm else (" M" if msm == total else f" M{msm}")
+    prob = r.get("precip_prob_hours", 0)
+    if prob:
+        tag += f" 確{prob}"
     moist = r.get("precip_moist_hours", 0)
     if moist:
         tag += f" 湿{moist}"
-    return f"{fmt(r['precip_wet_pct'])}({r['precip_wet_hours']}/{r['precip_total_hours']}h{tag})"
+    wet_hours = r["precip_wet_hours"]
+    wet_hours_s = str(int(wet_hours)) if float(wet_hours).is_integer() else f"{wet_hours:.1f}"
+    total_mm = r.get("precip_total_mm") or 0.0
+    mm_tag = f" {total_mm:.1f}mm" if total_mm >= 0.05 else ""
+    return f"{fmt(r['precip_wet_pct'])}({wet_hours_s}/{total}h{tag}){mm_tag}"
 
 
 def print_day_score_table(mtn: dict, day_scores: dict):
@@ -900,11 +923,11 @@ def print_day_score_table(mtn: dict, day_scores: dict):
           f"活動時間(降水判定・PM共通の終了):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜日没+{ACTIVITY_END_GRACE_MINUTES}分 / "
           f"雲量(稜線/PM)・視程・降水(活動時間中の雨天割合)の重み付き幾何平均(各{SCORE_WEIGHTS['cloud']:.2f}) / "
           f"雷・強風・低体温症はスコアに含めず「危険信号」列で別枠警告 / "
-          f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂面/その下の面でRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上、湿n表記)、MSM範囲外はECMWF降水確率{WET_HOUR_PRECIP_THRESHOLD_PCT:.0f}%以上)\n")
+          f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂面/その下の面でRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上、湿n表記)、MSM範囲外(確n表記)はECMWF降水確率の期待値(各時間の確率/100の合計、4日目以降の時間別詳細は追わない) / 降水量は活動時間内の合計mm({PRECIP_FULL_PENALTY_TOTAL_MM:.0f}mmで満点ペナルティ) / PM雲量は連続{PM_CLOUD_PERSIST_HOURS}時間平均の最大値)\n")
     header = (
         pad("日付", 18) + pad("危険信号(雷/強風/低体温症)", 34) + pad("スコア", 8) + pad("稜線風速m/s", 12)
         + pad("雷リスクCAPE", 14) + pad("雲量%(稜線/PM)", 14) + pad("視程m(稜線)", 10)
-        + pad("雨天割合%(活動時間)", 22) + pad("体感温度℃(稜線)", 16)
+        + pad("雨天割合%(活動時間)", 30) + pad("体感温度℃(稜線)", 16)
         + pad("降水量mm(全日)", 14)
     )
     print(header)
@@ -916,7 +939,7 @@ def print_day_score_table(mtn: dict, day_scores: dict):
             + pad(str(r["score"]), 8)
             + pad(fmt(r["ridge_wind_ms"]), 12) + pad(fmt(r["cape"], 0), 14)
             + pad(fmt(r["cloud_pct"]), 14) + pad(fmt(r["ridge_visibility"], 0), 10)
-            + pad(wet_cell, 22)
+            + pad(wet_cell, 30)
             + pad(fmt(r["chill"]), 16)
             + pad(fmt(r.get("day_total_precip_mm"), 0), 14)
         )
