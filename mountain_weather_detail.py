@@ -29,8 +29,10 @@ from datetime import date, datetime, timedelta, timezone
 
 from mountain_weather_core import (
     MOUNTAINS, pad,
-    pressure_level_altitude_m, nearest_pressure_level,
-    FIXED_ALTITUDE_BANDS_M, ALTITUDE_BAND_HPA, BAND_VARS, WIND_SPEED_BAND_VARS,
+    nearest_pressure_level,
+    FIXED_ALTITUDE_BANDS_M, BAND_VARS, WIND_SPEED_BAND_VARS,
+    level_stack_vars, add_altitude_columns, climb_layer_moist_series, altitude_col, band_label,
+    SUMMIT_LABEL, SUMMIT_VARS, CLIMB_LAYER_MOIST_VAR, CLIMB_LAYER_DEPTH_M,
     KMH_TO_MS, wind_chill_c, safe_avg, safe_avg_or_none,
     SCORE_WEIGHTS, mountain_climb_score, mountain_hazards,
     format_date_with_weekday,
@@ -39,7 +41,7 @@ from mountain_weather_core import (
     get_with_retry, CACHE_DIR, CACHE_TTL_SECONDS, _load_cache, _save_cache,
     fetch_open_meteo,
     WET_HOUR_PRECIP_THRESHOLD_PCT, WET_HOUR_MSM_PRECIP_MM, WET_HOUR_RH_PCT, WET_HOUR_MOIST_CLOUD_PCT,
-    MSM_PRECIP_VAR, wet_fraction, any_layer_moist, slope_pressure_level,
+    MSM_PRECIP_VAR, wet_fraction,
     sustained_peak, PM_CLOUD_PERSIST_HOURS, PRECIP_FULL_PENALTY_TOTAL_MM,
 )
 
@@ -49,38 +51,34 @@ from mountain_weather_core import (
 FORECAST_DAYS = 14
 
 # ---------------------------------------------------------------------------
-# Pressure levels / fixed altitude bands: shared with mountain_weather_mvp.py,
-# see mountain_weather_core.py (imported above). detail.py-only extras below
-# (ALTITUDE_BAND_ACTUAL_M/band_altitude_label/HUMIDITY_VARS/WIND_DIR_BAND_VARS)
-# build on the shared FIXED_ALTITUDE_BANDS_M/ALTITUDE_BAND_HPA.
+# Per-altitude columns (2026-09-09): every per-altitude value -- the fixed
+# 1000/2000/3000m display bands AND the selected mountain's own summit -- is
+# interpolated in height from the pressure-level stack using each hour's
+# geopotential heights (core.add_altitude_columns, see the altitude
+# interpolation layer's comment in core.py). The bands are therefore the
+# EXACT altitudes their names say (before this, "2000m帯" was 850hPa ~=
+# 1460m and every summit was snapped to the nearest of 925/850/700hPa, up
+# to 500m+ off). Column names are core.altitude_col(kind, label), e.g.
+# 'cloudcover_at_2000m' / 'windspeed_at_summit'.
 # ---------------------------------------------------------------------------
-# The pressure levels nearest 1000/2000/3000m in standard atmosphere are
-# 925/850/700hPa (see core.PRESSURE_LEVELS_HPA -- 900/800hPa aren't in that
-# list because ecmwf_ifs025 returns null for them). Their *actual*
-# standard-atmosphere altitudes deviate from the nominal 1000/2000/3000m
-# labels non-trivially -- 925hPa~=762m (-238m), 850hPa~=1458m (-542m),
-# 700hPa~=3013m (+13m) -- so "2000m帯" in particular is really closer to
-# 1460m. Kept here so the hourly table's subtitle can show the real figure
-# instead of silently using the nominal one.
-ALTITUDE_BAND_ACTUAL_M = {alt: round(pressure_level_altitude_m(hpa)) for alt, hpa in ALTITUDE_BAND_HPA.items()}
 
 
 def band_altitude_label(alt: int) -> str:
-    """Display label for one fixed band, e.g. '約1458m' -- uses the band's
-    real standard-atmosphere altitude (ALTITUDE_BAND_ACTUAL_M), not the
-    nominal 1000/2000/3000m name used internally as its dict key, since the
-    two diverge non-trivially (see ALTITUDE_BAND_ACTUAL_M's comment)."""
-    return f"約{ALTITUDE_BAND_ACTUAL_M[alt]}m"
-# Relative humidity at each band's pressure level -- a proxy for whether
-# that layer is actually saturated (near 100%) vs. just partly cloudy.
-# Combined with surface precipitation_probability, high humidity at a band
-# + high surface precip suggests that band is likely getting wet too.
-HUMIDITY_VARS = {alt: f"relative_humidity_{hpa}hPa" for alt, hpa in ALTITUDE_BAND_HPA.items()}
+    """Display label for one fixed band, e.g. '2000m' -- exact now that the
+    bands are interpolated, so the nominal name IS the real altitude."""
+    return band_label(alt)
+
+
+# Relative humidity at each band -- a proxy for whether that layer is
+# actually saturated (near 100%) vs. just partly cloudy. Combined with
+# surface precipitation_probability, high humidity at a band + high surface
+# precip suggests that band is likely getting wet too.
+HUMIDITY_VARS = {alt: altitude_col("relative_humidity", band_label(alt)) for alt in FIXED_ALTITUDE_BANDS_M}
 # Wind speed (WIND_SPEED_BAND_VARS, shared -- imported from core) and
 # direction at each of the same fixed altitude bands, so the hourly memo
 # can report which band has the strongest wind that hour. WIND_DIR_BAND_VARS
 # is detail.py-only (mvp.py's ranking table doesn't show wind direction).
-WIND_DIR_BAND_VARS = {alt: f"winddirection_{hpa}hPa" for alt, hpa in ALTITUDE_BAND_HPA.items()}
+WIND_DIR_BAND_VARS = {alt: altitude_col("winddirection", band_label(alt)) for alt in FIXED_ALTITUDE_BANDS_M}
 
 # Freezing level (0°C altitude) and, at the pressure level nearest the
 # *selected* mountain's actual elevation (not the fixed 1000/2000/3000m
@@ -96,21 +94,13 @@ VISIBILITY_VAR = "visibility"
 
 
 def wind_vars_for_elevation(elevation_m: float):
-    """Pressure level (hPa) nearest the given elevation, plus the
-    corresponding wind speed/direction hourly variable names."""
-    hpa = nearest_pressure_level(elevation_m)
-    return hpa, f"windspeed_{hpa}hPa", f"winddirection_{hpa}hPa"
-
-
-def moisture_vars_for_summit(summit_hpa: int) -> list:
-    """Hourly variable names the moisture rule of core.is_wet_hour() needs
-    for a mountain whose own level is summit_hpa: RH + cloud at that level
-    and at the slope level below it (core.slope_pressure_level). Pass these
-    as extra_vars to fetch_forecast() -- the fixed 925/850/700hPa cloud/RH
-    are always fetched anyway, so this only adds anything for summits
-    outside those (e.g. 富士山's 600hPa)."""
-    levels = [summit_hpa] + ([slope_pressure_level(summit_hpa)] if slope_pressure_level(summit_hpa) else [])
-    return [f"{kind}_{h}hPa" for h in levels for kind in ("relative_humidity", "cloudcover")]
+    """(summit_m, wind-speed column, wind-direction column) for a mountain's
+    own elevation -- the '..._at_summit' columns fetch_forecast(summit_m=...)
+    synthesizes by interpolating the pressure-level stack to elevation_m
+    (2026-09-09; used to be the nearest standard level's real variable
+    names). The first element is the elevation itself, passed on to
+    compute_day_scores()/build_hourly_rows()/detect_cloud_sea_opportunity()."""
+    return elevation_m, SUMMIT_VARS["windspeed"], SUMMIT_VARS["winddirection"]
 
 
 def temp_var_for_elevation(elevation_m: float) -> str:
@@ -125,8 +115,9 @@ def temp_var_for_elevation(elevation_m: float) -> str:
     (estimate_temp_c(), now removed) because temperature_XXXhPa was assumed
     unavailable; that assumption was never actually tested and the estimate
     ran 3-5°C warmer than both てんきとくらす and this direct fetch during
-    a same-day comparison. Switched to match mvp.py's approach."""
-    return f"temperature_{nearest_pressure_level(elevation_m)}hPa"
+    a same-day comparison. Switched to match mvp.py's approach. 2026-09-09:
+    now the summit-interpolated column rather than one fixed level."""
+    return SUMMIT_VARS["temperature"]
 
 
 COMPASS_JA = ["北", "北北東", "北東", "東北東", "東", "東南東", "南東", "南南東",
@@ -248,7 +239,7 @@ ACTIVITY_END_GRACE_MINUTES = 30
 
 def fetch_single_model(lat: float, lon: float, model: str, days: int, with_sunrise: bool = False,
                         extra_vars: list = None) -> dict:
-    hourly_vars = HOURLY_VARS + list(BAND_VARS.values()) + list(HUMIDITY_VARS.values())
+    hourly_vars = HOURLY_VARS + level_stack_vars()
     if extra_vars:
         hourly_vars = hourly_vars + extra_vars
     daily_vars = ["sunrise", "sunset"] if with_sunrise else None
@@ -271,12 +262,17 @@ def fetch_visibility(lat: float, lon: float, days: int) -> dict:
     return fetch_open_meteo(lat, lon, hourly=[VISIBILITY_VAR], days=days, model=None)
 
 
-def fetch_forecast(lat: float, lon: float, days: int = FORECAST_DAYS, extra_vars: list = None) -> dict:
+def fetch_forecast(lat: float, lon: float, days: int = FORECAST_DAYS, extra_vars: list = None,
+                   summit_m: float = None) -> dict:
     """Merge JMA MSM (preferred, where available) with ECMWF IFS 0.25°
     (fallback for hours MSM doesn't cover). Also fetches daily sunrise
     (astronomical, not model-dependent) from the ECMWF call, and freezing
-    level height + visibility from separate best_match calls."""
-    all_vars = HOURLY_VARS + list(BAND_VARS.values()) + list(HUMIDITY_VARS.values())
+    level height + visibility from separate best_match calls. Then
+    synthesizes the per-altitude columns (2026-09-09): the fixed
+    1000/2000/3000m bands always, plus '..._at_summit' and the climb-layer
+    moisture flag (CLIMB_LAYER_MOIST_VAR) when summit_m is given (the
+    selected mountain's elevation, or a GPX waypoint's)."""
+    all_vars = HOURLY_VARS + level_stack_vars()
     if extra_vars:
         all_vars = all_vars + extra_vars
 
@@ -319,18 +315,26 @@ def fetch_forecast(lat: float, lon: float, days: int = FORECAST_DAYS, extra_vars
     # column above can no longer tell it.
     merged_hourly[MSM_PRECIP_VAR] = list(msm["hourly"].get("precipitation", []))
 
+    targets = {band_label(alt): alt for alt in FIXED_ALTITUDE_BANDS_M}
+    if summit_m is not None:
+        targets[SUMMIT_LABEL] = summit_m
+    add_altitude_columns(merged_hourly, targets)
+    if summit_m is not None:
+        merged_hourly[CLIMB_LAYER_MOIST_VAR] = climb_layer_moist_series(merged_hourly, summit_m)
+
     daily_sunrise = dict(zip(fallback["daily"]["time"], fallback["daily"]["sunrise"]))
     daily_sunset = dict(zip(fallback["daily"]["time"], fallback["daily"]["sunset"]))
     return {"hourly": merged_hourly, "_daily_sunrise": daily_sunrise, "_daily_sunset": daily_sunset}
 
 
-def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, temp_var: str) -> dict:
+def compute_day_scores(forecast: dict, wind_speed_var: str, summit_m: float, temp_var: str) -> dict:
     """Per-day mountain_climb_score for the selected mountain, using the same
     three windows as mountain_weather_mvp.py (AM/ridge/PM -- see that file's
     comment for the rationale) but this file's own per-mountain-exact inputs:
     wind_speed_var and temp_var (nearest pressure level to the mountain's
     real elevation, from wind_vars_for_elevation/temp_var_for_elevation) and
-    summit_hpa's own cloud cover (not mvp.py's fixed-band lookup composite).
+    the summit-interpolated cloud cover ('cloudcover_at_summit'; summit_m is
+    the elevation fetch_forecast(summit_m=...) was given).
 
     Returns {date_str: {"score": ..., "ridge_wind_ms": ..., "cape": ...,
     "cloud_pct": ..., "precip_wet_pct": ..., "chill": ..., "day_peak_wind_ms":
@@ -381,16 +385,14 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
     # .get(): scratch_past_date.py-style model=None forecasts have no MSM
     # column, in which case every hour falls back to the probability rule.
     msm_mm_series = forecast["hourly"].get(MSM_PRECIP_VAR) or [None] * len(times)
-    # Moisture rule layers (core.is_wet_hour()): summit level + slope level.
-    # .get(): missing columns just mean that layer can't vote.
-    slope_hpa = slope_pressure_level(summit_hpa) if summit_hpa else None
-    moist_layer_series = []
-    for hpa in [h for h in (summit_hpa, slope_hpa) if h]:
-        moist_layer_series.append((forecast["hourly"].get(f"relative_humidity_{hpa}hPa") or [None] * len(times),
-                                   forecast["hourly"].get(f"cloudcover_{hpa}hPa") or [None] * len(times)))
+    # Moisture rule (core.wet_hour_weight()): the climb-layer flag
+    # fetch_forecast(summit_m=...) precomputed (core.climb_layer_moist_series,
+    # summit down to CLIMB_LAYER_DEPTH_M). .get(): a forecast built without
+    # summit_m just can't vote on moisture.
+    moist_series = forecast["hourly"].get(CLIMB_LAYER_MOIST_VAR) or [None] * len(times)
     cape_series = forecast["hourly"]["cape"]
     wind_speed_series = forecast["hourly"].get(wind_speed_var)
-    summit_cloud_series = forecast["hourly"].get(f"cloudcover_{summit_hpa}hPa") if summit_hpa else None
+    summit_cloud_series = forecast["hourly"].get(SUMMIT_VARS["cloudcover"]) if summit_m is not None else None
     temp_series = forecast["hourly"].get(temp_var)
     visibility_series = forecast["hourly"].get(VISIBILITY_VAR)
     daily_sunrise = forecast["_daily_sunrise"]
@@ -435,7 +437,7 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
                 e["precip_prob"].append(precip_prob_series[idx])
                 e["precip_mm"].append(precip_mm_series[idx])
                 e["msm_mm"].append(msm_mm_series[idx])
-                e["moist"].append(any_layer_moist(*[(rh[idx], c[idx]) for rh, c in moist_layer_series]))
+                e["moist"].append(moist_series[idx])
 
         if sunrise_iso is not None and sunset_iso is not None:
             day_start = datetime.fromisoformat(sunrise_iso) + timedelta(hours=EARLY_START_OFFSET_HOURS)
@@ -557,25 +559,23 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_hpa: int, tem
 
 
 def build_hourly_rows(forecast: dict, wind_speed_var: str = None, wind_dir_var: str = None,
-                       summit_hpa: int = None, temp_var: str = None) -> list:
+                       summit_m: float = None, temp_var: str = None) -> list:
     """One row per hour, for every hour from sunrise+EARLY_START_OFFSET_HOURS
     to sunset on each forecast day -- combining the cloud/precip score with
     the wind/temperature "feels like" estimate, since both are now on the
     same per-hour granularity.
 
-    summit_hpa: pressure level nearest the mountain's *actual* elevation
-    (from wind_vars_for_elevation / nearest_pressure_level), used for the
-    score's cloud reference instead of the fixed 1000/2000/3000m bands.
-    Those fixed bands top out at ~3000m (700hPa) for every mountain, so for
-    anything taller -- Fuji at 3776m is ~700m above that -- the capped
-    lookup was checking cloud cover well below the real summit. Passing
-    summit_hpa fixes that; omitting it falls back to the old capped
-    behavior (kept only for scripts written against the old signature).
+    summit_m: the mountain's *actual* elevation (from
+    wind_vars_for_elevation), the altitude fetch_forecast(summit_m=...)
+    interpolated the '..._at_summit' columns to -- the score's cloud
+    reference and the table's 山頂 columns. Those fixed bands top out at
+    3000m, so for anything taller -- Fuji at 3776m -- the summit columns are
+    the only ones at the real summit. Omitting it leaves cloud_summit None.
 
-    temp_var: temperature_XXXhPa variable name for that same pressure level
-    (from temp_var_for_elevation), read directly rather than estimated."""
-    summit_cloud_var = f"cloudcover_{summit_hpa}hPa" if summit_hpa else None
-    summit_alt_m = round(pressure_level_altitude_m(summit_hpa)) if summit_hpa else None
+    temp_var: the summit temperature column (from temp_var_for_elevation),
+    read directly rather than estimated."""
+    summit_cloud_var = SUMMIT_VARS["cloudcover"] if summit_m is not None else None
+    summit_alt_m = round(summit_m) if summit_m is not None else None
 
     times = forecast["hourly"]["time"]
     cloud = forecast["hourly"]["cloudcover"]
@@ -923,7 +923,8 @@ def print_day_score_table(mtn: dict, day_scores: dict):
           f"活動時間(降水判定・PM共通の終了):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜日没+{ACTIVITY_END_GRACE_MINUTES}分 / "
           f"雲量(稜線/PM)・視程・降水(活動時間中の雨天割合)の重み付き幾何平均(各{SCORE_WEIGHTS['cloud']:.2f}) / "
           f"雷・強風・低体温症はスコアに含めず「危険信号」列で別枠警告 / "
-          f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂面/その下の面でRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上、湿n表記)、MSM範囲外(確n表記)はECMWF降水確率の期待値(各時間の確率/100の合計、4日目以降の時間別詳細は追わない) / 降水量は活動時間内の合計mm({PRECIP_FULL_PENALTY_TOTAL_MM:.0f}mmで満点ペナルティ) / PM雲量は連続{PM_CLOUD_PERSIST_HOURS}時間平均の最大値)\n")
+          f"標高別の値は気圧面をジオポテンシャル高度で山頂標高{mtn['elevation_m']}mへ補間 / "
+          f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂〜{CLIMB_LAYER_DEPTH_M}m下の層のどこかでRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上、湿n表記)、MSM範囲外(確n表記)はECMWF降水確率の期待値(各時間の確率/100の合計、4日目以降の時間別詳細は追わない) / 降水量は活動時間内の合計mm({PRECIP_FULL_PENALTY_TOTAL_MM:.0f}mmで満点ペナルティ) / PM雲量は連続{PM_CLOUD_PERSIST_HOURS}時間平均の最大値)\n")
     header = (
         pad("日付", 18) + pad("危険信号(雷/強風/低体温症)", 34) + pad("スコア", 8) + pad("稜線風速m/s", 12)
         + pad("雷リスクCAPE", 14) + pad("雲量%(稜線/PM)", 14) + pad("視程m(稜線)", 10)
@@ -954,16 +955,19 @@ def print_day_score_table(mtn: dict, day_scores: dict):
 
 def print_hourly_table(mtn: dict, rows: list):
     print(f"\n=== {mtn['name']}({mtn['elevation_m']}m) / {mtn['access']} / {mtn['region']} ===")
-    hpa_note = "/".join(f"{ALTITUDE_BAND_HPA[alt]}hPa≈{band_altitude_label(alt)}" for alt in FIXED_ALTITUDE_BANDS_M)
+    summit_label = f"山頂{mtn['elevation_m']}m"
     print(f"(日の出{EARLY_START_OFFSET_HOURS:+.0f}h〜日の入りまで1時間ごと。"
-          f"雲量・風とも地上+気圧面3バンド(標高は標準大気換算: {hpa_note})。今日から{FORECAST_DAYS}日先まで)\n")
+          f"雲量・風とも地上+1000/2000/3000m+山頂。標高別の値は気圧面(1000〜600hPa)を"
+          f"その時刻のジオポテンシャル高度で各標高へ補間したもの。今日から{FORECAST_DAYS}日先まで)\n")
 
     header = (
         pad("日付", 18) + pad("時刻", 7) + pad("降水確率%(地上)", 16)
         + pad("雲量地上%", 10) + pad(f"雲量{band_altitude_label(1000)}%", 13)
         + pad(f"雲量{band_altitude_label(2000)}%", 13) + pad(f"雲量{band_altitude_label(3000)}%", 13)
+        + pad(f"雲量{summit_label}%", 16)
         + pad("風地上", 17) + pad(f"風{band_altitude_label(1000)}", 17)
         + pad(f"風{band_altitude_label(2000)}", 17) + pad(f"風{band_altitude_label(3000)}", 17)
+        + pad(f"風{summit_label}", 20)
     )
     print(header)
     last_date = None
@@ -975,10 +979,12 @@ def print_hourly_table(mtn: dict, rows: list):
             + pad(fmt(r["precip"]), 16) + pad(fmt(r["cloud"]), 10)
             + pad(fmt(r["cloud_1000m"]), 13) + pad(fmt(r["cloud_2000m"]), 13)
             + pad(fmt(r["cloud_3000m"]), 13)
+            + pad(fmt(r["cloud_summit"]), 16)
             + pad(wind_band_cell(r["wind10_speed_kmh"], r["wind10_dir"]), 17)
             + pad(wind_band_cell(r["wind_speed_1000m_kmh"], r["wind_dir_1000m"]), 17)
             + pad(wind_band_cell(r["wind_speed_2000m_kmh"], r["wind_dir_2000m"]), 17)
             + pad(wind_band_cell(r["wind_speed_3000m_kmh"], r["wind_dir_3000m"]), 17)
+            + pad(wind_band_cell(r["wind_speed"], r["wind_dir"]), 20)
         )
         print(row)
 
@@ -1016,8 +1022,8 @@ CLOUD_SEA_DAWN_WINDOW_HOURS = 2.0
 # would dilute the signal for the actually-photogenic dawn moments.
 
 
-def detect_cloud_sea_opportunity(forecast: dict, summit_hpa: int) -> list:
-    """Scan for hours where the mountain's own band (summit_hpa) is clear
+def detect_cloud_sea_opportunity(forecast: dict, summit_m: float) -> list:
+    """Scan for hours where the mountain's own summit (summit_m) is clear
     while some band BELOW its real altitude -- surface, or a fixed
     1000/2000/3000m band, whichever are genuinely lower -- is under a solid
     cloud deck, restricted to the dawn window (see banner comment). When
@@ -1035,11 +1041,11 @@ def detect_cloud_sea_opportunity(forecast: dict, summit_hpa: int) -> list:
     perfect lockstep and requiring both would under-detect real events."""
     times = forecast["hourly"]["time"]
     daily_sunrise = forecast["_daily_sunrise"]
-    summit_cloud_series = forecast["hourly"].get(f"cloudcover_{summit_hpa}hPa")
+    summit_cloud_series = forecast["hourly"].get(SUMMIT_VARS["cloudcover"])
     surface_cloud_series = forecast["hourly"].get("cloudcover")
     band_cloud_series = {alt: forecast["hourly"].get(var) for alt, var in BAND_VARS.items()}
     band_humidity_series = {alt: forecast["hourly"].get(var) for alt, var in HUMIDITY_VARS.items()}
-    summit_actual_m = pressure_level_altitude_m(summit_hpa)
+    summit_actual_m = summit_m
 
     # Candidate deck layers below the summit's own altitude, CLOSEST TO THE
     # SUMMIT first, so the reported deck is the one immediately below the
@@ -1058,7 +1064,7 @@ def detect_cloud_sea_opportunity(forecast: dict, summit_hpa: int) -> list:
     # the fallback when no fixed band qualifies.
     candidates = [("surface", 0.0, surface_cloud_series, None)]
     for alt in FIXED_ALTITUDE_BANDS_M:
-        band_actual_m = ALTITUDE_BAND_ACTUAL_M[alt]
+        band_actual_m = alt
         if band_actual_m < summit_actual_m - 100:
             candidates.append((f"{alt}m帯", band_actual_m, band_cloud_series.get(alt), band_humidity_series.get(alt)))
     candidates.sort(key=lambda c: c[1], reverse=True)
@@ -1231,12 +1237,12 @@ def print_comparison_table(mtn: dict, rows: list, target_date: str):
     Not wired into main(); call this from a one-off snippet, e.g.:
 
         import mountain_weather_detail as m
-        rows = m.build_hourly_rows(forecast, wind_speed_var, wind_dir_var, summit_hpa=wind_hpa, temp_var=temp_var)
+        rows = m.build_hourly_rows(forecast, wind_speed_var, wind_dir_var, summit_m=mtn["elevation_m"], temp_var=temp_var)
         m.print_comparison_table(mtn, rows, "2026-09-01")
     """
     day_rows = [r for r in rows if r["date"] == target_date]
     summit_alt_m = day_rows[0]["summit_alt_m"] if day_rows else None
-    summit_label = f"山頂帯雲量%(約{summit_alt_m}m)" if summit_alt_m else "山頂帯雲量%"
+    summit_label = f"山頂雲量%({summit_alt_m}m)" if summit_alt_m else "山頂雲量%"
     print(f"\n=== {mtn['name']}({mtn['elevation_m']}m) {format_date_with_weekday(target_date)} "
           f"/ Windy・SCW比較用の生値 ===\n")
     header = (
@@ -1262,46 +1268,34 @@ def print_comparison_table(mtn: dict, rows: list, target_date: str):
 # caller-chosen date. Distinct from print_hourly_table (fixed 1000/2000/3000m
 # bands, one lat/lon = the selected mountain's own): here each waypoint has
 # its own lat/lon *and* its own elevation, so each gets its own Open-Meteo
-# fetch and its own nearest_pressure_level().
+# fetch, interpolated to its own elevation (fetch_forecast(summit_m=...)).
 # ---------------------------------------------------------------------------
 def fetch_waypoint_hourly(wp: dict, target_date: str):
     """Fetch + score one GPX waypoint for target_date: the per-point
-    nearest_pressure_level -> fetch_forecast -> compute_day_scores ->
+    fetch_forecast(summit_m=its elevation) -> compute_day_scores ->
     build_hourly_rows pipeline, factored out so diagnose_route() (text
     tables) and render_route_weather_map() (PNG icons) consume identical
     per-point data instead of two copies of the same fetch logic.
 
-    Returns (hpa, day_score, day_rows). day_score is compute_day_scores()'s
+    Returns (elevation_m, day_score, day_rows). day_score is compute_day_scores()'s
     entry for target_date (None if that date has no data). day_rows is
     build_hourly_rows()'s rows filtered to target_date. May raise
     requests.exceptions.RequestException -- caller decides how to handle
     a failed fetch for one point without aborting the rest of the route."""
-    hpa = nearest_pressure_level(wp["elevation_m"])
-    wind_speed_var = f"windspeed_{hpa}hPa"
-    wind_dir_var = f"winddirection_{hpa}hPa"
-    temp_var = f"temperature_{hpa}hPa"
-    cloud_var = f"cloudcover_{hpa}hPa"
-    # WIND_SPEED_BAND_VARS/WIND_DIR_BAND_VARS aren't used by
-    # print_waypoint_table, but build_hourly_rows() unconditionally reads
-    # them (it also builds the fixed 1000/2000/3000m wind columns
-    # print_hourly_table wants) -- same extra_vars main_single_mountain()
-    # passes for the single-mountain flow.
-    extra_vars = ([wind_speed_var, wind_dir_var, temp_var, cloud_var]
-                  + moisture_vars_for_summit(hpa)
-                  + list(WIND_SPEED_BAND_VARS.values()) + list(WIND_DIR_BAND_VARS.values()))
+    elevation_m, wind_speed_var, wind_dir_var = wind_vars_for_elevation(wp["elevation_m"])
+    temp_var = temp_var_for_elevation(wp["elevation_m"])
 
-    forecast = fetch_forecast(wp["lat"], wp["lon"], extra_vars=extra_vars)
-    day_scores = compute_day_scores(forecast, wind_speed_var, hpa, temp_var)
+    forecast = fetch_forecast(wp["lat"], wp["lon"], summit_m=elevation_m)
+    day_scores = compute_day_scores(forecast, wind_speed_var, elevation_m, temp_var)
     day_score = day_scores.get(target_date)
-    rows = build_hourly_rows(forecast, wind_speed_var, wind_dir_var, summit_hpa=hpa, temp_var=temp_var)
+    rows = build_hourly_rows(forecast, wind_speed_var, wind_dir_var, summit_m=elevation_m, temp_var=temp_var)
     day_rows = [r for r in rows if r["date"] == target_date]
-    return hpa, day_score, day_rows
+    return elevation_m, day_score, day_rows
 
 
-def print_waypoint_table(wp: dict, hpa: int, day_rows: list, day_score: dict = None):
+def print_waypoint_table(wp: dict, elevation_m: float, day_rows: list, day_score: dict = None):
     label = strip_furigana(wp["name"])
-    alt_m = round(pressure_level_altitude_m(hpa))
-    print(f"\n--- {label}({wp['elevation_m']:.0f}m) / 使用気圧面:{hpa}hPa≈約{alt_m}m ---")
+    print(f"\n--- {label}({wp['elevation_m']:.0f}m) / 値はこの地点の標高{elevation_m:.0f}mへ補間 ---")
     if day_score is not None:
         print(f"    登山向け総合スコア: {day_score['score']} "
               f"(稜線風速{fmt(day_score['ridge_wind_ms'])}m/s 雲量{fmt(day_score['cloud_pct'])}%(稜線/PM) "
@@ -1338,16 +1332,14 @@ def diagnose_route(waypoints: list, target_date: str):
     "which point on this route looks best/worst that day" falls out of the
     existing scoring logic for free rather than needing a separate metric."""
     ranking = []
-    hpa_used = set()
     for wp in waypoints:
         try:
-            hpa, day_score, day_rows = fetch_waypoint_hourly(wp, target_date)
+            elevation_m, day_score, day_rows = fetch_waypoint_hourly(wp, target_date)
         except requests.exceptions.RequestException as e:
             print(f"\n{strip_furigana(wp['name'])}: 取得に失敗しました: {e}")
             continue
 
-        hpa_used.add(hpa)
-        print_waypoint_table(wp, hpa, day_rows, day_score=day_score)
+        print_waypoint_table(wp, elevation_m, day_rows, day_score=day_score)
 
         if day_score is not None:
             ranking.append((strip_furigana(wp["name"]), day_score["score"]))
@@ -1357,19 +1349,9 @@ def diagnose_route(waypoints: list, target_date: str):
         for name, score in sorted(ranking, key=lambda pair: pair[1], reverse=True):
             print(f"  {pad(name, 20)} {score}")
 
-    # Same-band note: if every selected waypoint rounded to one
-    # nearest_pressure_level(), their displayed values are identical by
-    # construction (same pressure-level variable, and at this route scale
-    # usually the same model grid cell too) -- not a bug. See SKILL.md's
-    # "GPXルート診断機能" section (大菩薩嶺 vs 唐松岳 comparison) for the
-    # confirmed cases this covers.
-    if len(waypoints) > 1 and len(hpa_used) == 1:
-        only_hpa = next(iter(hpa_used))
-        alt_m = round(pressure_level_altitude_m(only_hpa))
-        print(f"\n※選択した{len(waypoints)}地点はすべて同じ気圧面({only_hpa}hPa≈約{alt_m}m)"
-              f"に丸められたため、表示値が同一になっています(標高差が小さいルートでは"
-              f"想定通りの挙動で、バグではありません。標高差の大きいルートでは気圧面の"
-              f"境界をまたぎ、地点ごとに値が分かれます)。")
+    # (The old "all waypoints rounded to the same pressure level" note is
+    # gone: values are interpolated to each point's own elevation now, so
+    # nearby points differ by construction -- 2026-09-09.)
 
 
 def diagnose_route_by_visit_date(waypoints_to_plot: list, all_waypoints: list = None):
@@ -2561,32 +2543,32 @@ def main_single_mountain():
     print_mountain_list()
     mtn = prompt_selection()
 
-    wind_hpa, wind_speed_var, wind_dir_var = wind_vars_for_elevation(mtn["elevation_m"])
+    summit_m, wind_speed_var, wind_dir_var = wind_vars_for_elevation(mtn["elevation_m"])
     temp_var = temp_var_for_elevation(mtn["elevation_m"])
-    extra_vars = ([wind_speed_var, wind_dir_var, temp_var, f"cloudcover_{wind_hpa}hPa"]
-                  + moisture_vars_for_summit(wind_hpa)
-                  + list(WIND_SPEED_BAND_VARS.values()) + list(WIND_DIR_BAND_VARS.values()))
 
     try:
-        forecast = fetch_forecast(mtn["lat"], mtn["lon"], extra_vars=extra_vars)
+        forecast = fetch_forecast(mtn["lat"], mtn["lon"], summit_m=summit_m)
     except requests.exceptions.RequestException as e:
         print(f"取得に失敗しました: {e}")
         return
 
-    day_scores = compute_day_scores(forecast, wind_speed_var, wind_hpa, temp_var)
+    day_scores = compute_day_scores(forecast, wind_speed_var, summit_m, temp_var)
     print_day_score_table(mtn, day_scores)
 
-    rows = build_hourly_rows(forecast, wind_speed_var, wind_dir_var, summit_hpa=wind_hpa, temp_var=temp_var)
+    rows = build_hourly_rows(forecast, wind_speed_var, wind_dir_var, summit_m=summit_m, temp_var=temp_var)
     print_hourly_table(mtn, rows)
 
-    opportunities = detect_cloud_sea_opportunity(forecast, wind_hpa)
+    opportunities = detect_cloud_sea_opportunity(forecast, summit_m)
     print_cloud_sea_opportunities(mtn, opportunities)
 
     print_weather_transitions(mtn, rows)
 
     try:
+        # The ensemble API needs REAL level names (no interpolation there),
+        # so this one call still snaps to the nearest standard level.
+        ens_hpa = nearest_pressure_level(mtn["elevation_m"])
         confidence_by_day = compute_ensemble_confidence_by_day(
-            mtn["lat"], mtn["lon"], f"cloudcover_{wind_hpa}hPa", temp_var, forecast["_daily_sunrise"]
+            mtn["lat"], mtn["lon"], f"cloudcover_{ens_hpa}hPa", f"temperature_{ens_hpa}hPa", forecast["_daily_sunrise"]
         )
         print_ensemble_confidence_table(mtn, confidence_by_day)
     except requests.exceptions.RequestException as e:

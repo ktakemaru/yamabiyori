@@ -181,18 +181,12 @@ MOUNTAINS = [
 # selected mountain's own real elevation).
 # ---------------------------------------------------------------------------
 PRESSURE_LEVELS_HPA = [1000, 925, 850, 700, 600, 500, 400, 300, 250, 200, 150, 100, 50]
-# REVERTED a widened list (975/950/900/800hPa added) that looked like a pure
-# accuracy win for the fixed-band altitude mapping -- it was NOT. Confirmed
-# live: ecmwf_ifs025 (the fallback model both scripts merge in wherever
-# jma_msm has no data -- i.e. essentially all of the 4+ day range) returns
-# null for windspeed/temperature/cloudcover at 975/950/900/800hPa; only
-# jma_msm's short (~2-3 day) range supports them. The merge -> safe_avg
-# pipeline silently treats that null as 0.0, which silently corrupted
-# wind/temp/cloud (0.0 wind = no penalty, 0.0 cloud = perfect) for most of
-# the forecast horizon. Only 1000/925/850/700/600/500/... are confirmed
-# valid on ecmwf_ifs025 -- do not add intermediate levels back without
-# re-verifying ecmwf_ifs025 (not just best_match) actually returns non-null
-# data for them.
+# Levels ecmwf_ifs025 serves (900/800hPa etc. come back null there -- see
+# LEVEL_STACK_HPA's comment). Today this list only feeds
+# nearest_pressure_level(), which detail.py's ECMWF *ensemble* confidence
+# call still needs (that API takes a real level name). Scoring and display
+# no longer snap to a level at all -- see the altitude interpolation layer
+# below (2026-09-09).
 
 
 def pressure_level_altitude_m(hpa: int) -> float:
@@ -202,27 +196,198 @@ def pressure_level_altitude_m(hpa: int) -> float:
 
 def nearest_pressure_level(elevation_m: float) -> int:
     """Return the pressure level (hPa) whose standard-atmosphere altitude is
-    closest to the given elevation."""
+    closest to the given elevation. Only used where a REAL level name is
+    unavoidable (the ensemble API); everything else interpolates."""
     return min(PRESSURE_LEVELS_HPA, key=lambda hpa: abs(pressure_level_altitude_m(hpa) - elevation_m))
 
 
-# Fixed altitude bands mvp.py compares every mountain on (so results are
-# directly comparable across peaks regardless of each one's own elevation);
-# detail.py also uses these same 3 bands for its hourly cloud/wind display
-# table (see that file's BAND_VARS/WIND_SPEED_BAND_VARS usage), separately
-# from its own per-mountain nearest-pressure-level logic used for scoring.
+# ---------------------------------------------------------------------------
+# Altitude interpolation layer (2026-09-09).
+#
+# Before: every per-altitude number (cloud/RH/wind/temp) came from ONE fixed
+# pressure level chosen by standard atmosphere -- 925/850/700hPa for the
+# nominal 1000/2000/3000m bands, nearest level for a summit. Two problems:
+#   * the "2000m band" was really 850hPa ~= 1460m, and 25 of the 76
+#     mountains' summits sat 500m+ from their assigned level (男体山 2486m
+#     was read at ~1460m);
+#   * a climber thinks in 1000/2000/3000m (and Fuji's 3776m), not hPa.
+# Live-verified 2026-09-09: jma_msm serves 1000/925/900/850/800/700/600hPa
+# in full, ecmwf_ifs025 serves 1000/925/850/700/600 (900/800 all-null), and
+# BOTH serve geopotential_height_XXXhPa -- the actual height of each surface
+# that hour (唐松岳 9/9 12時: 925=755m, 900=990m, 850=1471m, 800=1981m,
+# 700=3109m, 600=4384m). So each hour we build the (height, value) profile
+# from whatever levels have data and interpolate linearly in height to the
+# altitude we actually want: exact 1000/2000/3000m bands, and each
+# mountain's own summit. Inside MSM's range 900/800hPa make 1000/2000m
+# near-exact; beyond it the 850<->700 span is interpolated -- coarser, but
+# strictly better than snapping to 1460m. Levels that are null (ECMWF's
+# 900/800, or any hour a variable is missing) simply drop out of the
+# profile -- no None ever reaches the safe_avg pipeline as a fake 0.0,
+# which is the failure the older "don't add 900/800hPa" warning was about.
+# ---------------------------------------------------------------------------
+LEVEL_STACK_HPA = [1000, 925, 900, 850, 800, 700, 600]
+GPH_KIND = "geopotential_height"
+LEVEL_KINDS = ["cloudcover", "relative_humidity", "windspeed", "winddirection", "temperature", GPH_KIND]
+
+
+def level_var(kind: str, hpa: int) -> str:
+    return f"{kind}_{hpa}hPa"
+
+
+def level_stack_vars(kinds=None, levels=None) -> list:
+    """Every Open-Meteo hourly variable the interpolation layer needs:
+    kinds x levels, geopotential_height always included (it's the x-axis)."""
+    kinds = list(kinds or LEVEL_KINDS)
+    if GPH_KIND not in kinds:
+        kinds.append(GPH_KIND)
+    return [level_var(k, h) for h in (levels or LEVEL_STACK_HPA) for k in kinds]
+
+
+# Nominal altitudes every mountain is displayed/compared at (detail.py's
+# hourly table), now the EXACT altitudes thanks to the interpolation above.
 FIXED_ALTITUDE_BANDS_M = [1000, 2000, 3000]
-ALTITUDE_BAND_HPA = {alt: nearest_pressure_level(alt) for alt in FIXED_ALTITUDE_BANDS_M}
-# e.g. {1000: 925, 2000: 850, 3000: 700}
-BAND_VARS = {alt: f"cloudcover_{hpa}hPa" for alt, hpa in ALTITUDE_BAND_HPA.items()}
-WIND_SPEED_BAND_VARS = {alt: f"windspeed_{hpa}hPa" for alt, hpa in ALTITUDE_BAND_HPA.items()}
+SUMMIT_LABEL = "summit"  # the interpolation target for a mountain's own elevation
 
 
-def nearest_band(elevation_m: float) -> int:
-    """Which of the fixed altitude bands (1000/2000/3000m) is closest to a
-    given summit elevation. Peaks above 3000m still map to the 3000m band,
-    since that's the highest band tracked."""
-    return min(FIXED_ALTITUDE_BANDS_M, key=lambda b: abs(b - elevation_m))
+def band_label(alt_m) -> str:
+    return f"{int(round(alt_m))}m"
+
+
+def altitude_col(kind: str, label: str) -> str:
+    """Name of a synthesized per-altitude hourly column, e.g.
+    'cloudcover_at_2000m' or 'windspeed_at_summit'."""
+    return f"{kind}_at_{label}"
+
+
+BAND_VARS = {alt: altitude_col("cloudcover", band_label(alt)) for alt in FIXED_ALTITUDE_BANDS_M}
+WIND_SPEED_BAND_VARS = {alt: altitude_col("windspeed", band_label(alt)) for alt in FIXED_ALTITUDE_BANDS_M}
+SUMMIT_VARS = {kind: altitude_col(kind, SUMMIT_LABEL) for kind in LEVEL_KINDS if kind != GPH_KIND}
+
+# The "climb layer" the moisture rule of wet_hour_weight() checks: from the
+# summit down CLIMB_LAYER_DEPTH_M -- the summit-ridge zone a climber spends
+# the exposed part of the day in. Replaces the old "summit's level + the
+# next standard level below it" (which for a 3000m-class summit reached
+# ~1640m down, and for a 2000m one ~700m).
+#
+# Why 600m and not deeper (2026-09-09 night): an 800m layer was tried first
+# and blew up on the 2026-09-10 forecast -- a saturated stratus deck at
+# ~2000-2150m (MSM 800hPa RH 99% / cloud 80%) under bone-dry 700hPa air, i.e.
+# a classic 雲海 with clear summits above it. "Any moist point in the
+# layer" flagged every hour for 59 of 76 mountains and zeroed 西穂高岳/
+# 木曽駒ヶ岳/白山 (100 -> 0) on what is a photogenic day up top. The
+# 唐松岳 9/6 reference case (rain on the descent) looks different in the
+# profile: the saturated zone climbs from 850/800hPa up to ~2260-2400m,
+# within 300-450m of the 2696m summit, from 14時 to 17時. A 600m layer
+# (bottom 2096m) catches those 4 hours and ignores the 2150m deck under a
+# 2909m summit. So the rule reads "is saturated air within 600m of the
+# summit" -- the ridge is in cloud, or about to be -- while a deck well
+# below the ridge is left to the cloud-sea detector. Judgment call; retune
+# with scratch_validate_refs.py (唐松岳9/6 must stay < 80) plus a 雲海-type
+# day. A graded version (fraction of the layer that is saturated, as the
+# hour's wet weight) was prototyped and would score 唐松岳9/6 ~83, so it's
+# parked -- see SKILL.md TODO.
+CLIMB_LAYER_DEPTH_M = 600
+CLIMB_LAYER_MOIST_VAR = "climb_layer_moist"
+
+
+def level_profile(hourly: dict, kind: str, idx: int) -> list:
+    """[(height_m, value)] for one hour, ascending, over the levels where both
+    the geopotential height and the value are present."""
+    pts = []
+    for hpa in LEVEL_STACK_HPA:
+        z = hourly.get(level_var(GPH_KIND, hpa))
+        v = hourly.get(level_var(kind, hpa))
+        if z and v and idx < len(z) and idx < len(v) and z[idx] is not None and v[idx] is not None:
+            pts.append((z[idx], v[idx]))
+    pts.sort()
+    return pts
+
+
+def interp_at_altitude(hourly: dict, kind: str, idx: int, target_m: float):
+    """Value of `kind` at target_m for hour idx, linear in height between
+    the bracketing levels; clamped to the lowest/highest level outside the
+    profile (a 600m summit reads the 1000hPa~=100m..925hPa~=750m bracket, a
+    4400m+ target would read 600hPa). winddirection takes the nearer level
+    rather than averaging angles. None when no level has data."""
+    pts = level_profile(hourly, kind, idx)
+    if not pts:
+        return None
+    if target_m <= pts[0][0]:
+        return pts[0][1]
+    if target_m >= pts[-1][0]:
+        return pts[-1][1]
+    for (z0, v0), (z1, v1) in zip(pts, pts[1:]):
+        if z0 <= target_m <= z1:
+            if kind == "winddirection":
+                return v0 if target_m - z0 <= z1 - target_m else v1
+            if z1 == z0:
+                return v0
+            return v0 + (v1 - v0) * (target_m - z0) / (z1 - z0)
+    return None
+
+
+def add_altitude_columns(hourly: dict, targets: dict, kinds=None) -> None:
+    """Synthesize hourly[altitude_col(kind, label)] for every (label ->
+    altitude_m) in targets and every kind (default: all LEVEL_KINDS except
+    geopotential height). Both scripts' fetch_forecast() call this once
+    after merging models, so the rest of the pipeline reads plain columns
+    like 'cloudcover_at_2000m' / 'temperature_at_summit'."""
+    kinds = [k for k in (kinds or LEVEL_KINDS) if k != GPH_KIND]
+    n = len(hourly["time"])
+    for label, alt_m in targets.items():
+        for kind in kinds:
+            hourly[altitude_col(kind, label)] = [interp_at_altitude(hourly, kind, i, alt_m) for i in range(n)]
+
+
+# Capped-deck check (2026-09-09 night, same 2026-09-10 forecast as above):
+# even a 600m layer still flagged 唐松岳 (2696m) for 10 hours on 9/10 because
+# the interpolation between 800hPa (2040m, RH 99%) and 700hPa (3158m, RH
+# 31%) smears the deck's sharp top into a gradual moistening that only
+# falls below RH 90% around 2200m. What actually separates that day from
+# the 唐松岳 9/6 rain-on-descent case in the profile is the air ABOVE the
+# summit: 9/6 had 700hPa at RH 74-77% (deep moist layer, orographic cloud
+# and drizzle), 9/10 had 27-56% (dry, subsiding air = an inversion capping
+# a stratus deck = 雲海). So a moist layer BELOW the summit only counts when
+# the air CAP_CHECK_ABOVE_M above the summit is not dry (RH >=
+# CAP_DRY_RH_PCT); if the summit itself is in the moist layer it always
+# counts. Judgment calls -- retune with scratch_validate_refs.py (唐松岳9/6
+# keeps 14-17時 -> 4/14h) and a 雲海-type day (2026-09-10 is the pending
+# real-world check).
+CAP_CHECK_ABOVE_M = 400
+CAP_DRY_RH_PCT = 70.0
+
+
+def climb_layer_moist_series(hourly: dict, summit_m: float, depth_m: float = CLIMB_LAYER_DEPTH_M) -> list:
+    """Per hour: True if the summit itself is a moist layer (layer_is_moist:
+    RH >= WET_HOUR_RH_PCT and cloud >= WET_HOUR_MOIST_CLOUD_PCT), or if any
+    point of the climb layer [summit-depth, summit] is -- checked at the
+    layer's bottom and at every real model level inside it (values are
+    linear between levels, so those are the extremes) -- AND the air
+    CAP_CHECK_ABOVE_M above the summit is not dry (a moist deck under dry
+    air is a capped 雲海, not weather the ridge is in). False if none,
+    None if no level had data that hour."""
+    n = len(hourly["time"])
+    bottom = summit_m - depth_m
+    out = []
+    for i in range(n):
+        rh_s = interp_at_altitude(hourly, "relative_humidity", i, summit_m)
+        summit_moist = layer_is_moist(rh_s, interp_at_altitude(hourly, "cloudcover", i, summit_m))
+        if summit_moist is None:
+            out.append(None)
+            continue
+        if summit_moist:
+            out.append(True)
+            continue
+        heights = [bottom] + [z for z, _ in level_profile(hourly, "relative_humidity", i) if bottom < z < summit_m]
+        below = any_layer_moist(*[(interp_at_altitude(hourly, "relative_humidity", i, z),
+                                   interp_at_altitude(hourly, "cloudcover", i, z)) for z in heights])
+        if not below:
+            out.append(False)
+            continue
+        rh_above = interp_at_altitude(hourly, "relative_humidity", i, summit_m + CAP_CHECK_ABOVE_M)
+        capped = rh_above is not None and rh_above < CAP_DRY_RH_PCT
+        out.append(not capped)
+    return out
 
 
 KMH_TO_MS = 1 / 3.6
@@ -616,13 +781,16 @@ def mountain_hazards(*, ridge_wind_ms, pm_cape, chill_c, precip_wet_pct, precip_
 #   - MSM available (inside MSM's range, roughly today+2): weight 1.0 if
 #       MSM mm/h >= WET_HOUR_MSM_PRECIP_MM
 #           or  a "moist layer" is on the mountain: relative humidity >=
-#               WET_HOUR_RH_PCT AND cloud cover >= WET_HOUR_MOIST_CLOUD_PCT at
-#               the summit's own pressure level OR at the next standard level
-#               below it (the slope the climber walks up/down through --
-#               slope_pressure_level()). This is the mountain-meteorology
-#               reading: "is saturated air sitting on the ridge/slope," which
-#               a 5km deterministic model resolves even when it converts
-#               none of it into mm (drizzle, ridge fog, orographic stratus).
+#               WET_HOUR_RH_PCT AND cloud cover >= WET_HOUR_MOIST_CLOUD_PCT
+#               anywhere in the climb layer -- the summit down to
+#               CLIMB_LAYER_DEPTH_M below it, the slope the climber walks
+#               up/down through (climb_layer_moist_series(); until
+#               2026-09-09 evening this was "the summit's pressure level or
+#               the next standard level below it"). This is the
+#               mountain-meteorology reading: "is saturated air sitting on
+#               the ridge/slope," which a 5km deterministic model resolves
+#               even when it converts none of it into mm (drizzle, ridge
+#               fog, orographic stratus).
 #       else 0.0. (ECMWF probability is NOT consulted here unless
 #       WET_HOUR_KEEP_ECMWF_PROB_IN_MSM_RANGE is flipped on -- kept as an
 #       A/B switch.)
@@ -649,8 +817,10 @@ def mountain_hazards(*, ridge_wind_ms, pm_cape, chill_c, precip_wet_pct, precip_
 #     descent, ~1mm/day): MSM precipitation was 0.0mm at the point AND on all
 #     25 grid cells within +-10km for every activity hour -- a neighborhood
 #     probability would have scored the day ~97 (a miss). But MSM's 850hPa
-#     layer (the descent) moistened 80->96% RH with cloud 37->58% from 13時,
-#     wind veering SW/W: the moisture rule flags 14-18時.
+#     layer (the descent) moistened 80->96% RH with cloud 37->58% from 13時
+#     (and 800hPa ~2000m, seen once the level stack was widened: RH 94-97%,
+#     cloud 52-66% 14-18時), wind veering SW/W: the moisture rule flags
+#     14-18時.
 #   - 立山9/5 and 槍ヶ岳9/5 (reported fine days): ECMWF probability put
 #     50-80% on hours where MSM's 700hPa RH was 14-29% (dry aloft, likely
 #     false alarms); the moisture rule leaves 立山 with ~1h and 槍 with the
@@ -669,15 +839,6 @@ WET_HOUR_MOIST_CLOUD_PCT = 40.0       #      ... AND cloud cover at/above this, 
 WET_HOUR_KEEP_ECMWF_PROB_IN_MSM_RANGE = False  # A/B switch: also count ECMWF prob>=50% inside MSM range
 WET_HOUR_BEYOND_MSM_USE_THRESHOLD = False      # A/B switch: beyond MSM, the pre-2026-09-09 hard 50% cut instead of prob/100
 MSM_PRECIP_VAR = "precipitation_msm"  # raw jma_msm precipitation, None beyond MSM's range
-
-
-def slope_pressure_level(summit_hpa: int):
-    """The next standard pressure level BELOW summit_hpa's altitude (i.e. the
-    next larger hPa in PRESSURE_LEVELS_HPA), or None if summit_hpa is already
-    the lowest. The "slope layer" the moisture rule checks alongside the
-    summit's own level."""
-    lower = [h for h in PRESSURE_LEVELS_HPA if h > summit_hpa]
-    return min(lower) if lower else None
 
 
 def layer_is_moist(rh_pct, cloud_pct):
