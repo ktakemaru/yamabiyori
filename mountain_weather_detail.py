@@ -27,6 +27,8 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta, timezone
 
+import mountain_terrain as terrain
+
 from mountain_weather_core import (
     MOUNTAINS, pad,
     nearest_pressure_level,
@@ -91,6 +93,15 @@ FREEZING_LEVEL_VAR = "freezing_level_height"
 # (model=None) has real data -- so it's fetched the same way, via
 # fetch_visibility() below.
 VISIBILITY_VAR = "visibility"
+
+# Per-hour terrain reading (2026-09-10, mountain_terrain.py): summit wind
+# direction/speed against the mountain's terrain profile -> upslope_lift()
+# dict per hour. Precomputed profiles (terrain_profiles.json) for the 76
+# MOUNTAINS; GPX waypoints get theirs computed on the fly (tiles cached).
+# Display/validation only for now -- NOT a score input.
+UPSLOPE_VAR = "upslope"            # summit-wind reading
+UPSLOPE_BASE_VAR = "upslope_base"  # climb-layer-bottom-wind reading (decks below the summit)
+CLIMB_BASE_LABEL = "climb_base"  # altitude target: summit - CLIMB_LAYER_DEPTH_M (the climb layer's bottom)
 
 
 def wind_vars_for_elevation(elevation_m: float):
@@ -263,7 +274,7 @@ def fetch_visibility(lat: float, lon: float, days: int) -> dict:
 
 
 def fetch_forecast(lat: float, lon: float, days: int = FORECAST_DAYS, extra_vars: list = None,
-                   summit_m: float = None) -> dict:
+                   summit_m: float = None, terrain_profile: dict = None) -> dict:
     """Merge JMA MSM (preferred, where available) with ECMWF IFS 0.25°
     (fallback for hours MSM doesn't cover). Also fetches daily sunrise
     (astronomical, not model-dependent) from the ECMWF call, and freezing
@@ -321,6 +332,14 @@ def fetch_forecast(lat: float, lon: float, days: int = FORECAST_DAYS, extra_vars
     add_altitude_columns(merged_hourly, targets)
     if summit_m is not None:
         merged_hourly[CLIMB_LAYER_MOIST_VAR] = climb_layer_moist_series(merged_hourly, summit_m)
+        if terrain_profile:
+            add_altitude_columns(merged_hourly, {CLIMB_BASE_LABEL: summit_m - CLIMB_LAYER_DEPTH_M},
+                                 ["windspeed", "winddirection"])
+            merged_hourly[UPSLOPE_VAR] = terrain.upslope_lift_series(
+                merged_hourly, terrain_profile, SUMMIT_VARS["winddirection"], SUMMIT_VARS["windspeed"])
+            merged_hourly[UPSLOPE_BASE_VAR] = terrain.upslope_lift_series(
+                merged_hourly, terrain_profile, altitude_col("winddirection", CLIMB_BASE_LABEL),
+                altitude_col("windspeed", CLIMB_BASE_LABEL))
 
     daily_sunrise = dict(zip(fallback["daily"]["time"], fallback["daily"]["sunrise"]))
     daily_sunset = dict(zip(fallback["daily"]["time"], fallback["daily"]["sunset"]))
@@ -390,6 +409,8 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_m: float, tem
     # summit down to CLIMB_LAYER_DEPTH_M). .get(): a forecast built without
     # summit_m just can't vote on moisture.
     moist_series = forecast["hourly"].get(CLIMB_LAYER_MOIST_VAR) or [None] * len(times)
+    upslope_series = forecast["hourly"].get(UPSLOPE_VAR) or [None] * len(times)
+    upslope_base_series = forecast["hourly"].get(UPSLOPE_BASE_VAR) or [None] * len(times)
     cape_series = forecast["hourly"]["cape"]
     wind_speed_series = forecast["hourly"].get(wind_speed_var)
     summit_cloud_series = forecast["hourly"].get(SUMMIT_VARS["cloudcover"]) if summit_m is not None else None
@@ -433,11 +454,13 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_m: float, tem
 
         if main_start is not None and activity_end is not None:
             if main_start <= t_dt < activity_end:
-                e = activity_by_day.setdefault(day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": []})
+                e = activity_by_day.setdefault(day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": [], "upslope": [], "upslope_base": []})
                 e["precip_prob"].append(precip_prob_series[idx])
                 e["precip_mm"].append(precip_mm_series[idx])
                 e["msm_mm"].append(msm_mm_series[idx])
                 e["moist"].append(moist_series[idx])
+                e["upslope"].append(upslope_series[idx])
+                e["upslope_base"].append(upslope_base_series[idx])
 
         if sunrise_iso is not None and sunset_iso is not None:
             day_start = datetime.fromisoformat(sunrise_iso) + timedelta(hours=EARLY_START_OFFSET_HOURS)
@@ -463,7 +486,7 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_m: float, tem
 
     scores = {}
     for day_str in sorted(set(activity_by_day) | set(ridge_by_day) | set(pm_by_day)):
-        activity = activity_by_day.get(day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": []})
+        activity = activity_by_day.get(day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": [], "upslope": [], "upslope_base": []})
         ridge = ridge_by_day.get(day_str, {"wind_kmh": [], "cloud": [], "temp": [], "visibility": []})
         pm = pm_by_day.get(day_str, {"cape": [], "cloud": []})
 
@@ -554,6 +577,8 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_m: float, tem
             "day_peak_wind_hour": peak_hour,
             "hazards": hazards,
             "day_total_precip_mm": round(day_precip_by_day[day_str], 1) if day_str in day_precip_by_day else None,
+            "terrain": terrain.summarize_lift(activity.get("upslope", [])),
+            "terrain_base": terrain.summarize_lift(activity.get("upslope_base", [])),
         }
     return scores
 
@@ -595,6 +620,8 @@ def build_hourly_rows(forecast: dict, wind_speed_var: str = None, wind_dir_var: 
     wind_dir_series = forecast["hourly"].get(wind_dir_var) if wind_dir_var else None
     summit_cloud_series = forecast["hourly"].get(summit_cloud_var) if summit_cloud_var else None
     temp_series = forecast["hourly"].get(temp_var) if temp_var else None
+    upslope_series = forecast["hourly"].get(UPSLOPE_VAR)
+    upslope_base_series = forecast["hourly"].get(UPSLOPE_BASE_VAR)
     daily_sunrise = forecast["_daily_sunrise"]
     daily_sunset = forecast["_daily_sunset"]
 
@@ -644,6 +671,8 @@ def build_hourly_rows(forecast: dict, wind_speed_var: str = None, wind_dir_var: 
             "wind_dir": wind_dir_series[idx] if wind_dir_series else None,
             "temp_est": temp_est,
             "chill": chill,
+            "upslope": upslope_series[idx] if upslope_series else None,
+            "upslope_base": upslope_base_series[idx] if upslope_base_series else None,
         })
     return rows
 
@@ -929,7 +958,7 @@ def print_day_score_table(mtn: dict, day_scores: dict):
         pad("日付", 18) + pad("危険信号(雷/強風/低体温症)", 34) + pad("スコア", 8) + pad("稜線風速m/s", 12)
         + pad("雷リスクCAPE", 14) + pad("雲量%(稜線/PM)", 14) + pad("視程m(稜線)", 10)
         + pad("雨天割合%(活動時間)", 30) + pad("体感温度℃(稜線)", 16)
-        + pad("降水量mm(全日)", 14)
+        + pad("降水量mm(全日)", 14) + pad("地形(活動時間 山頂風/稜線帯下端風)", 34)
     )
     print(header)
     for day_str in sorted(day_scores):
@@ -943,10 +972,13 @@ def print_day_score_table(mtn: dict, day_scores: dict):
             + pad(wet_cell, 30)
             + pad(fmt(r["chill"]), 16)
             + pad(fmt(r.get("day_total_precip_mm"), 0), 14)
+            + pad(terrain.terrain_cell(r.get("terrain"), r.get("terrain_base")), 34)
         )
         print(row)
     print("(「降水量mm(全日)」は登り区間(AM)に限らない0-23時の合計。AM降水確率が低くても"
-          "全日ではまとまった雨になる日があるため参考に併記)")
+          "全日ではまとまった雨になる日があるため参考に併記。"
+          "「地形」は山頂風向が風上(谷側)/風下(山越え)の時間数と地形性上昇流w[m/s]の平均、"
+          f"スコアには未反映。{terrain.ATTRIBUTION})")
 
     note = precip_timing_note(day_scores)
     if note:
@@ -967,7 +999,7 @@ def print_hourly_table(mtn: dict, rows: list):
         + pad(f"雲量{summit_label}%", 16)
         + pad("風地上", 17) + pad(f"風{band_altitude_label(1000)}", 17)
         + pad(f"風{band_altitude_label(2000)}", 17) + pad(f"風{band_altitude_label(3000)}", 17)
-        + pad(f"風{summit_label}", 20)
+        + pad(f"風{summit_label}", 20) + pad("地形風(山頂/稜線帯下端)", 26)
     )
     print(header)
     last_date = None
@@ -985,8 +1017,20 @@ def print_hourly_table(mtn: dict, rows: list):
             + pad(wind_band_cell(r["wind_speed_2000m_kmh"], r["wind_dir_2000m"]), 17)
             + pad(wind_band_cell(r["wind_speed_3000m_kmh"], r["wind_dir_3000m"]), 17)
             + pad(wind_band_cell(r["wind_speed"], r["wind_dir"]), 20)
+            + pad(upslope_cell(r.get("upslope"), r.get("upslope_base")), 26)
         )
         print(row)
+
+
+def upslope_cell(u, ub=None) -> str:
+    """'風下 w0.3 / 風上(東)' -- one hour's summit-wind and climb-layer-bottom-
+    wind upslope_lift() results for the hourly table."""
+    if not u:
+        return "-"
+    top = f"{u['label'][:2]} w{u['w_ms']:.1f}"
+    if not ub:
+        return top
+    return f"{top} / {ub['label'][:2]}({terrain.compass16(ub['from_deg'])})"
 
 
 # ---------------------------------------------------------------------------
@@ -1285,7 +1329,15 @@ def fetch_waypoint_hourly(wp: dict, target_date: str):
     elevation_m, wind_speed_var, wind_dir_var = wind_vars_for_elevation(wp["elevation_m"])
     temp_var = temp_var_for_elevation(wp["elevation_m"])
 
-    forecast = fetch_forecast(wp["lat"], wp["lon"], summit_m=elevation_m)
+    # Terrain for an arbitrary route point is computed here (not
+    # precomputed like MOUNTAINS'); DEM tiles are cached so repeat points
+    # cost nothing. Stashed on the wp dict for print_waypoint_table().
+    if "_terrain" not in wp:
+        try:
+            wp["_terrain"] = terrain.compute_terrain_profile(wp["lat"], wp["lon"], elevation_m)
+        except Exception:  # DEM fetch trouble must not break the route diagnosis
+            wp["_terrain"] = None
+    forecast = fetch_forecast(wp["lat"], wp["lon"], summit_m=elevation_m, terrain_profile=wp["_terrain"])
     day_scores = compute_day_scores(forecast, wind_speed_var, elevation_m, temp_var)
     day_score = day_scores.get(target_date)
     rows = build_hourly_rows(forecast, wind_speed_var, wind_dir_var, summit_m=elevation_m, temp_var=temp_var)
@@ -1295,12 +1347,15 @@ def fetch_waypoint_hourly(wp: dict, target_date: str):
 
 def print_waypoint_table(wp: dict, elevation_m: float, day_rows: list, day_score: dict = None):
     label = strip_furigana(wp["name"])
-    print(f"\n--- {label}({wp['elevation_m']:.0f}m) / 値はこの地点の標高{elevation_m:.0f}mへ補間 ---")
+    tp = wp.get("_terrain")
+    exposure = (f" / 露出度:{terrain.exposure_label(tp['exposure_deg'])}({tp['exposure_deg']:.1f}°)"
+                if tp and tp.get("exposure_deg") is not None else "")
+    print(f"\n--- {label}({wp['elevation_m']:.0f}m) / 値はこの地点の標高{elevation_m:.0f}mへ補間{exposure} ---")
     if day_score is not None:
         print(f"    登山向け総合スコア: {day_score['score']} "
               f"(稜線風速{fmt(day_score['ridge_wind_ms'])}m/s 雲量{fmt(day_score['cloud_pct'])}%(稜線/PM) "
               f"雷リスクCAPE{fmt(day_score['cape'], 0)} 体感温度{fmt(day_score['chill'])}℃) "
-              f"危険信号: {hazard_warning_cell(day_score)}")
+              f"危険信号: {hazard_warning_cell(day_score)} 地形: {terrain.terrain_cell(day_score.get('terrain'), day_score.get('terrain_base'))}")
     if not day_rows:
         print("  (対象日のデータがありません -- 予報範囲外の可能性があります)")
         return
@@ -2547,7 +2602,8 @@ def main_single_mountain():
     temp_var = temp_var_for_elevation(mtn["elevation_m"])
 
     try:
-        forecast = fetch_forecast(mtn["lat"], mtn["lon"], summit_m=summit_m)
+        forecast = fetch_forecast(mtn["lat"], mtn["lon"], summit_m=summit_m,
+                                  terrain_profile=terrain.terrain_for(mtn["name"]))
     except requests.exceptions.RequestException as e:
         print(f"取得に失敗しました: {e}")
         return

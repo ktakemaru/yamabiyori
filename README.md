@@ -39,6 +39,7 @@ echo "1
 - `.claude-plugin/marketplace.json` — このリポジトリ自体をプライベートマーケットプレイスとして配布するための定義(`source: "./"`でリポジトリ直下を唯一のプラグインとして指す)。
 - `skills/yamabiyori/SKILL.md` — Claude Code向けのスキル定義・設計ドキュメント本体。
 - `mountain_weather_core.py` — 探索モード・診断モードが共有する土台モジュール(山リスト、気圧面変換、スコア算出ロジック、Open-Meteoレスポンスのディスクキャッシュ)。単体では実行しない。
+- `mountain_terrain.py` — 地形レイヤー(国土地理院の標高タイルから各山の風上/風下・露出度を読む)。`precompute_terrain.py`で76座分を`terrain_profiles.json`へ事前計算済み。`terrain_cache/`はDEMタイルのキャッシュ(自動生成)。
 - `mountain_weather_mvp.py` — 探索モード本体。
 - `mountain_weather_detail.py` — 診断モード(山選択・GPXルート診断)本体。
 - `assets/` — README用のバナー画像など。

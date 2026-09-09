@@ -26,3 +26,6 @@ _baseline_*.txt
 # --- OS/editor cruft ---
 .DS_Store
 Thumbs.db
+
+# --- Terrain: GSI DEM tile cache (regenerable via precompute_terrain.py) ---
+terrain_cache/

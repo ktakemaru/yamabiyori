@@ -1,6 +1,7 @@
 # Core dependency for mountain_weather_core.py / mountain_weather_mvp.py /
 # mountain_weather_detail.py (Open-Meteo API calls + retry logic).
 requests
+numpy      # mountain_terrain.py: GSI DEM tiles (terrain layer, 2026-09-10)
 
 # --- Optional dependencies ---
 # Uncomment/install only if you use the corresponding feature. All are

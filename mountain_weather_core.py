@@ -1053,10 +1053,41 @@ def fetch_open_meteo(lat: float, lon: float, hourly: list = None, daily: list = 
     fresh = resp.json()
 
     if is_fresh:
+        # Partial merge: the cache is within TTL but lacks some variables.
+        # The API always returns a forecast starting from *today*, so if
+        # the cache was written before midnight and this top-up runs after
+        # it, fresh["hourly"]["time"] starts a day later than the cached
+        # axis. Blindly .update()-ing would replace "time" and leave every
+        # older column misaligned by 24h (found 2026-09-10 when the terrain
+        # layer added winddirection to mvp.py's variable set). So re-index
+        # the new columns onto the CACHED time axis (hours the fresh call
+        # doesn't cover -> None) and never touch "time" itself.
         merged = cached
-        merged.setdefault("hourly", {}).update(fresh.get("hourly", {}))
+        cached_hourly = merged.setdefault("hourly", {})
+        fresh_hourly = fresh.get("hourly", {})
+        cached_times = cached_hourly.get("time")
+        fresh_times = fresh_hourly.get("time")
+        if cached_times and fresh_times and cached_times != fresh_times:
+            fresh_index = {t: i for i, t in enumerate(fresh_times)}
+            for var, values in fresh_hourly.items():
+                if var == "time":
+                    continue
+                cached_hourly[var] = [values[fresh_index[t]] if t in fresh_index and fresh_index[t] < len(values) else None
+                                      for t in cached_times]
+        else:
+            cached_hourly.update(fresh_hourly)
         if fresh.get("daily"):
-            merged.setdefault("daily", {}).update(fresh["daily"])
+            cached_daily = merged.setdefault("daily", {})
+            fresh_daily = fresh["daily"]
+            if cached_daily.get("time") and fresh_daily.get("time") and cached_daily["time"] != fresh_daily["time"]:
+                fidx = {t: i for i, t in enumerate(fresh_daily["time"])}
+                for var, values in fresh_daily.items():
+                    if var == "time":
+                        continue
+                    cached_daily[var] = [values[fidx[t]] if t in fidx and fidx[t] < len(values) else None
+                                         for t in cached_daily["time"]]
+            else:
+                cached_daily.update(fresh_daily)
     else:
         merged = fresh
         merged.setdefault("hourly", {})

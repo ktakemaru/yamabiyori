@@ -22,10 +22,12 @@ Usage:
 import requests
 from datetime import date, datetime, timedelta
 
+import mountain_terrain as terrain
+
 from mountain_weather_core import (
     MOUNTAINS, pad,
     level_stack_vars, add_altitude_columns, climb_layer_moist_series,
-    SUMMIT_LABEL, SUMMIT_VARS, CLIMB_LAYER_MOIST_VAR, CLIMB_LAYER_DEPTH_M,
+    SUMMIT_LABEL, SUMMIT_VARS, CLIMB_LAYER_MOIST_VAR, CLIMB_LAYER_DEPTH_M, altitude_col,
     KMH_TO_MS, wind_chill_c, safe_avg, safe_avg_or_none,
     SCORE_WEIGHTS, mountain_climb_score,
     mountain_hazards,
@@ -158,7 +160,16 @@ VISIBILITY_VAR = "visibility"
 # geopotential heights) is fetched for every mountain and fetch_forecast()
 # synthesizes the 'xxx_at_summit' columns. Wind direction isn't needed by
 # the ranking table, so it's left out of the stack here (detail.py adds it).
-LEVEL_KINDS_MVP = ["cloudcover", "relative_humidity", "windspeed", "temperature"]
+LEVEL_KINDS_MVP = ["cloudcover", "relative_humidity", "windspeed", "winddirection", "temperature"]
+# Per-hour terrain reading (2026-09-10, mountain_terrain.py): the summit
+# wind's direction/speed against the mountain's precomputed
+# terrain_profiles.json entry -> upslope_lift() dict per hour, stored in
+# this hourly column when a profile exists. Display/validation only for
+# now -- NOT a score input (see SKILL.md 地形レイヤー).
+UPSLOPE_VAR = "upslope"            # summit-wind reading
+UPSLOPE_BASE_VAR = "upslope_base"  # climb-layer-bottom-wind reading (decks below the summit)
+CLIMB_BASE_LABEL = "climb_base"  # altitude target: summit - CLIMB_LAYER_DEPTH_M (the climb layer's bottom)
+
 
 
 def fetch_single_model(lat: float, lon: float, model, days: int, with_sunrise: bool = False,
@@ -170,7 +181,8 @@ def fetch_single_model(lat: float, lon: float, model, days: int, with_sunrise: b
     return fetch_open_meteo(lat, lon, hourly=hourly_vars, daily=daily_vars, days=days, model=model)
 
 
-def fetch_forecast(lat: float, lon: float, days: int = 15, summit_m: float = None) -> dict:
+def fetch_forecast(lat: float, lon: float, days: int = 15, summit_m: float = None,
+                   terrain_profile: dict = None) -> dict:
     """Fetch hourly surface cloud cover/precip/cape plus the pressure-level
     stack, then synthesize cloud cover, RH, wind speed and temperature AT
     summit_m (core.add_altitude_columns -> 'cloudcover_at_summit' etc.,
@@ -226,6 +238,14 @@ def fetch_forecast(lat: float, lon: float, days: int = 15, summit_m: float = Non
     if summit_m is not None:
         add_altitude_columns(merged_hourly, {SUMMIT_LABEL: summit_m}, LEVEL_KINDS_MVP)
         merged_hourly[CLIMB_LAYER_MOIST_VAR] = climb_layer_moist_series(merged_hourly, summit_m)
+        if terrain_profile:
+            add_altitude_columns(merged_hourly, {CLIMB_BASE_LABEL: summit_m - CLIMB_LAYER_DEPTH_M},
+                                 ["windspeed", "winddirection"])
+            merged_hourly[UPSLOPE_VAR] = terrain.upslope_lift_series(
+                merged_hourly, terrain_profile, SUMMIT_VARS["winddirection"], SUMMIT_VARS["windspeed"])
+            merged_hourly[UPSLOPE_BASE_VAR] = terrain.upslope_lift_series(
+                merged_hourly, terrain_profile, altitude_col("winddirection", CLIMB_BASE_LABEL),
+                altitude_col("windspeed", CLIMB_BASE_LABEL))
 
     daily_sunrise = dict(zip(fallback["daily"]["time"], fallback["daily"]["sunrise"]))
     daily_sunset = dict(zip(fallback["daily"]["time"], fallback["daily"]["sunset"]))
@@ -310,6 +330,8 @@ def window_scores_by_day(forecast: dict) -> dict:
     wind_series = forecast["hourly"][SUMMIT_VARS["windspeed"]]
     temp_series = forecast["hourly"][SUMMIT_VARS["temperature"]]
     moist_series = forecast["hourly"].get(CLIMB_LAYER_MOIST_VAR) or [None] * len(times)
+    upslope_series = forecast["hourly"].get(UPSLOPE_VAR) or [None] * len(times)
+    upslope_base_series = forecast["hourly"].get(UPSLOPE_BASE_VAR) or [None] * len(times)
     visibility_series = forecast["hourly"][VISIBILITY_VAR]
     daily_sunrise = forecast["_daily_sunrise"]
     daily_sunset = forecast["_daily_sunset"]
@@ -369,11 +391,13 @@ def window_scores_by_day(forecast: dict) -> dict:
         if main_start is not None and activity_end is not None:
             if main_start <= t_dt < activity_end:
                 entry = activity_by_day.setdefault(
-                    day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": []})
+                    day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": [], "upslope": [], "upslope_base": []})
                 entry["precip_prob"].append(precip_prob_series[idx])
                 entry["precip_mm"].append(precip_mm_series[idx])
                 entry["msm_mm"].append(msm_mm_series[idx])
                 entry["moist"].append(moist_series[idx])
+                entry["upslope"].append(upslope_series[idx])
+                entry["upslope_base"].append(upslope_base_series[idx])
 
                 # Wind-peak detection shares the exact same AM-start..
                 # activity_end span as the precip window above (both used to
@@ -390,7 +414,7 @@ def window_scores_by_day(forecast: dict) -> dict:
 
     summary = {}
     for day_str in set(activity_by_day) | set(ridge_by_day) | set(pm_by_day):
-        activity_vals = activity_by_day.get(day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": []})
+        activity_vals = activity_by_day.get(day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": [], "upslope": [], "upslope_base": []})
         ridge_vals = ridge_by_day.get(day_str, {})
         pm_vals = pm_by_day.get(day_str, {"cape": [], "cloud": []})
 
@@ -450,6 +474,8 @@ def window_scores_by_day(forecast: dict) -> dict:
             "msm_hours": wf["msm_hours"],
             "moist_hours": wf["moist_hours"],
             "prob_hours": wf["prob_hours"],
+            "terrain": terrain.summarize_lift(activity_vals.get("upslope", [])),
+            "terrain_base": terrain.summarize_lift(activity_vals.get("upslope_base", [])),
         }
 
         summary[day_str] = {
@@ -543,7 +569,7 @@ def print_ranking_table(rows):
         + pad("スコア", 8) + pad("稜線風速m/s", 12)
         + pad("雷リスクCAPE", 14) + pad("雲量%(稜線/PM)", 14) + pad("視程m(稜線)", 10)
         + pad("雨天割合%(活動時間)", 30) + pad("体感温度℃(稜線)", 16)
-        + pad("降水量mm(全日)", 14)
+        + pad("降水量mm(全日)", 14) + pad("地形(活動時間 山頂風/稜線帯下端風)", 34)
     )
     print(header)
     for i, r in enumerate(rows, start=1):
@@ -556,6 +582,7 @@ def print_ranking_table(rows):
             + pad(fmt(r["ridge_visibility"], 0), 10)
             + pad(wet_cell, 30) + pad(fmt(r["chill"]), 16)
             + pad(fmt(r.get("day_total_precip_mm"), 0), 14)
+            + pad(terrain.terrain_cell(r.get("terrain"), r.get("terrain_base")), 34)
         )
         print(row)
 
@@ -573,7 +600,8 @@ def main():
 
     for mtn in pool:
         try:
-            forecast = fetch_forecast(mtn["lat"], mtn["lon"], summit_m=mtn["elevation_m"])
+            forecast = fetch_forecast(mtn["lat"], mtn["lon"], summit_m=mtn["elevation_m"],
+                                      terrain_profile=terrain.terrain_for(mtn["name"]))
         except requests.exceptions.RequestException as e:
             print(f"  ({mtn['name']}: 取得失敗のためスキップ - {e})")
             continue
@@ -634,6 +662,8 @@ def main():
                         "day_peak_wind_hour": day_peak["hour"],
                         "hazards": hazards,
                         "day_total_precip_mm": windows["day_total_precip_mm"],
+                        "terrain": activity["terrain"],
+                        "terrain_base": activity["terrain_base"],
                     }
                 )
 
@@ -647,7 +677,8 @@ def main():
           f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂〜{CLIMB_LAYER_DEPTH_M}m下の層のどこかでRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上、湿n表記)、MSM範囲外(確n表記)はECMWF降水確率の期待値(各時間の確率/100の合計、4日目以降の時間別詳細は追わない) / 降水量は活動時間内の合計mm({PRECIP_FULL_PENALTY_TOTAL_MM:.0f}mmで満点ペナルティ) / PM雲量は連続{PM_CLOUD_PERSIST_HOURS}時間平均の最大値 / "
           f"稜線帯:日の出{TRIP_START_OFFSET_HOURS + RIDGE_DWELL_TRIM_HOURS:+.0f}h〜{MAIN_TIME_END_HOUR - RIDGE_DWELL_TRIM_HOURS}時 "
           f"活動時間(降水判定・PM雷雲共通):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜"
-          f"日没+{ACTIVITY_END_GRACE_MINUTES}分 PM開始:{PM_START_HOUR}時】")
+          f"日没+{ACTIVITY_END_GRACE_MINUTES}分 PM開始:{PM_START_HOUR}時 / "
+          f"地形(活動時間)=山頂風向に対する風上/風下の時間数と地形性上昇流w[m/s](terrain_profiles.json、{terrain.ATTRIBUTION}、スコアには未反映)】")
 
     for week_label, day_range in (("=== 今週 (0-6日先) ===", range(0, 7)),
                                    ("=== 来週以降 (7-14日先) ===", range(7, 15))):
