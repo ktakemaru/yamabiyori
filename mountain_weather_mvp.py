@@ -36,6 +36,7 @@ from mountain_weather_core import (
     PRECIP_TIMING_BOUNDARY_HIGH, PRECIP_TIMING_NOTE,
     fetch_open_meteo,
     WET_HOUR_PRECIP_THRESHOLD_PCT, WET_HOUR_MSM_PRECIP_MM, WET_HOUR_RH_PCT, WET_HOUR_MOIST_CLOUD_PCT,
+    LIFT_RULE_ENABLED, LIFT_MIN_WIND_MS, LIFT_MIN_RH_BOTTOM_PCT,
     MSM_PRECIP_VAR, wet_fraction,
     sustained_peak, PM_CLOUD_PERSIST_HOURS, PRECIP_FULL_PENALTY_TOTAL_MM,
 )
@@ -674,7 +675,7 @@ def main():
           f"登山向け総合スコア=雲量(稜線/PM)・視程・降水(活動時間中の雨天割合)の重み付き幾何平均(各{SCORE_WEIGHTS['cloud']:.2f}) / "
           f"雷・強風・低体温症はスコアに含めず「危険信号」列で別枠警告 / "
           f"標高別の値は気圧面をジオポテンシャル高度で山頂標高へ補間(稜線風速・雲量・体感温度はすべて山頂標高の値) / "
-          f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂〜{CLIMB_LAYER_DEPTH_M}m下の層のどこかでRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上、湿n表記)、MSM範囲外(確n表記)はECMWF降水確率の期待値(各時間の確率/100の合計、4日目以降の時間別詳細は追わない) / 降水量は活動時間内の合計mm({PRECIP_FULL_PENALTY_TOTAL_MM:.0f}mmで満点ペナルティ) / PM雲量は連続{PM_CLOUD_PERSIST_HOURS}時間平均の最大値 / "
+          f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂〜{CLIMB_LAYER_DEPTH_M}m下の層のどこかでRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上{'、または山頂風' + format(LIFT_MIN_WIND_MS, '.0f') + 'm/s以上で下端RH' + format(LIFT_MIN_RH_BOTTOM_PCT, '.0f') + '%以上の空気が持ち上がり山頂で飽和する強制上昇' if LIFT_RULE_ENABLED else ''}、湿n表記)、MSM範囲外(確n表記)はECMWF降水確率の期待値(各時間の確率/100の合計、4日目以降の時間別詳細は追わない) / 降水量は活動時間内の合計mm({PRECIP_FULL_PENALTY_TOTAL_MM:.0f}mmで満点ペナルティ) / PM雲量は連続{PM_CLOUD_PERSIST_HOURS}時間平均の最大値 / "
           f"稜線帯:日の出{TRIP_START_OFFSET_HOURS + RIDGE_DWELL_TRIM_HOURS:+.0f}h〜{MAIN_TIME_END_HOUR - RIDGE_DWELL_TRIM_HOURS}時 "
           f"活動時間(降水判定・PM雷雲共通):日の出{TRIP_START_OFFSET_HOURS:+.0f}h〜"
           f"日没+{ACTIVITY_END_GRACE_MINUTES}分 PM開始:{PM_START_HOUR}時 / "

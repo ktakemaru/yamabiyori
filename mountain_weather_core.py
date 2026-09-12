@@ -356,6 +356,66 @@ def add_altitude_columns(hourly: dict, targets: dict, kinds=None) -> None:
 CAP_CHECK_ABOVE_M = 400
 CAP_DRY_RH_PCT = 70.0
 
+# Forced-lift rule (2026-09-12, from the real-world validation session):
+# two misses shared a signature the moisture rule cannot see. 火打山9/6 had
+# summit RH 58-72% (dry) but the climb layer's bottom at RH 77-81% under a
+# 11-14m/s SSE wind -- climbers met dense fog and a gale at the summit at
+# 10時 and walked out of the cloud at ~2000m (a banner cloud). 西穂高岳9/10
+# had the cap check dismiss a 90-94% RH climb-layer bottom as a capped
+# 雲海 from 11時 while a 10-11m/s SW wind blew up the valley side -- the gas
+# lasted until 14時. In both, moist air at the layer's bottom was being
+# forced up the slope by a strong wind, which saturates it if its lifting
+# condensation level (~125m per degC of dewpoint depression) lies below the
+# summit. Gated on the summit wind's absolute speed, NOT on the terrain
+# layer's windward/lee label: 火打山 read as 風下(山越え) that morning, so a
+# terrain gate would have voted the wrong way. Prototype over all 2026-09-12
+# cases: 火打山9/6 95.9->67.8, 西穂高岳9/10 54.9->0, 唐松岳9/6 (ref) 77.1->64.5
+# (still <80), 立山/槍9/5 and every confirmed-good day unchanged, and the
+# calm 2026-09-10 雲海 forecast for 唐松岳 unchanged (the cap check still
+# wins when the wind is light). Caveat: it also adds afternoon hours no
+# climber was on the mountain to confirm. A/B switch below.
+LIFT_RULE_ENABLED = True
+LIFT_MIN_WIND_MS = 10.0          # summit wind (m/s) at/above which the parcel is forced up the slope
+LIFT_MIN_RH_BOTTOM_PCT = 80.0    # climb-layer-bottom RH at/above which lifting can saturate it by the summit
+LCL_M_PER_DEGC = 125.0           # lifting condensation level height per degC of dewpoint depression
+
+
+def dewpoint_c(temp_c: float, rh_pct: float) -> float:
+    """Magnus-form dew point (Alduchov & Eskridge coefficients); RH clamped to >=1%."""
+    a, b = 17.625, 243.04
+    g = math.log(max(rh_pct, 1.0) / 100.0) + a * temp_c / (b + temp_c)
+    return b * g / (a - g)
+
+
+def forced_lift_saturates(hourly: dict, idx: int, summit_m: float, depth_m: float = CLIMB_LAYER_DEPTH_M):
+    """True if the summit wind is >= LIFT_MIN_WIND_MS and a parcel from the
+    climb layer's bottom (RH >= LIFT_MIN_RH_BOTTOM_PCT) reaches its lifting
+    condensation level at or below the summit; False otherwise; None when
+    the bottom RH/temperature or summit wind is missing."""
+    bottom = summit_m - depth_m
+    rh_b = interp_at_altitude(hourly, "relative_humidity", idx, bottom)
+    t_b = interp_at_altitude(hourly, "temperature", idx, bottom)
+    wind_kmh = interp_at_altitude(hourly, "windspeed", idx, summit_m)
+    if rh_b is None or t_b is None or wind_kmh is None:
+        return None
+    if wind_kmh * KMH_TO_MS < LIFT_MIN_WIND_MS or rh_b < LIFT_MIN_RH_BOTTOM_PCT:
+        return False
+    return bottom + LCL_M_PER_DEGC * (t_b - dewpoint_c(t_b, rh_b)) <= summit_m
+
+
+def _climb_layer_moist_hour(hourly: dict, i: int, summit_m: float, bottom: float):
+    rh_s = interp_at_altitude(hourly, "relative_humidity", i, summit_m)
+    summit_moist = layer_is_moist(rh_s, interp_at_altitude(hourly, "cloudcover", i, summit_m))
+    if summit_moist is None or summit_moist:
+        return summit_moist
+    heights = [bottom] + [z for z, _ in level_profile(hourly, "relative_humidity", i) if bottom < z < summit_m]
+    below = any_layer_moist(*[(interp_at_altitude(hourly, "relative_humidity", i, z),
+                               interp_at_altitude(hourly, "cloudcover", i, z)) for z in heights])
+    if not below:
+        return False
+    rh_above = interp_at_altitude(hourly, "relative_humidity", i, summit_m + CAP_CHECK_ABOVE_M)
+    return not (rh_above is not None and rh_above < CAP_DRY_RH_PCT)
+
 
 def climb_layer_moist_series(hourly: dict, summit_m: float, depth_m: float = CLIMB_LAYER_DEPTH_M) -> list:
     """Per hour: True if the summit itself is a moist layer (layer_is_moist:
@@ -364,29 +424,17 @@ def climb_layer_moist_series(hourly: dict, summit_m: float, depth_m: float = CLI
     layer's bottom and at every real model level inside it (values are
     linear between levels, so those are the extremes) -- AND the air
     CAP_CHECK_ABOVE_M above the summit is not dry (a moist deck under dry
-    air is a capped 雲海, not weather the ridge is in). False if none,
-    None if no level had data that hour."""
-    n = len(hourly["time"])
+    air is a capped 雲海, not weather the ridge is in); or, when
+    LIFT_RULE_ENABLED, if forced_lift_saturates() (a strong summit wind
+    lifting moist climb-layer-bottom air to saturation, which overrides the
+    cap). False if none, None if no level had data that hour."""
     bottom = summit_m - depth_m
     out = []
-    for i in range(n):
-        rh_s = interp_at_altitude(hourly, "relative_humidity", i, summit_m)
-        summit_moist = layer_is_moist(rh_s, interp_at_altitude(hourly, "cloudcover", i, summit_m))
-        if summit_moist is None:
-            out.append(None)
-            continue
-        if summit_moist:
-            out.append(True)
-            continue
-        heights = [bottom] + [z for z, _ in level_profile(hourly, "relative_humidity", i) if bottom < z < summit_m]
-        below = any_layer_moist(*[(interp_at_altitude(hourly, "relative_humidity", i, z),
-                                   interp_at_altitude(hourly, "cloudcover", i, z)) for z in heights])
-        if not below:
-            out.append(False)
-            continue
-        rh_above = interp_at_altitude(hourly, "relative_humidity", i, summit_m + CAP_CHECK_ABOVE_M)
-        capped = rh_above is not None and rh_above < CAP_DRY_RH_PCT
-        out.append(not capped)
+    for i in range(len(hourly["time"])):
+        flag = _climb_layer_moist_hour(hourly, i, summit_m, bottom)
+        if LIFT_RULE_ENABLED and not flag and forced_lift_saturates(hourly, i, summit_m, depth_m):
+            flag = True
+        out.append(flag)
     return out
 
 

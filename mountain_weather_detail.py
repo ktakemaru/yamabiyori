@@ -43,6 +43,7 @@ from mountain_weather_core import (
     get_with_retry, CACHE_DIR, CACHE_TTL_SECONDS, _load_cache, _save_cache,
     fetch_open_meteo,
     WET_HOUR_PRECIP_THRESHOLD_PCT, WET_HOUR_MSM_PRECIP_MM, WET_HOUR_RH_PCT, WET_HOUR_MOIST_CLOUD_PCT,
+    LIFT_RULE_ENABLED, LIFT_MIN_WIND_MS, LIFT_MIN_RH_BOTTOM_PCT,
     MSM_PRECIP_VAR, wet_fraction,
     sustained_peak, PM_CLOUD_PERSIST_HOURS, PRECIP_FULL_PENALTY_TOTAL_MM,
 )
@@ -953,7 +954,7 @@ def print_day_score_table(mtn: dict, day_scores: dict):
           f"雲量(稜線/PM)・視程・降水(活動時間中の雨天割合)の重み付き幾何平均(各{SCORE_WEIGHTS['cloud']:.2f}) / "
           f"雷・強風・低体温症はスコアに含めず「危険信号」列で別枠警告 / "
           f"標高別の値は気圧面をジオポテンシャル高度で山頂標高{mtn['elevation_m']}mへ補間 / "
-          f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂〜{CLIMB_LAYER_DEPTH_M}m下の層のどこかでRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上、湿n表記)、MSM範囲外(確n表記)はECMWF降水確率の期待値(各時間の確率/100の合計、4日目以降の時間別詳細は追わない) / 降水量は活動時間内の合計mm({PRECIP_FULL_PENALTY_TOTAL_MM:.0f}mmで満点ペナルティ) / PM雲量は連続{PM_CLOUD_PERSIST_HOURS}時間平均の最大値)\n")
+          f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂〜{CLIMB_LAYER_DEPTH_M}m下の層のどこかでRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上{'、または山頂風' + format(LIFT_MIN_WIND_MS, '.0f') + 'm/s以上で下端RH' + format(LIFT_MIN_RH_BOTTOM_PCT, '.0f') + '%以上の空気が持ち上がり山頂で飽和する強制上昇' if LIFT_RULE_ENABLED else ''}、湿n表記)、MSM範囲外(確n表記)はECMWF降水確率の期待値(各時間の確率/100の合計、4日目以降の時間別詳細は追わない) / 降水量は活動時間内の合計mm({PRECIP_FULL_PENALTY_TOTAL_MM:.0f}mmで満点ペナルティ) / PM雲量は連続{PM_CLOUD_PERSIST_HOURS}時間平均の最大値)\n")
     header = (
         pad("日付", 18) + pad("危険信号(雷/強風/低体温症)", 34) + pad("スコア", 8) + pad("稜線風速m/s", 12)
         + pad("雷リスクCAPE", 14) + pad("雲量%(稜線/PM)", 14) + pad("視程m(稜線)", 10)
