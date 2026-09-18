@@ -2218,7 +2218,23 @@ CONFIDENCE_MIN_DAYS_OUT = 2
 # this file (0.5mm/h), but lower: a per-member yes/no split is more
 # sensitive to drizzle-level amounts than a single blended value, so a
 # stricter (lower) threshold avoids calling a mostly-dry ensemble "wet".
-ENSEMBLE_PRECIP_WET_THRESHOLD_MM = 0.1
+#
+# 0.1 -> 0.2 on 2026-09-19 (backtest R8, yamabiyori-backtest/docs/
+# product-recommendations.md). Open-Meteo's hourly ECMWF precipitation is
+# the native 3-hourly sum divided by 3 and rounded to 0.1mm, so an hourly
+# 0.1 really means "0.15-0.44mm over 3 hours". Against AMeDAS hourly rain
+# (4 foot stations, 2026-01-15..02-28 + 06-11..09-17, all hours,
+# n=10,565/lead) the 0.1 rule called 3.5-4.0x more hours wet than were
+# observed at >=0.5mm, 76-84% of those hours were dry, and hours forecast
+# at exactly 0.1 were dry 85-92% of the time. 0.2 (= 0.6mm per 3h) drops
+# only that rounding-boundary band and raises PSS (0.48 -> 0.52 at d1-2).
+# Caveats: the gauge resolution is 0.5mm, so the 0.1-0.4 band cannot be
+# told apart from "no rain"; the sample is warm-season heavy (cold season
+# 45 days only, and winter gauges under-catch snow). The MSM-side
+# deterministic threshold (core.WET_HOUR_MSM_PRECIP_MM) moved to 0.5 for
+# the same reason; the ensemble stays lower because a per-member split is
+# still more sensitive than a single value (the original rationale above).
+ENSEMBLE_PRECIP_WET_THRESHOLD_MM = 0.2
 
 
 def _ensemble_cache_path(lat: float, lon: float, days: int) -> str:

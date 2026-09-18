@@ -881,7 +881,26 @@ def mountain_hazards(*, ridge_wind_ms, pm_cape, chill_c, precip_wet_pct, precip_
 #   touching any of them.
 # ---------------------------------------------------------------------------
 WET_HOUR_PRECIP_THRESHOLD_PCT = 50.0  # beyond MSM, A/B only: hard cut at/above this probability
-WET_HOUR_MSM_PRECIP_MM = 0.1          # MSM: an hour is wet at/above this MSM hourly precipitation (mm/h)
+# WET_HOUR_MSM_PRECIP_MM: 0.1 -> 0.5 on 2026-09-19 (backtest R8,
+# yamabiyori-backtest/docs/product-recommendations.md). Against AMeDAS hourly
+# rain at 4 foot stations (2026-01-15..02-28 + 06-11..09-17, all hours,
+# n=10,565/lead), hours the 0.1 rule called "wet" were dry (<0.5mm observed)
+# 72-75% of the time for MSM (76-84% for ECMWF), i.e. 2.6x more wet hours
+# than were actually observed at >=0.5mm -- and hours forecast at exactly
+# 0.1mm were dry 85-92% of the time. This is not a rounding artefact: MSM is
+# native hourly (ECMWF's hourly value is a 3h sum / 3, rounded), the
+# threshold itself was too low. Caveats: the AMeDAS gauge resolution is
+# 0.5mm, so whether the 0.1-0.4mm/h band is "no rain" or "drizzle" cannot be
+# decided from this data (a band we cannot verify should not drive a wet
+# hour); the sample is warm-season heavy (the cold season is 45 days only,
+# and winter gauges under-catch snow, so the cold-season dry rate may be
+# overstated). 0.5 aligns "wet" with what the gauge can measure (bias 1.5,
+# POD 0.54, FAR 0.63 at MSM d1). PSS is best at 0.1 (0.47) but treats a
+# false alarm and a miss symmetrically, which this product does not: a
+# hiker reading "rain" on 2.6x too many hours is the failure mode. The
+# reference day 唐松岳9/6 is unaffected (its wet hours all come from the
+# moisture rule, MSM mm was 0.0 in every activity hour).
+WET_HOUR_MSM_PRECIP_MM = 0.5          # MSM: an hour is wet at/above this MSM hourly precipitation (mm/h)
 WET_HOUR_RH_PCT = 90.0                # MSM: ... or a moist layer: RH at/above this ...
 WET_HOUR_MOIST_CLOUD_PCT = 40.0       #      ... AND cloud cover at/above this, at summit or slope level
 WET_HOUR_KEEP_ECMWF_PROB_IN_MSM_RANGE = False  # A/B switch: also count ECMWF prob>=50% inside MSM range
