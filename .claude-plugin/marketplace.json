@@ -9,7 +9,7 @@
     {
       "name": "yamabiyori",
       "source": "./",
-      "description": "MSM/ECMWFに基づく14日先までの登山特化型天気予報ツール(探索モード・診断モード・GPXルート診断)。"
+      "description": "MSM/ECMWFに基づく14日先までの登山特化型天気予報ツール(探索モード・診断モード・GPXルート診断)。バックテストで精度を検証・較正済み。"
     }
   ]
 }
