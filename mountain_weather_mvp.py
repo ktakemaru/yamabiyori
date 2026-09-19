@@ -39,7 +39,8 @@ from mountain_weather_core import (
     LIFT_RULE_ENABLED, LIFT_MIN_WIND_MS, LIFT_MIN_RH_BOTTOM_PCT,
     MSM_PRECIP_VAR, wet_fraction,
     sustained_peak, PM_CLOUD_PERSIST_HOURS, PRECIP_FULL_PENALTY_TOTAL_MM,
-    SUMMIT_CLOUD_CAL_VAR, calibrated_summit_cloud_series, CLOUD_CALIBRATION_ENABLED, CLOUD_CALIBRATION_MAX_SUMMIT_M,
+    SUMMIT_CLOUD_CAL_VAR, calibrated_summit_cloud_series, CLOUD_CALIBRATION_ENABLED,
+    CLOUD_CALIBRATION_FULL_SUMMIT_M, CLOUD_CALIBRATION_RAW_SUMMIT_M,
 )
 
 # ---------------------------------------------------------------------------
@@ -426,10 +427,11 @@ def window_scores_by_day(forecast: dict) -> dict:
     for day_str in set(activity_by_day) | set(ridge_by_day) | set(pm_by_day):
         activity_vals = activity_by_day.get(day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": [], "upslope": [], "upslope_base": []})
         ridge_vals = ridge_by_day.get(day_str, {})
-        pm_vals = pm_by_day.get(day_str, {"cape": [], "cloud": []})
+        pm_vals = pm_by_day.get(day_str, {"cape": [], "cloud": [], "cloud_raw": []})
 
         ridge = {
             "cloud": safe_avg(ridge_vals.get("cloud", [])),
+            "cloud_raw": safe_avg(ridge_vals.get("cloud_raw", [])),
             "wind": safe_avg(ridge_vals.get("wind", [])),
             "temp": safe_avg(ridge_vals.get("temp", [])),
             "visibility": safe_avg_or_none(ridge_vals.get("visibility", [])),
@@ -573,8 +575,8 @@ def wet_fraction_cell(r) -> str:
 def cloud_cell(r) -> str:
     """'48.9/6.1' -- calibrated effective cloud (what the score uses, 2026-09-19
     R1: 100*(1-P(sunny)) per hour, see core.py's calibration banner) / raw
-    diagnosed summit cloud. Identical when the summit is above
-    CLOUD_CALIBRATION_MAX_SUMMIT_M or calibration is off."""
+    diagnosed summit cloud. Identical when the summit is at or above
+    CLOUD_CALIBRATION_RAW_SUMMIT_M or calibration is off."""
     raw = r.get("cloud_pct_raw")
     return fmt(r["cloud_pct"]) if raw is None else f"{fmt(r['cloud_pct'])}/{fmt(raw)}"
 

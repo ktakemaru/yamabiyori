@@ -46,7 +46,8 @@ from mountain_weather_core import (
     LIFT_RULE_ENABLED, LIFT_MIN_WIND_MS, LIFT_MIN_RH_BOTTOM_PCT,
     MSM_PRECIP_VAR, wet_fraction,
     sustained_peak, PM_CLOUD_PERSIST_HOURS, PRECIP_FULL_PENALTY_TOTAL_MM,
-    SUMMIT_CLOUD_CAL_VAR, calibrated_summit_cloud_series, CLOUD_CALIBRATION_ENABLED, CLOUD_CALIBRATION_MAX_SUMMIT_M,
+    SUMMIT_CLOUD_CAL_VAR, calibrated_summit_cloud_series, CLOUD_CALIBRATION_ENABLED,
+    CLOUD_CALIBRATION_FULL_SUMMIT_M, CLOUD_CALIBRATION_RAW_SUMMIT_M,
 )
 
 # ---------------------------------------------------------------------------
@@ -962,8 +963,8 @@ def wet_fraction_cell(r) -> str:
 def cloud_cell(r) -> str:
     """'48.9/6.1' -- calibrated effective cloud (what the score uses, 2026-09-19
     R1: 100*(1-P(sunny)) per hour, see core.py's calibration banner) / raw
-    diagnosed summit cloud. Identical when the summit is above
-    CLOUD_CALIBRATION_MAX_SUMMIT_M or calibration is off."""
+    diagnosed summit cloud. Identical when the summit is at or above
+    CLOUD_CALIBRATION_RAW_SUMMIT_M or calibration is off."""
     raw = r.get("cloud_pct_raw")
     return fmt(r["cloud_pct"]) if raw is None else f"{fmt(r['cloud_pct'])}/{fmt(raw)}"
 

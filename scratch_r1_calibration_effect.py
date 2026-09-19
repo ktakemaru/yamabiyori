@@ -55,7 +55,7 @@ for mtn in core.MOUNTAINS:
         if b["score"] is None:
             continue
         n_days += 1
-        if mtn["elevation_m"] > core.CLOUD_CALIBRATION_MAX_SUMMIT_M:
+        if mtn["elevation_m"] > core.CLOUD_CALIBRATION_RAW_SUMMIT_M:
             high_total += 1
             high_unchanged += (b["score"] == a["score"])
             continue
@@ -70,8 +70,8 @@ for mtn in core.MOUNTAINS:
         else:
             delta["<-20" if d < -20 else "-20..-10" if d < -10 else "-10..-5" if d < -5 else "-5..0" if d < 0 else "0..+5" if d <= 5 else "+5..+10" if d <= 10 else ">+10"] += 1
         rows.append((mtn["name"], mtn["elevation_m"], day, b["score"], a["score"], b["cloud_pct"], a["cloud_pct"]))
-print(f"scored mountain-days: {n_days}; summits >{core.CLOUD_CALIBRATION_MAX_SUMMIT_M:.0f}m: {high_total} days, unchanged {high_unchanged}")
-print(f"changed (summit <= {core.CLOUD_CALIBRATION_MAX_SUMMIT_M:.0f}m): {n_changed}; delta buckets (excluding 0-point crossings): {dict(delta)}")
+print(f"scored mountain-days: {n_days}; summits >{core.CLOUD_CALIBRATION_RAW_SUMMIT_M:.0f}m: {high_total} days, unchanged {high_unchanged}")
+print(f"changed (summit <= {core.CLOUD_CALIBRATION_RAW_SUMMIT_M:.0f}m): {n_changed}; delta buckets (excluding 0-point crossings): {dict(delta)}")
 print(f"revived from 0 (before 0 -> after >0): {len(revived)}")
 for r in revived:
     print("   ", r)
