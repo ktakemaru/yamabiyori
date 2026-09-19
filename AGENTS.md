@@ -78,7 +78,7 @@ printf "1\n12\n" | ./venv/Scripts/python.exe mountain_weather_detail.py
 ```
 
 探索モードの主な調整パラメータ(`mountain_weather_mvp.py` 冒頭): `REGION_FILTER`(空=全地域)、
-`TOP_N_PER_DAY`、`MIN_SCORE_THRESHOLD`(既定80点)。
+`TOP_N_PER_DAY`、`MIN_SCORE_THRESHOLD`(既定70点。v1.5.0で80から変更)。
 
 ## 重要(設計思想 — 具体的な禁止・許可のルール)
 

@@ -63,7 +63,7 @@ Open-Meteoの降水確率は山では当たりにくい。そこでMSM範囲内�
 
 ### 探索モード — 「今週末、どこがいい?」
 
-`mountain_weather_mvp.py`。76座を横断してスコア順に並べ、80点以上の山だけを今週・来週・2週間先の3期間で一覧する(非対話)。
+`mountain_weather_mvp.py`。76座を横断してスコア順に並べ、70点以上の山だけを今週・来週・2週間先の3期間で一覧する(非対話。v1.5.0 でスコア水準が下がったため目安を80→70に変更)。
 
 ```text
 -- 2026-09-14(月) --                                            (列を一部省略した抜粋)
@@ -186,7 +186,7 @@ python -m venv venv
 printf "1\n12\n" | ./venv/Scripts/python.exe mountain_weather_detail.py
 ```
 
-探索モードの主な調整パラメータ(`mountain_weather_mvp.py` 冒頭): `REGION_FILTER`(空=全地域)、`TOP_N_PER_DAY`、`MIN_SCORE_THRESHOLD`(既定80点)。
+探索モードの主な調整パラメータ(`mountain_weather_mvp.py` 冒頭): `REGION_FILTER`(空=全地域)、`TOP_N_PER_DAY`、`MIN_SCORE_THRESHOLD`(既定70点。v1.5.0で80から変更)。
 
 ## Claude Codeとの連携
 

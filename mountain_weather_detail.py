@@ -963,8 +963,8 @@ def wet_fraction_cell(r) -> str:
 def cloud_cell(r) -> str:
     """'48.9/6.1' -- calibrated effective cloud (what the score uses, 2026-09-19
     R1: 100*(1-P(sunny)) per hour, see core.py's calibration banner) / raw
-    diagnosed summit cloud. Identical when the summit is at or above
-    CLOUD_CALIBRATION_RAW_SUMMIT_M or calibration is off."""
+    diagnosed summit cloud. Identical when calibration is off (or, with
+    CLOUD_CALIBRATION_FULL_SUMMIT_M set, above CLOUD_CALIBRATION_RAW_SUMMIT_M)."""
     raw = r.get("cloud_pct_raw")
     return fmt(r["cloud_pct"]) if raw is None else f"{fmt(r['cloud_pct'])}/{fmt(raw)}"
 

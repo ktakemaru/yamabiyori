@@ -572,19 +572,24 @@ WIND_PEAK_WARNING_MS = 15.0
 #   * WARM-SEASON SAMPLE ONLY (June-September 2026). Winter-type low cloud
 #     and streak cloud are unverified; re-derive from the backtest repo's
 #     Phase 2 snapshots after the 2026-27 winter before trusting it there.
-#   * Applied in full up to CLOUD_CALIBRATION_FULL_SUMMIT_M (2900m: the
-#     validated summits go up to 2899m), not at all from
-#     CLOUD_CALIBRATION_RAW_SUMMIT_M (3300m) up, and linearly blended between
-#     the two (calibrated -> raw as the summit rises). The only higher summit
-#     with its own observations (富士山 3776m) was better served by the raw
-#     value from lead 7 on (its 0% hours are sunny ~86%, the foot-trained 0%
-#     value is too pessimistic up there). The data simply stops at 2899m and
-#     resumes at 3776m; nothing was measured in between, so the 2900-3300m
-#     ramp is a CONVENIENCE choice, not a measured one (R7: the 3000m class
-#     is unverified either way). Without the ramp a hard 3000m cut gave a
-#     5-10 point step between 八ヶ岳 2899m and 立山 3003m on the same fine
-#     day (2026-09-18 cache); the ramp puts 立山 at 74% calibrated,
-#     槍ヶ岳 3180m at 30%, 北岳 3193m at 27%.
+#   * Applied to ALL summits (CLOUD_CALIBRATION_FULL_SUMMIT_M = None). The
+#     validated summits go up to 2899m; the first plan (2026-09-19, same
+#     day) exempted summits above 3000m, then ramped 2900-3300m, because
+#     the only higher summit with its own observations (富士山 3776m) was
+#     better served by the raw value from lead 7 on. That exemption was
+#     dropped before release for two reasons: (1) it is a RANKING artefact
+#     in the exploration mode -- with every other summit's cloud lifted and
+#     the 3000m+ ones left raw, 3000m+ peaks doubled their presence in the
+#     daily top 10 (20 -> 40 mountain-days over the 2026-09-18 cache's 15
+#     days; with all summits calibrated 20 -> 19, and the day-by-day
+#     Spearman rank correlation before/after rose from median 0.96 to
+#     0.98); (2) 富士山's own sunshine says the calibration is BETTER than
+#     raw at lead 1-3 (Brier 0.21 vs 0.23) and only worse from lead 7 on,
+#     where every score is near climatology anyway. So the summit-side
+#     price is paid only at far leads, and the 2899-3776m gap (nothing
+#     measured in between; R7's unverified 3000m class) is treated like the
+#     rest. The ramp code stays (set FULL/RAW to re-enable) for when summit
+#     observations justify a different rule.
 #   * Built from the mean of T-1h and T (the verification's pairing);
 #     applied here to single hourly values.
 #   * The verification is daytime (07-17 JST) sunshine; night hours get the
@@ -594,8 +599,8 @@ WIND_PEAK_WARNING_MS = 15.0
 # A/B: CLOUD_CALIBRATION_ENABLED=False restores the raw summit cloud.
 # ---------------------------------------------------------------------------
 CLOUD_CALIBRATION_ENABLED = True
-CLOUD_CALIBRATION_FULL_SUMMIT_M = 2900.0  # fully calibrated up to here (validated to 2899m)
-CLOUD_CALIBRATION_RAW_SUMMIT_M = 3300.0   # raw from here up; linear blend in between (convenience ramp, see banner)
+CLOUD_CALIBRATION_FULL_SUMMIT_M = None    # None = every summit fully calibrated (see banner); e.g. 2900.0 to ramp out above
+CLOUD_CALIBRATION_RAW_SUMMIT_M = 3300.0   # raw from here up when FULL is set; linear blend in between
 CLOUD_CALIBRATION_BIN_EDGES = [0, 10, 20, 30, 40, 50, 70, 100]   # bin 0 = exactly 0%; then (edge[i-1], edge[i]]
 # (model, lead_day_lo, lead_day_hi, P(sunny) per bin). Built 2026-09-19 by
 # yamabiyori-backtest `python -m backtest.cloud_calibration_table`.
@@ -643,7 +648,7 @@ def cloud_calibration_weight(summit_m) -> float:
     """1.0 = fully calibrated (summit <= FULL), 0.0 = raw (summit >= RAW), linear in between."""
     if summit_m is None or not CLOUD_CALIBRATION_ENABLED:
         return 0.0
-    if summit_m <= CLOUD_CALIBRATION_FULL_SUMMIT_M:
+    if CLOUD_CALIBRATION_FULL_SUMMIT_M is None or summit_m <= CLOUD_CALIBRATION_FULL_SUMMIT_M:
         return 1.0
     if summit_m >= CLOUD_CALIBRATION_RAW_SUMMIT_M:
         return 0.0
@@ -689,8 +694,7 @@ def cloud_penalty(cloud_pct) -> float:
     itself was clear. Since 2026-09-19 the value arriving here is the
     CALIBRATED effective cloud (see the summit-cloud calibration banner
     above: hourly 100*(1-P(sunny)), aggregated by the caller), not the raw
-    diagnosed percentage, for summits up to CLOUD_CALIBRATION_FULL_SUMMIT_M
-    (blended out to raw by CLOUD_CALIBRATION_RAW_SUMMIT_M)."""
+    diagnosed percentage (all summits; see CLOUD_CALIBRATION_FULL_SUMMIT_M)."""
     return cloud_pct if cloud_pct is not None else 0.0
 
 

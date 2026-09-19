@@ -50,7 +50,8 @@ from mountain_weather_core import (
 # ---------------------------------------------------------------------------
 REGION_FILTER: list[str] = []
 TOP_N_PER_DAY = None  # None = show all mountains that clear MIN_SCORE_THRESHOLD; or set an int to cap it
-MIN_SCORE_THRESHOLD = 80.0  # see mountain_climb_score(): thunder/wind/cloud/precip/temp blend; below this, exclude
+MIN_SCORE_THRESHOLD = 70.0  # see mountain_climb_score(); below this, exclude. 80 -> 70 on 2026-09-19 (v1.5.0): the cloud
+                            # calibration lowered the whole scale (days that scored >=80 now sit at a median of ~78, 92% of them >=70)
 
 # ---------------------------------------------------------------------------
 # Pressure levels / fixed altitude bands / cache layer: shared with
@@ -575,8 +576,8 @@ def wet_fraction_cell(r) -> str:
 def cloud_cell(r) -> str:
     """'48.9/6.1' -- calibrated effective cloud (what the score uses, 2026-09-19
     R1: 100*(1-P(sunny)) per hour, see core.py's calibration banner) / raw
-    diagnosed summit cloud. Identical when the summit is at or above
-    CLOUD_CALIBRATION_RAW_SUMMIT_M or calibration is off."""
+    diagnosed summit cloud. Identical when calibration is off (or, with
+    CLOUD_CALIBRATION_FULL_SUMMIT_M set, above CLOUD_CALIBRATION_RAW_SUMMIT_M)."""
     raw = r.get("cloud_pct_raw")
     return fmt(r["cloud_pct"]) if raw is None else f"{fmt(r['cloud_pct'])}/{fmt(raw)}"
 
