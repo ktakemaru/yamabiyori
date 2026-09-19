@@ -517,6 +517,124 @@ def wind_penalty(speed_ms) -> float:
 WIND_PEAK_WARNING_MS = 15.0
 
 
+# ---------------------------------------------------------------------------
+# Summit-cloud calibration (2026-09-19, backtest R1 -- yamabiyori-backtest/
+# docs/product-recommendations.md, track-b-findings.md §4/§7/§9).
+#
+# The diagnosed summit cloud (Open-Meteo derives pressure-level cloud from
+# RH via Sundqvist, add_altitude_columns() interpolates it to the summit)
+# ORDERS sunny vs cloudy hours well (AUC 0.75-0.81 at lead 1-3) but its
+# SCALE is not a cloud percentage: against foot-station sunshine at 4 sites
+# (白馬/野辺山/奥日光/鷲倉, summits 1700-2899m, daytime, 2026-06-12..09-17)
+# an hour forecast at exactly 0% was sunny only 72-74% of the time, one in
+# the (0,10]% bin only ~50%, and anything above 50% was essentially never
+# sunny. Read as a probability directly ("1 - cloud/100") the raw value is
+# worse than climatology (Brier 0.41 vs 0.24); a per-bin calibration to the
+# observed sunny rate reaches 0.18 at lead 1-3. A per-site quantile
+# transform did no better than plain value bins (+-0.005), so this is a
+# static table, not a CDF.
+#
+# The table maps the raw hourly summit cloud (%) to P(sunny) per model and
+# lead-day group, and the score consumes 100 * (1 - P(sunny)) as its
+# "effective cloud" -- so 0% raw becomes ~26-28% effective at lead 1-2 (the
+# safety-side correction: a clear diagnosis is right ~3 times in 4, not
+# always) and 60% raw becomes ~93-98%. The transform is applied PER HOUR,
+# before the ridge-window mean and the PM sustained peak are taken (it is
+# non-linear, so transforming the window aggregates instead would change
+# their meaning). Bins: 0 (kept separate: 16-29% of daytime hours are
+# exactly 0 and they behave differently from small positive values) then
+# (0,10] (10,20] (20,30] (30,40] (40,50] (50,70] (70,100]; per-bin n is
+# 92-5,162 (docs/cloud-calibration-table.txt in the backtest repo). Values
+# are PAV-smoothed to be monotone in cloud. Lead groups are bundled where
+# single leads were thin: ecmwf d1-2 / d3-5 / d6-10, jma_msm d1-2 / d3-4.
+#
+# Scope and caveats:
+#   * WARM-SEASON SAMPLE ONLY (June-September 2026). Winter-type low cloud
+#     and streak cloud are unverified; re-derive from the backtest repo's
+#     Phase 2 snapshots after the 2026-27 winter before trusting it there.
+#   * Applied only when the summit is at or below
+#     CLOUD_CALIBRATION_MAX_SUMMIT_M. The validated summits go up to 2899m;
+#     the only higher summit with its own observations (富士山 3776m) was
+#     better served by the raw value from lead 7 on (its 0% hours are sunny
+#     ~86%, the foot-trained 0% value is too pessimistic up there). 3000m is
+#     a CONVENIENCE boundary -- the data simply stops at 2899m and resumes
+#     at 3776m; nothing was measured in between (R7: the 3000m class is
+#     unverified either way). Above it the raw value is used unchanged.
+#   * Built from the mean of T-1h and T (the verification's pairing);
+#     applied here to single hourly values.
+#   * The verification is daytime (07-17 JST) sunshine; night hours get the
+#     same table because nothing better exists (R7).
+#   * Unmapped (None) hours pass through as None; unknown model/lead falls
+#     back to the nearest group.
+# A/B: CLOUD_CALIBRATION_ENABLED=False restores the raw summit cloud.
+# ---------------------------------------------------------------------------
+CLOUD_CALIBRATION_ENABLED = True
+CLOUD_CALIBRATION_MAX_SUMMIT_M = 3000.0   # validated to 2899m; 3000 is a convenience boundary (see banner)
+CLOUD_CALIBRATION_BIN_EDGES = [0, 10, 20, 30, 40, 50, 70, 100]   # bin 0 = exactly 0%; then (edge[i-1], edge[i]]
+# (model, lead_day_lo, lead_day_hi, P(sunny) per bin). Built 2026-09-19 by
+# yamabiyori-backtest `python -m backtest.cloud_calibration_table`.
+CLOUD_CALIBRATION_TABLE = [
+    ("ecmwf_ifs025", 1, 2, [0.737, 0.492, 0.271, 0.206, 0.120, 0.052, 0.016, 0.000]),
+    ("ecmwf_ifs025", 3, 5, [0.697, 0.485, 0.288, 0.222, 0.159, 0.115, 0.069, 0.069]),
+    ("ecmwf_ifs025", 6, 10, [0.505, 0.415, 0.312, 0.312, 0.312, 0.257, 0.232, 0.129]),
+    ("jma_msm", 1, 2, [0.719, 0.511, 0.362, 0.247, 0.149, 0.118, 0.073, 0.071]),
+    ("jma_msm", 3, 4, [0.585, 0.454, 0.377, 0.264, 0.238, 0.146, 0.123, 0.040]),
+]
+SUMMIT_CLOUD_CAL_VAR = altitude_col("cloudcover", SUMMIT_LABEL) + "_cal"   # "cloudcover_at_summit_cal"
+
+
+def cloud_calibration_bin(cloud_pct: float) -> int:
+    if cloud_pct <= 0:
+        return 0
+    for i, hi in enumerate(CLOUD_CALIBRATION_BIN_EDGES[1:], start=1):
+        if cloud_pct <= hi:
+            return i
+    return len(CLOUD_CALIBRATION_BIN_EDGES) - 1
+
+
+def cloud_calibration_row(model: str, lead_day: int) -> list:
+    """The P(sunny) bins for this model/lead; nearest lead group when out of range."""
+    rows = [r for r in CLOUD_CALIBRATION_TABLE if r[0] == model] or [r for r in CLOUD_CALIBRATION_TABLE if r[0] == "ecmwf_ifs025"]
+    for _, lo, hi, bins in rows:
+        if lo <= lead_day <= hi:
+            return bins
+    return min(rows, key=lambda r: min(abs(lead_day - r[1]), abs(lead_day - r[2])))[3]
+
+
+def calibrated_cloud_pct(cloud_pct, model: str, lead_day: int):
+    """Raw summit cloud % -> effective cloud % = 100 * (1 - P(sunny)). None passes through."""
+    if cloud_pct is None:
+        return None
+    p_sunny = cloud_calibration_row(model, lead_day)[cloud_calibration_bin(cloud_pct)]
+    return round(100.0 * (1.0 - p_sunny), 1)
+
+
+def lead_day_for(t_iso: str, today: date) -> int:
+    """Lead day of an hourly timestamp relative to the run/fetch day: today -> 1, tomorrow -> 2, ...
+    (the verification's lead_day = [24(d-1), 24d) hours after a 00Z run). Past dates clamp to 1."""
+    return max(1, (date.fromisoformat(t_iso[:10]) - today).days + 1)
+
+
+def calibrated_summit_cloud_series(hourly: dict, summit_m: float, today: date = None) -> list:
+    """Per-hour calibrated summit cloud for compute_day_scores()/mvp's scoring. Hours inside MSM's range
+    (MSM_PRECIP_VAR not None, the same provenance test the wet-hour rule uses) take the jma_msm rows,
+    the rest the ecmwf_ifs025 rows. `today` defaults to the first date in the series (a normal Forecast
+    API fetch starts at today 00:00 local); past-date scripts pass the day they evaluate."""
+    raw = hourly.get(SUMMIT_VARS["cloudcover"])
+    times = hourly.get("time", [])
+    if raw is None:
+        return None
+    if not CLOUD_CALIBRATION_ENABLED or summit_m is None or summit_m > CLOUD_CALIBRATION_MAX_SUMMIT_M:
+        return list(raw)
+    today = today or (date.fromisoformat(times[0][:10]) if times else date.today())
+    msm = hourly.get(MSM_PRECIP_VAR) or [None] * len(times)
+    out = []
+    for i, t in enumerate(times):
+        model = "jma_msm" if (i < len(msm) and msm[i] is not None) else "ecmwf_ifs025"
+        out.append(calibrated_cloud_pct(raw[i], model, lead_day_for(t, today)))
+    return out
+
+
 def cloud_penalty(cloud_pct) -> float:
     """Cloud cover *at* the mountain's own altitude band (not a "look up
     from below" composite) -- i.e. are you actually standing in cloud/fog
@@ -525,7 +643,10 @@ def cloud_penalty(cloud_pct) -> float:
     Caller passes the worse of the ridge-dwell window and the PM descent
     window (2026-09 widening, see mountain_climb_score's docstring) so an
     afternoon cloud-up doesn't go unscored just because the ridge window
-    itself was clear."""
+    itself was clear. Since 2026-09-19 the value arriving here is the
+    CALIBRATED effective cloud (see the summit-cloud calibration banner
+    above: hourly 100*(1-P(sunny)), aggregated by the caller), not the raw
+    diagnosed percentage, for summits <= CLOUD_CALIBRATION_MAX_SUMMIT_M."""
     return cloud_pct if cloud_pct is not None else 0.0
 
 

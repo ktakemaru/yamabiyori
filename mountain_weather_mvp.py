@@ -39,6 +39,7 @@ from mountain_weather_core import (
     LIFT_RULE_ENABLED, LIFT_MIN_WIND_MS, LIFT_MIN_RH_BOTTOM_PCT,
     MSM_PRECIP_VAR, wet_fraction,
     sustained_peak, PM_CLOUD_PERSIST_HOURS, PRECIP_FULL_PENALTY_TOTAL_MM,
+    SUMMIT_CLOUD_CAL_VAR, calibrated_summit_cloud_series, CLOUD_CALIBRATION_ENABLED, CLOUD_CALIBRATION_MAX_SUMMIT_M,
 )
 
 # ---------------------------------------------------------------------------
@@ -239,6 +240,9 @@ def fetch_forecast(lat: float, lon: float, days: int = 15, summit_m: float = Non
     if summit_m is not None:
         add_altitude_columns(merged_hourly, {SUMMIT_LABEL: summit_m}, LEVEL_KINDS_MVP)
         merged_hourly[CLIMB_LAYER_MOIST_VAR] = climb_layer_moist_series(merged_hourly, summit_m)
+        # Calibrated summit cloud for the score (2026-09-19, R1 -- core.py's
+        # calibration banner): per hour, before window aggregation.
+        merged_hourly[SUMMIT_CLOUD_CAL_VAR] = calibrated_summit_cloud_series(merged_hourly, summit_m)
         if terrain_profile:
             add_altitude_columns(merged_hourly, {CLIMB_BASE_LABEL: summit_m - CLIMB_LAYER_DEPTH_M},
                                  ["windspeed", "winddirection"])
@@ -327,7 +331,10 @@ def window_scores_by_day(forecast: dict) -> dict:
     # Summit-elevation columns (fetch_forecast(summit_m=...)); the moisture
     # rule's climb-layer flag comes precomputed per hour (core.
     # climb_layer_moist_series -- summit down to CLIMB_LAYER_DEPTH_M).
-    cloud_series = forecast["hourly"][SUMMIT_VARS["cloudcover"]]
+    # Score input is the CALIBRATED hourly summit cloud (2026-09-19 R1, see
+    # core.py); raw is kept only for cloud_pct_raw in the result.
+    raw_cloud_series = forecast["hourly"][SUMMIT_VARS["cloudcover"]]
+    cloud_series = forecast["hourly"].get(SUMMIT_CLOUD_CAL_VAR) or raw_cloud_series
     wind_series = forecast["hourly"][SUMMIT_VARS["windspeed"]]
     temp_series = forecast["hourly"][SUMMIT_VARS["temperature"]]
     moist_series = forecast["hourly"].get(CLIMB_LAYER_MOIST_VAR) or [None] * len(times)
@@ -380,8 +387,9 @@ def window_scores_by_day(forecast: dict) -> dict:
             ridge_start = main_start + timedelta(hours=RIDGE_DWELL_TRIM_HOURS)
             ridge_end = main_end - timedelta(hours=RIDGE_DWELL_TRIM_HOURS)
             if ridge_start <= t_dt < ridge_end:
-                entry = ridge_by_day.setdefault(day_str, {"cloud": [], "wind": [], "temp": [], "visibility": []})
+                entry = ridge_by_day.setdefault(day_str, {"cloud": [], "cloud_raw": [], "wind": [], "temp": [], "visibility": []})
                 entry["cloud"].append(cloud_series[idx])
+                entry["cloud_raw"].append(raw_cloud_series[idx])
                 entry["wind"].append(wind_series[idx])
                 entry["temp"].append(temp_series[idx])
                 # Visibility is a single surface-ish value at the mountain's
@@ -409,9 +417,10 @@ def window_scores_by_day(forecast: dict) -> dict:
                 day_by_day.setdefault(day_str, []).append((wind_series[idx], t_dt.hour))
 
         if activity_end is not None and PM_START_HOUR <= t_dt.hour and t_dt < activity_end:
-            entry = pm_by_day.setdefault(day_str, {"cape": [], "cloud": []})
+            entry = pm_by_day.setdefault(day_str, {"cape": [], "cloud": [], "cloud_raw": []})
             entry["cape"].append(cape_series[idx])
             entry["cloud"].append(cloud_series[idx])
+            entry["cloud_raw"].append(raw_cloud_series[idx])
 
     summary = {}
     for day_str in set(activity_by_day) | set(ridge_by_day) | set(pm_by_day):
@@ -444,8 +453,10 @@ def window_scores_by_day(forecast: dict) -> dict:
         # below (see window_scores_by_day's docstring and
         # ACTIVITY_END_GRACE_MINUTES's comment).
         sustained = sustained_peak(pm_vals.get("cloud", []))
+        sustained_raw = sustained_peak(pm_vals.get("cloud_raw", []))
         pm = {"cape": max(cape_clean) if cape_clean else None,
-              "cloud": sustained if sustained is not None else 0.0}
+              "cloud": sustained if sustained is not None else 0.0,
+              "cloud_raw": sustained_raw if sustained_raw is not None else 0.0}
 
         # Duration-based precip (2026-09 redesign, see ACTIVITY_END_GRACE_MINUTES's
         # comment): what fraction of the activity window's hours are "wet"
@@ -559,6 +570,15 @@ def wet_fraction_cell(r) -> str:
     return f"{fmt(r['precip_wet_pct'])}({wet_hours_s}/{total}h{tag}){mm_tag}"
 
 
+def cloud_cell(r) -> str:
+    """'48.9/6.1' -- calibrated effective cloud (what the score uses, 2026-09-19
+    R1: 100*(1-P(sunny)) per hour, see core.py's calibration banner) / raw
+    diagnosed summit cloud. Identical when the summit is above
+    CLOUD_CALIBRATION_MAX_SUMMIT_M or calibration is off."""
+    raw = r.get("cloud_pct_raw")
+    return fmt(r["cloud_pct"]) if raw is None else f"{fmt(r['cloud_pct'])}/{fmt(raw)}"
+
+
 def print_ranking_table(rows):
     # 危険信号 sits right after the mountain name -- deliberately the most
     # visible position, not at the end -- because thunder/wind no longer
@@ -568,7 +588,7 @@ def print_ranking_table(rows):
     header = (
         pad("順位", 5) + pad("山", 26) + pad("アクセス", 24) + pad("危険信号(雷/強風/低体温症)", 34)
         + pad("スコア", 8) + pad("稜線風速m/s", 12)
-        + pad("雷リスクCAPE", 14) + pad("雲量%(稜線/PM)", 14) + pad("視程m(稜線)", 10)
+        + pad("雷リスクCAPE", 14) + pad("雲量%(較正/生)", 14) + pad("視程m(稜線)", 10)
         + pad("雨天割合%(活動時間)", 30) + pad("体感温度℃(稜線)", 16)
         + pad("降水量mm(全日)", 14) + pad("地形(活動時間 山頂風/稜線帯下端風)", 34)
     )
@@ -579,7 +599,7 @@ def print_ranking_table(rows):
             pad(str(i), 5) + pad(r["mountain"], 26) + pad(r["access"], 24)
             + pad(hazard_warning_cell(r), 34)
             + pad(str(r["score"]), 8) + pad(fmt(r["ridge_wind_ms"]), 12)
-            + pad(fmt(r["cape"], 0), 14) + pad(fmt(r["cloud_pct"]), 14)
+            + pad(fmt(r["cape"], 0), 14) + pad(cloud_cell(r), 14)
             + pad(fmt(r["ridge_visibility"], 0), 10)
             + pad(wet_cell, 30) + pad(fmt(r["chill"]), 16)
             + pad(fmt(r.get("day_total_precip_mm"), 0), 14)
@@ -623,6 +643,7 @@ def main():
                 precip_wet_pct = activity["wet_fraction_pct"]
                 precip_mm = activity["total_mm"]
                 cloud_pct = max(ridge["cloud"], pm["cloud"])
+                cloud_pct_raw = max(ridge["cloud_raw"], pm["cloud_raw"])   # display only (2026-09-19 R1)
                 score = mountain_climb_score(
                     cloud_pct=cloud_pct,
                     ridge_visibility_m=ridge["visibility"],
@@ -650,6 +671,7 @@ def main():
                         "ridge_wind_ms": round(ridge_wind_ms, 1),
                         "cape": pm["cape"],
                         "cloud_pct": round(cloud_pct, 1),
+                        "cloud_pct_raw": round(cloud_pct_raw, 1),
                         "ridge_visibility": round(ridge["visibility"]) if ridge["visibility"] is not None else None,
                         "precip_wet_pct": round(precip_wet_pct, 1),
                         "precip_wet_hours": activity["wet_hours"],

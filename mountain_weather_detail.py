@@ -46,6 +46,7 @@ from mountain_weather_core import (
     LIFT_RULE_ENABLED, LIFT_MIN_WIND_MS, LIFT_MIN_RH_BOTTOM_PCT,
     MSM_PRECIP_VAR, wet_fraction,
     sustained_peak, PM_CLOUD_PERSIST_HOURS, PRECIP_FULL_PENALTY_TOTAL_MM,
+    SUMMIT_CLOUD_CAL_VAR, calibrated_summit_cloud_series, CLOUD_CALIBRATION_ENABLED, CLOUD_CALIBRATION_MAX_SUMMIT_M,
 )
 
 # ---------------------------------------------------------------------------
@@ -333,6 +334,10 @@ def fetch_forecast(lat: float, lon: float, days: int = FORECAST_DAYS, extra_vars
     add_altitude_columns(merged_hourly, targets)
     if summit_m is not None:
         merged_hourly[CLIMB_LAYER_MOIST_VAR] = climb_layer_moist_series(merged_hourly, summit_m)
+        # Calibrated summit cloud for the score (2026-09-19, R1 -- see the
+        # calibration banner in core.py): per hour, before any window
+        # aggregation. Display columns keep the raw diagnosed value.
+        merged_hourly[SUMMIT_CLOUD_CAL_VAR] = calibrated_summit_cloud_series(merged_hourly, summit_m)
         if terrain_profile:
             add_altitude_columns(merged_hourly, {CLIMB_BASE_LABEL: summit_m - CLIMB_LAYER_DEPTH_M},
                                  ["windspeed", "winddirection"])
@@ -414,7 +419,13 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_m: float, tem
     upslope_base_series = forecast["hourly"].get(UPSLOPE_BASE_VAR) or [None] * len(times)
     cape_series = forecast["hourly"]["cape"]
     wind_speed_series = forecast["hourly"].get(wind_speed_var)
-    summit_cloud_series = forecast["hourly"].get(SUMMIT_VARS["cloudcover"]) if summit_m is not None else None
+    # Score input is the CALIBRATED hourly summit cloud (SUMMIT_CLOUD_CAL_VAR,
+    # 2026-09-19 R1: 100*(1-P(sunny)) per hour, see core.py's calibration
+    # banner); it falls back to the raw column for forecasts built without
+    # it. The raw series is carried alongside only for cloud_pct_raw in the
+    # result (display/diagnosis), never for the score.
+    raw_summit_cloud_series = forecast["hourly"].get(SUMMIT_VARS["cloudcover"]) if summit_m is not None else None
+    summit_cloud_series = (forecast["hourly"].get(SUMMIT_CLOUD_CAL_VAR) or raw_summit_cloud_series) if summit_m is not None else None
     temp_series = forecast["hourly"].get(temp_var)
     visibility_series = forecast["hourly"].get(VISIBILITY_VAR)
     daily_sunrise = forecast["_daily_sunrise"]
@@ -474,22 +485,24 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_m: float, tem
             ridge_start = main_start + timedelta(hours=RIDGE_DWELL_TRIM_HOURS)
             ridge_end = main_end - timedelta(hours=RIDGE_DWELL_TRIM_HOURS)
             if ridge_start <= t_dt < ridge_end:
-                e = ridge_by_day.setdefault(day_str, {"wind_kmh": [], "cloud": [], "temp": [], "visibility": []})
+                e = ridge_by_day.setdefault(day_str, {"wind_kmh": [], "cloud": [], "cloud_raw": [], "temp": [], "visibility": []})
                 e["wind_kmh"].append(wind_speed_series[idx] if wind_speed_series else None)
                 e["cloud"].append(summit_cloud_series[idx] if summit_cloud_series else None)
+                e["cloud_raw"].append(raw_summit_cloud_series[idx] if raw_summit_cloud_series else None)
                 e["temp"].append(temp_series[idx] if temp_series else None)
                 e["visibility"].append(visibility_series[idx] if visibility_series else None)
 
         if activity_end is not None and PM_START_HOUR <= t_dt.hour and t_dt < activity_end:
-            e = pm_by_day.setdefault(day_str, {"cape": [], "cloud": []})
+            e = pm_by_day.setdefault(day_str, {"cape": [], "cloud": [], "cloud_raw": []})
             e["cape"].append(cape_series[idx])
             e["cloud"].append(summit_cloud_series[idx] if summit_cloud_series else None)
+            e["cloud_raw"].append(raw_summit_cloud_series[idx] if raw_summit_cloud_series else None)
 
     scores = {}
     for day_str in sorted(set(activity_by_day) | set(ridge_by_day) | set(pm_by_day)):
         activity = activity_by_day.get(day_str, {"precip_prob": [], "precip_mm": [], "msm_mm": [], "moist": [], "upslope": [], "upslope_base": []})
-        ridge = ridge_by_day.get(day_str, {"wind_kmh": [], "cloud": [], "temp": [], "visibility": []})
-        pm = pm_by_day.get(day_str, {"cape": [], "cloud": []})
+        ridge = ridge_by_day.get(day_str, {"wind_kmh": [], "cloud": [], "cloud_raw": [], "temp": [], "visibility": []})
+        pm = pm_by_day.get(day_str, {"cape": [], "cloud": [], "cloud_raw": []})
 
         # Duration-based precip (2026-09, second pass -- see this function's
         # docstring): fraction of the activity window's hours that are
@@ -534,6 +547,9 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_m: float, tem
         # AM/PM max: the activity window above already spans climb through
         # descent in one pass.
         cloud_pct = max(ridge_cloud, pm_cloud)
+        # Same aggregation on the raw diagnosed cloud, for cloud_pct_raw only.
+        pm_cloud_raw_sustained = sustained_peak(pm["cloud_raw"])
+        cloud_pct_raw = max(safe_avg(ridge["cloud_raw"]), pm_cloud_raw_sustained if pm_cloud_raw_sustained is not None else 0.0)
 
         ridge_wind_ms = ridge_wind_kmh * KMH_TO_MS
         chill = wind_chill_c(ridge_temp, ridge_wind_kmh)
@@ -565,6 +581,7 @@ def compute_day_scores(forecast: dict, wind_speed_var: str, summit_m: float, tem
             "ridge_wind_ms": round(ridge_wind_ms, 1),
             "cape": pm_cape,
             "cloud_pct": round(cloud_pct, 1),
+            "cloud_pct_raw": round(cloud_pct_raw, 1),
             "ridge_visibility": round(ridge_visibility) if ridge_visibility is not None else None,
             "precip_wet_pct": round(precip_wet_pct, 1),
             "precip_wet_hours": wet_hours,
@@ -942,6 +959,15 @@ def wet_fraction_cell(r) -> str:
     return f"{fmt(r['precip_wet_pct'])}({wet_hours_s}/{total}h{tag}){mm_tag}"
 
 
+def cloud_cell(r) -> str:
+    """'48.9/6.1' -- calibrated effective cloud (what the score uses, 2026-09-19
+    R1: 100*(1-P(sunny)) per hour, see core.py's calibration banner) / raw
+    diagnosed summit cloud. Identical when the summit is above
+    CLOUD_CALIBRATION_MAX_SUMMIT_M or calibration is off."""
+    raw = r.get("cloud_pct_raw")
+    return fmt(r["cloud_pct"]) if raw is None else f"{fmt(r['cloud_pct'])}/{fmt(raw)}"
+
+
 def print_day_score_table(mtn: dict, day_scores: dict):
     """Day-by-day mountain_climb_score for the selected mountain -- the same
     scoring formula/weights mountain_weather_mvp.py uses to rank all 75
@@ -957,7 +983,7 @@ def print_day_score_table(mtn: dict, day_scores: dict):
           f"雨天判定:MSM範囲内(表のM表記)はMSM降水量{WET_HOUR_MSM_PRECIP_MM}mm/h以上または湿潤層(山頂〜{CLIMB_LAYER_DEPTH_M}m下の層のどこかでRH{WET_HOUR_RH_PCT:.0f}%以上かつ雲量{WET_HOUR_MOIST_CLOUD_PCT:.0f}%以上{'、または山頂風' + format(LIFT_MIN_WIND_MS, '.0f') + 'm/s以上で下端RH' + format(LIFT_MIN_RH_BOTTOM_PCT, '.0f') + '%以上の空気が持ち上がり山頂で飽和する強制上昇' if LIFT_RULE_ENABLED else ''}、湿n表記)、MSM範囲外(確n表記)はECMWF降水確率の期待値(各時間の確率/100の合計、4日目以降の時間別詳細は追わない) / 降水量は活動時間内の合計mm({PRECIP_FULL_PENALTY_TOTAL_MM:.0f}mmで満点ペナルティ) / PM雲量は連続{PM_CLOUD_PERSIST_HOURS}時間平均の最大値)\n")
     header = (
         pad("日付", 18) + pad("危険信号(雷/強風/低体温症)", 34) + pad("スコア", 8) + pad("稜線風速m/s", 12)
-        + pad("雷リスクCAPE", 14) + pad("雲量%(稜線/PM)", 14) + pad("視程m(稜線)", 10)
+        + pad("雷リスクCAPE", 14) + pad("雲量%(較正/生)", 14) + pad("視程m(稜線)", 10)
         + pad("雨天割合%(活動時間)", 30) + pad("体感温度℃(稜線)", 16)
         + pad("降水量mm(全日)", 14) + pad("地形(活動時間 山頂風/稜線帯下端風)", 34)
     )
@@ -969,7 +995,7 @@ def print_day_score_table(mtn: dict, day_scores: dict):
             pad(format_date_with_weekday(day_str), 18) + pad(hazard_warning_cell(r), 34)
             + pad(str(r["score"]), 8)
             + pad(fmt(r["ridge_wind_ms"]), 12) + pad(fmt(r["cape"], 0), 14)
-            + pad(fmt(r["cloud_pct"]), 14) + pad(fmt(r["ridge_visibility"], 0), 10)
+            + pad(cloud_cell(r), 14) + pad(fmt(r["ridge_visibility"], 0), 10)
             + pad(wet_cell, 30)
             + pad(fmt(r["chill"]), 16)
             + pad(fmt(r.get("day_total_precip_mm"), 0), 14)
@@ -1354,7 +1380,7 @@ def print_waypoint_table(wp: dict, elevation_m: float, day_rows: list, day_score
     print(f"\n--- {label}({wp['elevation_m']:.0f}m) / 値はこの地点の標高{elevation_m:.0f}mへ補間{exposure} ---")
     if day_score is not None:
         print(f"    登山向け総合スコア: {day_score['score']} "
-              f"(稜線風速{fmt(day_score['ridge_wind_ms'])}m/s 雲量{fmt(day_score['cloud_pct'])}%(稜線/PM) "
+              f"(稜線風速{fmt(day_score['ridge_wind_ms'])}m/s 雲量{cloud_cell(day_score)}%(較正/生, 稜線/PM) "
               f"雷リスクCAPE{fmt(day_score['cape'], 0)} 体感温度{fmt(day_score['chill'])}℃) "
               f"危険信号: {hazard_warning_cell(day_score)} 地形: {terrain.terrain_cell(day_score.get('terrain'), day_score.get('terrain_base'))}")
     if not day_rows:

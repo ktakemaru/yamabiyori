@@ -58,11 +58,16 @@ for name, day in REFS:
     targets[core.SUMMIT_LABEL] = summit_m
     core.add_altitude_columns(hourly, targets)
     hourly[core.CLIMB_LAYER_MOIST_VAR] = core.climb_layer_moist_series(hourly, summit_m)
+    # Calibrated summit cloud (2026-09-19 R1). These are past dates, so the
+    # lead is 1 (today = the reference day), same as the live pipeline's
+    # day-0 rows.
+    from datetime import date as _date
+    hourly[core.SUMMIT_CLOUD_CAL_VAR] = core.calibrated_summit_cloud_series(hourly, summit_m, today=_date.fromisoformat(day))
     fc = {"hourly": hourly,
           "_daily_sunrise": dict(zip(ec["daily"]["time"], ec["daily"]["sunrise"])),
           "_daily_sunset": dict(zip(ec["daily"]["time"], ec["daily"]["sunset"]))}
     r = m.compute_day_scores(fc, wind_var, summit_m, temp_var)[day]
-    print(f"{name} {day}: score={r['score']} cloud={r['cloud_pct']} wet={m.wet_fraction_cell(r)} "
+    print(f"{name} {day}: score={r['score']} cloud={r['cloud_pct']}(raw {r.get('cloud_pct_raw')}) wet={m.wet_fraction_cell(r)} "
           f"vis={r['ridge_visibility']} day_total_mm={r.get('day_total_precip_mm')}")
     if verbose:
         for i, t in enumerate(hourly["time"]):
