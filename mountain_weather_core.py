@@ -602,18 +602,33 @@ CLOUD_CALIBRATION_ENABLED = True
 CLOUD_CALIBRATION_FULL_SUMMIT_M = None    # None = every summit fully calibrated (see banner); e.g. 2900.0 to ramp out above
 CLOUD_CALIBRATION_RAW_SUMMIT_M = 3300.0   # raw from here up when FULL is set; linear blend in between
 CLOUD_CALIBRATION_BIN_EDGES = [0, 10, 20, 30, 40, 50, 70, 100]   # bin 0 = exactly 0%; then (edge[i-1], edge[i]]
-# (model, lead_day_lo, lead_day_hi, P(sunny) per bin). Built 2026-09-19 by
-# yamabiyori-backtest `python -m backtest.cloud_calibration_table`.
+# (model, lead_day_lo, lead_day_hi, P(sunny) per bin, P_ref). Built 2026-09-19 by
+# yamabiyori-backtest `python -m backtest.cloud_calibration_table`; the jma_msm
+# 1-2 row was replaced 2026-09-23 (v1.6.0, backtest R12) by the row of
+# mos_tables/r1-summit-cloud-sunny-msm7.json (table_set_version 1.1.0,
+# content_sha256 e4191f9b...).
+#
+# R12 (v1.6.0): the jma_msm rows were trained on summit cloud interpolated
+# WITHOUT 900/800hPa (Single Runs serves them as null), but this plugin
+# interpolates MSM WITH them (Forecast API), so near the 800hPa height
+# (~2000m) the same weather read a higher cloud % than in training and the
+# table under-rated P(sunny) (0% bin: 0.719 table vs 0.822 observed). The
+# 1-2 row is retrained on the 7-level summit cloud (Historical Forecast API
+# jma_msm, same (site, hour) set, bins and PAV as R1; short effective lead,
+# see the backtest's docs/r12-msm-retrain.md). The 3-4 row is still the
+# 5-level one (rebuild planned 2027-03 from the Forecast snapshots).
+# P_ref (案 C) is now PER ROW (5th element) instead of "the model's 1-2 row
+# bin 0": the new 1-2 row is normalised by its own bin 0 (0.822), while the
+# 3-4 row keeps v1.5.0's 0.719 so its effective values do not move. ECMWF
+# rows and their P_ref (0.737) are unchanged.
 CLOUD_CALIBRATION_TABLE = [
-    ("ecmwf_ifs025", 1, 2, [0.737, 0.492, 0.271, 0.206, 0.120, 0.052, 0.016, 0.000]),
-    ("ecmwf_ifs025", 3, 5, [0.697, 0.485, 0.288, 0.222, 0.159, 0.115, 0.069, 0.069]),
-    ("ecmwf_ifs025", 6, 10, [0.505, 0.415, 0.312, 0.312, 0.312, 0.257, 0.232, 0.129]),
-    ("jma_msm", 1, 2, [0.719, 0.511, 0.362, 0.247, 0.149, 0.118, 0.073, 0.071]),
-    ("jma_msm", 3, 4, [0.585, 0.454, 0.377, 0.264, 0.238, 0.146, 0.123, 0.040]),
+    ("ecmwf_ifs025", 1, 2, [0.737, 0.492, 0.271, 0.206, 0.120, 0.052, 0.016, 0.000], 0.737),
+    ("ecmwf_ifs025", 3, 5, [0.697, 0.485, 0.288, 0.222, 0.159, 0.115, 0.069, 0.069], 0.737),
+    ("ecmwf_ifs025", 6, 10, [0.505, 0.415, 0.312, 0.312, 0.312, 0.257, 0.232, 0.129], 0.737),
+    ("jma_msm", 1, 2, [0.822, 0.687, 0.517, 0.342, 0.260, 0.142, 0.062, 0.041], 0.822),   # 7-level (R12)
+    ("jma_msm", 3, 4, [0.585, 0.454, 0.377, 0.264, 0.238, 0.146, 0.123, 0.040], 0.719),   # 5-level; v1.5.0 P_ref
 ]
 SUMMIT_CLOUD_CAL_VAR = altitude_col("cloudcover", SUMMIT_LABEL) + "_cal"   # "cloudcover_at_summit_cal"
-# 案 C reference: P(sunny | 0%, lead 1-2) per model (the first bin of that model's first row).
-CLOUD_CALIBRATION_P_REF = {r[0]: r[3][0] for r in CLOUD_CALIBRATION_TABLE if r[1] == 1}
 
 
 def cloud_calibration_bin(cloud_pct: float) -> int:
@@ -625,23 +640,28 @@ def cloud_calibration_bin(cloud_pct: float) -> int:
     return len(CLOUD_CALIBRATION_BIN_EDGES) - 1
 
 
-def cloud_calibration_row(model: str, lead_day: int) -> list:
-    """The P(sunny) bins for this model/lead; nearest lead group when out of range."""
+def cloud_calibration_entry(model: str, lead_day: int) -> tuple:
+    """The table row (model, lo, hi, bins, P_ref) for this model/lead: an unknown model falls back to the
+    ecmwf_ifs025 rows, a lead outside every group to the nearest group."""
     rows = [r for r in CLOUD_CALIBRATION_TABLE if r[0] == model] or [r for r in CLOUD_CALIBRATION_TABLE if r[0] == "ecmwf_ifs025"]
-    for _, lo, hi, bins in rows:
-        if lo <= lead_day <= hi:
-            return bins
-    return min(rows, key=lambda r: min(abs(lead_day - r[1]), abs(lead_day - r[2])))[3]
+    for r in rows:
+        if r[1] <= lead_day <= r[2]:
+            return r
+    return min(rows, key=lambda r: min(abs(lead_day - r[1]), abs(lead_day - r[2])))
+
+
+def cloud_calibration_row(model: str, lead_day: int) -> list:
+    """The P(sunny) bins for this model/lead (see cloud_calibration_entry)."""
+    return cloud_calibration_entry(model, lead_day)[3]
 
 
 def calibrated_cloud_pct(cloud_pct, model: str, lead_day: int):
-    """Raw summit cloud % -> effective cloud % = 100 * (1 - P(sunny) / P_ref), P_ref = the same
-    model's P(sunny | 0%, lead 1-2) (案 C, see the banner). Clamped to [0, 100]; None passes through."""
+    """Raw summit cloud % -> effective cloud % = 100 * (1 - P(sunny) / P_ref), P_ref = that row's own
+    reference (5th element; 案 C, see the banner -- per row since v1.6.0). Clamped to [0, 100]; None passes through."""
     if cloud_pct is None:
         return None
-    p_sunny = cloud_calibration_row(model, lead_day)[cloud_calibration_bin(cloud_pct)]
-    p_ref = CLOUD_CALIBRATION_P_REF.get(model) or CLOUD_CALIBRATION_P_REF["ecmwf_ifs025"]
-    return round(min(100.0, max(0.0, 100.0 * (1.0 - p_sunny / p_ref))), 1)
+    _, _, _, bins, p_ref = cloud_calibration_entry(model, lead_day)
+    return round(min(100.0, max(0.0, 100.0 * (1.0 - bins[cloud_calibration_bin(cloud_pct)] / p_ref))), 1)
 
 
 def cloud_calibration_weight(summit_m) -> float:
