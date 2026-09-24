@@ -30,5 +30,25 @@ class TestReferenceDays(unittest.TestCase):
         self.assertEqual(proc.stdout.splitlines(), EXPECTED)
 
 
+class TestWithoutUtf8Mode(unittest.TestCase):
+    """-X utf8 を付け忘れても落ちないこと(各スクリプトの __main__ で stdout/stderr を UTF-8 にしている)。
+    -X utf8=0 と環境変数の除去で UTF-8 モードを明示的に切るので、Windows ではパイプが cp932/cp1252 になる
+    (CI の Windows ランナーで reconfigure が効いていることの確認)。"""
+
+    def run_script(self, *args):
+        env = {k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING")}
+        proc = subprocess.run([sys.executable, "-X", "utf8=0", *args], cwd=ROOT, capture_output=True, env=env, timeout=120)
+        self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", "replace"))
+        return proc.stdout.decode("utf-8")
+
+    def test_validate_refs(self):
+        out = self.run_script(os.path.join(ROOT, "scratch_validate_refs.py"), "--cache-dir", FIXTURES)
+        self.assertEqual(out.splitlines(), EXPECTED)
+
+    def test_detail_list(self):
+        out = self.run_script(os.path.join(ROOT, "mountain_weather_detail.py"), "--list")
+        self.assertIn("唐松岳", out)
+
+
 if __name__ == "__main__":
     unittest.main()

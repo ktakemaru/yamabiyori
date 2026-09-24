@@ -278,7 +278,8 @@ python -m venv venv
 ```
 
 **実行するときは `-X utf8` を付ける。** Windows の Python 3.14 以前では、付けずに出力をパイプで受けると
-`⚠` などの記号で `UnicodeEncodeError` になる。
+`⚠` などの記号で `UnicodeEncodeError` になることがある(本体のスクリプトは付け忘れても UTF-8 で出力するようにしてある)。
+Windows PowerShell 5.1 で `>` を使うと文字化けするので、出力をファイルに残すときは `--out ファイル名` を使う。
 
 必須の依存は `requests` と `numpy`(地形レイヤー)のみ。以下のオプション機能を使う場合は `requirements.txt` のコメントに従って追加インストールする。
 
@@ -294,6 +295,7 @@ python -m venv venv
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --limit 3        # 動作確認用: 先頭3座だけ
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --region 伊豆     # 地域で絞る(複数回指定可)
+./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --out ranking.txt  # 結果をUTF-8でファイルに保存
 
 # 診断モード: 対話的に山を選択(1=山選択 / 2=GPXルート診断)
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py
@@ -329,6 +331,7 @@ claude --plugin-dir .
 | `mountain_weather_mvp.py` | 探索モード本体 |
 | `mountain_weather_detail.py` | 診断モード(山選択・GPXルート診断)本体。天気図取得・ルート地図PNG・アンサンブル確信度もここ |
 | `mountain_terrain.py` / `precompute_terrain.py` / `terrain_profiles.json` | 地形レイヤー。地理院DEMから76座分を事前計算済み(`terrain_cache/` はタイルキャッシュ、自動生成) |
+| `cli_output.py` | `--out`(出力を UTF-8 BOM付きでファイルに保存)の共通処理 |
 | `tests/`, `scripts/check_setup.py` | オフラインのテスト(参照3日の回帰チェックは `tests/fixtures/refs/` のフィクスチャで動く)とセットアップ確認 |
 | `AGENTS.md` | Codex などのコーディングエージェント向けの指示(セットアップ・成功条件・変更してよい範囲) |
 | `scratch_past_date.py` / `scratch_validate_refs.py` | 検証ツール。過去日付の再計算(実況照合用)と、参照3日の回帰チェック |

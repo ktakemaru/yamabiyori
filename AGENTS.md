@@ -17,8 +17,8 @@ python -m venv venv                       # python が無ければ py -m venv ve
 ./venv/Scripts/python.exe -m pip install -r requirements.txt
 ./venv/Scripts/python.exe -X utf8 scripts/check_setup.py        # [NG] があれば -> の案内に従う
 ```
-**すべての python 実行に `-X utf8` を付ける。** 付けないと Windows + Python 3.14 以前では、出力をパイプで受けたときに
-`UnicodeEncodeError`(cp932)で止まる。これはコードの不具合ではない。
+**すべての python 実行に `-X utf8` を付ける。** 本体の3スクリプトは付け忘れても UTF-8 で出力するが、`python -c` や
+自作の確認スクリプトは Windows + Python 3.14 以前だと `UnicodeEncodeError`(cp932)で止まる。コードの不具合ではない。
 
 ## 実行
 ```powershell
@@ -32,14 +32,16 @@ python -m venv venv                       # python が無ければ py -m venv ve
 - 山の番号はリスト順なので、使う前に `--list` で確認する。2回目以降は `cache/` が効いて速い。
 - **PowerShell では python の出力を `>`・`|`・`$x = ...` で受けない。** Windows PowerShell 5.1 では日本語が化け、`>` の
   ファイルは UTF-16 になる。`| Select-Object -First` は途中でプロセスを止め終了コードも壊す。コマンドはそのまま実行して出力を読む。
+  長い出力を残したいときは `--out ファイル`(UTF-8 BOM付きで保存、画面には `[OK]/[NG] 保存先(行数)` の1行だけ)を使う。
+  全山の探索は `--out` で保存し、必要な日付・山だけを読むと出力を読む量が減る。`--out` は診断モードでは `--mountain`/`--list` と一緒にだけ使える。
 - 全山の探索がコマンドのタイムアウトに当たったら、`--region` で地域ごとに分けて実行する(結果は `cache/` に残る)。
 
 ## 成功条件
 | 実行 | 成功 |
 |---|---|
 | `check_setup.py` | 終了コード0、最後に「セットアップは問題ありません」 |
-| 探索モード | 終了コード0、出力に `【対象地域:` の行があり、`取得失敗` を含む行が無い |
-| 診断モード | 終了コード0、出力に `登山向け総合スコア(日別)` の表がある |
+| 探索モード | 終了コード0、出力に `【対象地域:` の行があり、`取得失敗` を含む行が無い(`--out` のときはそのファイルの中身で判定) |
+| 診断モード | 終了コード0、出力に `登山向け総合スコア(日別)` の表がある(同上) |
 | テスト | 最後の行が `OK`(skipped は正常) |
 - **ランキングが空でも正常。** `--limit`・`--region` の軽量実行では、基準点(`MIN_SCORE_THRESHOLD`)を超える山が無く
   日別の表が1つも出ないことがある。上の成功条件(`【対象地域:` の行 / `取得失敗` なし / 終了コード0)は変わらない。
@@ -65,7 +67,7 @@ $env:YAMABIYORI_NETWORK_TESTS="1"; ./venv/Scripts/python.exe -X utf8 -m unittest
 | 変更してよい | 保護(ユーザーの明示的な指示と承認なしに変えない) |
 |---|---|
 | 探索モードの対象山の選別(`mountain_weather_mvp.py` の `select_pool()`・`REGION_FILTER`・`TOP_N_PER_DAY`)| `mountain_weather_core.py` のスコア式・penalty関数・`SCORE_WEIGHTS`・危険信号の閾値 |
-| 表示・表の整形(`print_*` 関数)、引数処理、`main()` の入出力 | 雲量較正(`CLOUD_CALIBRATION_*`、`calibrated_summit_cloud_series`)。**毎時に較正してから窓平均**の順序も含む |
+| 表示・表の整形(`print_*` 関数)、引数処理、`main()` の入出力、`cli_output.py` | 雲量較正(`CLOUD_CALIBRATION_*`、`calibrated_summit_cloud_series`)。**毎時に較正してから窓平均**の順序も含む |
 | `tests/`・`scripts/`・ドキュメント | 雨天判定(`WET_HOUR_*`、湿潤層・強制上昇・逆転層の蓋)と各種閾値定数 |
 | | 標高補間、MSM/ECMWF/ENS の取得と切り替え(各 `fetch_forecast`・`fetch_open_meteo`) |
 | | 時間帯評価(`window_scores_by_day`・`compute_day_scores`)、`MIN_SCORE_THRESHOLD` |

@@ -19,6 +19,7 @@ Usage:
     python -X utf8 mountain_weather_mvp.py                        # all mountains (first run takes minutes)
     python -X utf8 mountain_weather_mvp.py --limit 3              # quick check: first 3 mountains only
     python -X utf8 mountain_weather_mvp.py --region 伊豆 --region 東北南部
+    python -X utf8 mountain_weather_mvp.py --out ranking.txt      # save the output as UTF-8 (BOM) instead
 Exit code: 0 = done (an empty ranking is a normal result), 2 = bad arguments
 or every mountain failed to fetch.
 """
@@ -30,6 +31,7 @@ import requests
 from datetime import date, datetime, timedelta
 
 import mountain_terrain as terrain
+from cli_output import run_with_output_file
 
 from mountain_weather_core import (
     MOUNTAINS, pad,
@@ -625,6 +627,8 @@ def parse_args(argv=None):
                         help="対象地域(複数回指定可)。指定するとファイル冒頭の REGION_FILTER より優先")
     parser.add_argument("--limit", type=int, metavar="N",
                         help="MOUNTAINS の並び順で先頭N座だけ計算する(動作確認用の軽量実行)")
+    parser.add_argument("--out", metavar="ファイル",
+                        help="出力を UTF-8(BOM付き)でファイルに保存し、画面には保存先と行数だけを出す")
     return parser.parse_args(argv)
 
 
@@ -649,7 +653,12 @@ def main(argv=None) -> int:
     if error:
         print(error)
         return 2
+    if args.out:
+        return run_with_output_file(args.out, lambda: run_ranking(args, regions, pool))
+    return run_ranking(args, regions, pool)
 
+
+def run_ranking(args, regions, pool) -> int:
     today = date.today()
     target_dates = [str(today + timedelta(days=i)) for i in range(15)]  # today .. +14
     fetched = 0
@@ -767,4 +776,7 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    for _stream in (sys.stdout, sys.stderr):   # -X utf8 を付け忘れても cp932 で落ちないように(直接実行時のみ)
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
     sys.exit(main())

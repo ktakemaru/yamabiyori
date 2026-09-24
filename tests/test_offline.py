@@ -4,10 +4,12 @@
 スコアリングのロジックは変更せず、現行の出力を期待値として固定している。期待値が変わったら、
 それはスコアが変わったということ -- CHANGELOG に理由を書いたうえで期待値を更新すること。
 """
+import codecs
 import contextlib
 import io
 import json
 import os
+import tempfile
 import unittest
 from unittest import mock
 
@@ -162,6 +164,48 @@ class TestMvpCli(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("取得失敗", out)
         self.assertNotIn("【対象地域:", out)
+
+
+class TestOutFile(unittest.TestCase):
+    """--out: 出力を UTF-8(BOM付き)でファイルに保存し、画面には1行だけ出す。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = os.path.join(self.tmp.name, "out.txt")
+
+    def read_out(self):
+        with open(self.path, "rb") as f:
+            raw = f.read()
+        self.assertTrue(raw.startswith(codecs.BOM_UTF8), "BOM 付き UTF-8 ではない")
+        return raw.decode("utf-8-sig")
+
+    def test_detail_list_to_file(self):
+        code, screen = run_quietly(detail.main, ["--list", "--out", self.path])
+        self.assertEqual(code, 0)
+        self.assertIn(core.MOUNTAINS[0]["name"], self.read_out())
+        self.assertEqual(len(screen.strip().splitlines()), 1)
+        self.assertTrue(screen.startswith("[OK]"))
+
+    def test_detail_interactive_rejects_out(self):
+        code, screen = run_quietly(detail.main, ["--out", self.path])
+        self.assertEqual(code, 2)
+        self.assertFalse(os.path.exists(self.path))
+        self.assertIn("--out", screen)
+
+    def test_mvp_failure_to_file(self):
+        with mock.patch.object(mvp, "fetch_forecast", side_effect=requests.exceptions.ConnectionError("offline")):
+            code, screen = run_quietly(mvp.main, ["--limit", "2", "--out", self.path])
+        self.assertEqual(code, 2)
+        self.assertIn("取得失敗", self.read_out())
+        self.assertEqual(len(screen.strip().splitlines()), 1)
+        self.assertTrue(screen.startswith("[NG]"))
+
+    def test_mvp_bad_args_not_written(self):
+        code, screen = run_quietly(mvp.main, ["--limit", "0", "--out", self.path])
+        self.assertEqual(code, 2)
+        self.assertFalse(os.path.exists(self.path))
+        self.assertIn("--limit", screen)
 
 
 if __name__ == "__main__":

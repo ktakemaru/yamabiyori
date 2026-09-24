@@ -13,7 +13,9 @@
   - `scratch_validate_refs.py` に `--cache-dir` を追加(既定は従来どおり `cache/`)。参照3日の入力6ファイルを `tests/fixtures/refs/` にコミット(Open-Meteo, CC BY 4.0、2026-09-09 取得。`tests/fixtures/README.md`)。
   - テスト(`tests/`、標準ライブラリの unittest、pytest でも可): import、`MOUNTAINS` の構造(件数は `terrain_profiles.json` と一致)、`mountain_climb_score` の代表値と範囲、`CLOUD_CALIBRATION_TABLE` の形状、引数処理と終了コード、参照3日の完全一致。Open-Meteo 実通信の smoke は `YAMABIYORI_NETWORK_TESTS=1` のときだけ。
   - `scripts/check_setup.py`: Python バージョン・必須パッケージ・venv・UTF-8 出力・`cache/` 書き込み(`--network` で Open-Meteo 疎通)を確認し、失敗時の次の手順を日本語で表示。
-  - AGENTS.md を再構成(141→82行): 最初に読むもの、セットアップ、実行、成功条件、テスト、保護領域/変更してよい領域、変更後の検証、ネットワーク拒否時の扱い。R1/R8/R12 の経緯と数値は削除して CHANGELOG を正とした。CLAUDE.md は `@AGENTS.md` で共通ルールを取り込み、Claude 固有のルールだけを残す。README に「Codexで試す」節、全コマンドに `-X utf8`。
+  - AGENTS.md を再構成(141→88行): 最初に読むもの、セットアップ、実行、成功条件、テスト、保護領域/変更してよい領域、変更後の検証、ネットワーク拒否時の扱い。R1/R8/R12 の経緯と数値は削除して CHANGELOG を正とした。CLAUDE.md は `@AGENTS.md` で共通ルールを取り込み、Claude 固有のルールだけを残す。README に「Codexで試す」節、全コマンドに `-X utf8`。
+  - `--out ファイル`(探索モード・診断モード): 出力を UTF-8(BOM付き)で保存し、画面には保存先・行数・成否の1行だけを出す(`cli_output.py`)。理由: Windows PowerShell 5.1(既定の cp932 コンソール)で `>` を使うとファイルが UTF-16 になり日本語も化けることを、新規 clone での再現確認で確認したため(PS 5.1 の `Get-Content` は BOM なし UTF-8 も化けるので BOM 付き)。診断モードの対話実行(引数なし・GPX)では `input()` のプロンプトがファイル側に行って止まって見えるため `--out` は受け付けず終了コード2。
+  - mvp.py・detail.py・`scratch_validate_refs.py` の `__main__` でだけ `sys.stdout`/`sys.stderr` を UTF-8 に `reconfigure`。理由: エージェントが自分で組み立てたコマンドで `-X utf8` を付け忘れると `⚠` で `UnicodeEncodeError` になることを再現確認で確認したため。import 時には効かない(バックテストのように本体をライブラリとして読む側には影響しない)。`-X utf8=0` で UTF-8 モードを切って実行するテストを追加し、CI の Windows ランナーで確認。
   - GitHub Actions(`.github/workflows/ci.yml`): push/PR で Windows・Ubuntu × Python 3.10・最新安定版のオフラインテストと `check_setup.py`。network smoke は手動実行のみ。
 
 ## v1.6.1 — 2026-09-24

@@ -18,12 +18,18 @@ for the right N.
 import argparse
 import json
 import os
+import sys
 
 import mountain_weather_core as core
 import mountain_weather_detail as m
 
 REFS = [("唐松岳", "2026-09-06"), ("立山(雄山)", "2026-09-05"), ("槍ヶ岳", "2026-09-05")]
 PAST_DAYS = 5
+if __name__ == "__main__":
+    for _stream in (sys.stdout, sys.stderr):   # -X utf8 を付け忘れても cp932 で落ちないように(直接実行時のみ)
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
+
 _parser = argparse.ArgumentParser(description="参照3日(唐松岳9/6・立山9/5・槍ヶ岳9/5)の回帰チェック")
 _parser.add_argument("-v", action="store_true", help="時間別の行も表示する")
 _parser.add_argument("--cache-dir", default=core.CACHE_DIR, help="*_1d_past5d.json を読むディレクトリ(既定: cache/)")

@@ -18,6 +18,7 @@ Usage:
     python -X utf8 mountain_weather_detail.py                 # interactive (1=mountain / 2=GPX route)
     python -X utf8 mountain_weather_detail.py --list          # numbered mountain list, then exit
     python -X utf8 mountain_weather_detail.py --mountain 12   # non-interactive, by number or name
+    python -X utf8 mountain_weather_detail.py --mountain 12 --out fuji.txt   # save as UTF-8 (BOM)
 Exit code: 0 = done, 2 = unknown/ambiguous --mountain or the forecast fetch failed.
 """
 
@@ -33,6 +34,7 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta, timezone
 
 import mountain_terrain as terrain
+from cli_output import run_with_output_file
 
 from mountain_weather_core import (
     MOUNTAINS, pad,
@@ -2745,15 +2747,24 @@ def parse_args(argv=None):
     parser.add_argument("--list", action="store_true", help="山の番号一覧を表示して終了する")
     parser.add_argument("--mountain", metavar="番号|山名",
                         help="山を指定して非対話で診断する(例: --mountain 12 / --mountain 富士山)")
+    parser.add_argument("--out", metavar="ファイル",
+                        help="出力を UTF-8(BOM付き)でファイルに保存する。--mountain / --list と一緒にだけ使える")
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> int:
-    """Exit code: 0 = done, 2 = unknown/ambiguous --mountain or the forecast fetch failed."""
+    """Exit code: 0 = done, 2 = bad arguments (unknown/ambiguous --mountain, --out without
+    --mountain/--list) or the forecast fetch failed."""
     args = parse_args(argv)
+    if args.out and not (args.list or args.mountain is not None):
+        # 対話モード(引数なし・GPX)では input() のプロンプトがファイル側に行き、止まって見えるため受け付けない
+        print("--out は --mountain か --list と一緒に使ってください(対話モードでは使えません)。")
+        return 2
     if args.list:
-        print_mountain_list()
-        return 0
+        def show_list():
+            print_mountain_list()
+            return 0
+        return run_with_output_file(args.out, show_list) if args.out else show_list()
     if args.mountain is not None:
         mtn, candidates = resolve_mountain(args.mountain)
         if mtn is None:
@@ -2764,6 +2775,8 @@ def main(argv=None) -> int:
             else:
                 print(f"「{args.mountain}」に当てはまる山がありません(番号は1-{len(MOUNTAINS)}。--list で一覧を表示)。")
             return 2
+        if args.out:
+            return run_with_output_file(args.out, lambda: main_single_mountain(mtn))
         return main_single_mountain(mtn)
 
     print("\n=== モードを選んでください ===")
@@ -2778,4 +2791,7 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    for _stream in (sys.stdout, sys.stderr):   # -X utf8 を付け忘れても cp932 で落ちないように(直接実行時のみ)
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
     sys.exit(main())
