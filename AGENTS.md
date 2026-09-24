@@ -30,6 +30,9 @@ python -m venv venv                       # python が無ければ py -m venv ve
 ```
 - 引数なしの `mountain_weather_detail.py` は対話式(GPXルート診断もこちら)。エージェントからは `--mountain` を使う。
 - 山の番号はリスト順なので、使う前に `--list` で確認する。2回目以降は `cache/` が効いて速い。
+- **PowerShell では python の出力を `>`・`|`・`$x = ...` で受けない。** Windows PowerShell 5.1 では日本語が化け、`>` の
+  ファイルは UTF-16 になる。`| Select-Object -First` は途中でプロセスを止め終了コードも壊す。コマンドはそのまま実行して出力を読む。
+- 全山の探索がコマンドのタイムアウトに当たったら、`--region` で地域ごとに分けて実行する(結果は `cache/` に残る)。
 
 ## 成功条件
 | 実行 | 成功 |
@@ -67,7 +70,8 @@ $env:YAMABIYORI_NETWORK_TESTS="1"; ./venv/Scripts/python.exe -X utf8 -m unittest
 | | 標高補間、MSM/ECMWF/ENS の取得と切り替え(各 `fetch_forecast`・`fetch_open_meteo`) |
 | | 時間帯評価(`window_scores_by_day`・`compute_day_scores`)、`MIN_SCORE_THRESHOLD` |
 - 「特定の山だけで探索」したいときは `MOUNTAINS` を編集せず、探索モードの選別で絞る(`MOUNTAINS` の順番を変えると
-  診断モードの番号がずれる)。山の座標(`lat`/`lon`)・地域(`region`)は各山の dict にある。
+  診断モードの番号がずれる)。山の座標(`lat`/`lon`)・地域(`region`)は各山の dict にある。選別条件を足したら、
+  `main()` の `region_label`(`【対象地域:` の行)にもその条件が出るようにする。
 - 山の追加・削除はユーザーに確認してから。追加時は `python -X utf8 precompute_terrain.py 山名` を実行し、ドキュメントの山数も直す。
 - セットアップを通すためだけにスコアリングを変えてはならない。環境の問題は環境側で解決する。
 - 設計のルール: Open-Meteo 以外の予報サービスの結果を混ぜない(気象庁の天気図・ひまわりは可)。有料・APIキー必須のAPIを
