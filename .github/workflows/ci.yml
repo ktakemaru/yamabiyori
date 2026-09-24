@@ -1,0 +1,57 @@
+name: ci
+
+# オフラインのテストとセットアップ確認を Windows/Ubuntu × Python 3.10/最新安定版で回す。
+# Open-Meteo に実際にアクセスする smoke テストは外部要因で落ちうるので必須にせず、手動実行 (workflow_dispatch) のみ。
+# どのコマンドも README/AGENTS.md に書いた形 (-X utf8 付き) で実行する。
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: "Open-Meteo への network smoke テストも実行する"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        python: ["3.10", "3.x"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install
+        run: python -m pip install -r requirements.txt
+      - name: Setup check
+        run: python -X utf8 scripts/check_setup.py
+      - name: Offline tests (unittest)
+        run: python -X utf8 -m unittest -v
+      - name: Offline tests (pytest)
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.x'
+        run: |
+          python -m pip install pytest
+          python -X utf8 -m pytest -q
+
+  network:
+    if: github.event_name == 'workflow_dispatch' && inputs.network
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python -m pip install -r requirements.txt
+      - run: python -X utf8 scripts/check_setup.py --network
+      - run: python -X utf8 -m unittest -v tests.test_network
+        env:
+          YAMABIYORI_NETWORK_TESTS: "1"
+      - run: python -X utf8 mountain_weather_mvp.py --limit 3

@@ -7,26 +7,32 @@ pressure-level stack incl. geopotential heights), bypassing the cache TTL so
 the numbers are reproducible before/after a code change.
 Expected (2026-09-09 night, after the altitude-interpolation redesign): see
 CHANGELOG for the current reference values.
-Usage: python scratch_validate_refs.py [-v]   (-v prints the hourly rows)
+Usage: python -X utf8 scratch_validate_refs.py [-v] [--cache-dir DIR]
+  -v prints the hourly rows; --cache-dir reads the past5d files from DIR instead
+  of cache/ (tests/fixtures/refs/ holds a committed copy, so this runs right after a clone).
 If the past5d cache files are missing, re-fetch them with
 core.fetch_open_meteo(lat, lon, hourly=m.HOURLY_VARS + core.level_stack_vars(),
 daily=["sunrise","sunset"], days=1, model="jma_msm"/"ecmwf_ifs025", past_days=N)
 for the right N.
 """
+import argparse
 import json
 import os
-import sys
 
 import mountain_weather_core as core
 import mountain_weather_detail as m
 
 REFS = [("唐松岳", "2026-09-06"), ("立山(雄山)", "2026-09-05"), ("槍ヶ岳", "2026-09-05")]
 PAST_DAYS = 5
-verbose = "-v" in sys.argv
+_parser = argparse.ArgumentParser(description="参照3日(唐松岳9/6・立山9/5・槍ヶ岳9/5)の回帰チェック")
+_parser.add_argument("-v", action="store_true", help="時間別の行も表示する")
+_parser.add_argument("--cache-dir", default=core.CACHE_DIR, help="*_1d_past5d.json を読むディレクトリ(既定: cache/)")
+_args = _parser.parse_args()
+verbose = _args.v
 
 
 def load(model, lat, lon):
-    path = os.path.join(core.CACHE_DIR, f"{model}_{lat:.4f}_{lon:.4f}_1d_past{PAST_DAYS}d.json")
+    path = os.path.join(_args.cache_dir, f"{model}_{lat:.4f}_{lon:.4f}_1d_past{PAST_DAYS}d.json")
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 

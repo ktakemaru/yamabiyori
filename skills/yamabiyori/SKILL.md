@@ -155,7 +155,7 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 
 ## mountain_weather_detail.py 固有の機能
 
-- 起動直後に `main()` が入力経路を選ばせる(2026-09追加): 「1: 山を1つ選んで診断」(既存の`MOUNTAINS`選択フロー、`main_single_mountain()`)/「2: GPX登山計画書からルート診断」(`main_gpx_route()`、後述)。非対話実行は `echo "1\n<山番号>" | python mountain_weather_detail.py` のように先頭にモード番号を追加する。
+- 起動直後に `main()` が入力経路を選ばせる(2026-09追加): 「1: 山を1つ選んで診断」(既存の`MOUNTAINS`選択フロー、`main_single_mountain()`)/「2: GPX登山計画書からルート診断」(`main_gpx_route()`、後述)。非対話実行は `python -X utf8 mountain_weather_detail.py --mountain <番号|山名>`(2026-09-24〜。`--list` で番号一覧。引数なしなら従来どおり対話式)。
 - **モード1**: `MOUNTAINS` リストを番号付きで表示し、対話入力(`input()`)で1山選択。**番号はリストの並び順に依存するので、リストを変更したら番号もずれる**(2026-09時点で76座、唐松岳は39番。番号を使う前に必ず `print_mountain_list()` の出力かリストを確認し、このSKILL.md記載の番号も含めて鵜呑みにしないこと)。
 - 出力は2段構成:
   1. `print_day_score_table()` — 選択した山の14日分、日ごとの `mountain_climb_score` サマリー(mvp.pyのランキング表と同じ列構成)。
@@ -531,11 +531,15 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 
 ```bash
 cd C:\mountain-weather
-./venv/Scripts/python.exe -m pip install -r requirements.txt   # 初回セットアップ(中核機能=requestsのみ)
-./venv/Scripts/python.exe mountain_weather_detail.py        # 対話的に山を選択
-echo "12" | ./venv/Scripts/python.exe mountain_weather_detail.py   # 非対話(12=富士山(剣ヶ峰)、リスト順依存。要事前確認)
-./venv/Scripts/python.exe mountain_weather_mvp.py            # 全山ランキング(非対話)
+./venv/Scripts/python.exe -m pip install -r requirements.txt   # 初回セットアップ(requests・numpy)
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py                    # 対話的に山を選択
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山   # 非対話(番号でも可。--list で一覧)
+./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py                       # 全山ランキング(非対話)
+./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --limit 3             # 先頭3座だけ(動作確認用。--region で地域も絞れる)
+./venv/Scripts/python.exe -X utf8 -m unittest                                   # オフラインのテスト(参照3日の回帰チェックを含む)
 ```
+
+`-X utf8` は Windows の Python 3.14 以前で出力をパイプに流すとき `⚠` 等が cp932 で `UnicodeEncodeError` になるのを防ぐ(3.15 以降は既定で UTF-8)。
 
 `mountain_weather_core.py`は直接実行しない(mvp.py/detail.pyからimportされるだけのモジュール)。
 

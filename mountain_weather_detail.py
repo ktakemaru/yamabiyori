@@ -15,12 +15,17 @@ Requirements:
     pip install requests
 
 Usage:
-    python mountain_weather_detail.py
+    python -X utf8 mountain_weather_detail.py                 # interactive (1=mountain / 2=GPX route)
+    python -X utf8 mountain_weather_detail.py --list          # numbered mountain list, then exit
+    python -X utf8 mountain_weather_detail.py --mountain 12   # non-interactive, by number or name
+Exit code: 0 = done, 2 = unknown/ambiguous --mountain or the forecast fetch failed.
 """
 
+import argparse
 import math
 import re
 import statistics
+import sys
 import time as time_module
 import os
 import requests
@@ -2638,9 +2643,25 @@ def fetch_jma_weather_map(out_dir: str = SCREENSHOT_DIR, include_forecast: bool 
     return saved_paths if include_forecast else out_path
 
 
-def main_single_mountain():
-    print_mountain_list()
-    mtn = prompt_selection()
+def resolve_mountain(query: str):
+    """--mountain の値(番号 or 山名)を MOUNTAINS の1件に解決する。
+    戻り値 (山 or None, 候補の(番号, 山)リスト)。山名は完全一致 → 一意な部分一致の順に探す。"""
+    q = query.strip()
+    if q.isdigit():
+        n = int(q)
+        return (MOUNTAINS[n - 1], []) if 1 <= n <= len(MOUNTAINS) else (None, [])
+    numbered = list(enumerate(MOUNTAINS, start=1))
+    exact = [(i, m) for i, m in numbered if m["name"] == q]
+    if exact:
+        return exact[0][1], []
+    partial = [(i, m) for i, m in numbered if q and q in m["name"]]
+    return (partial[0][1], []) if len(partial) == 1 else (None, partial)
+
+
+def main_single_mountain(mtn: dict = None) -> int:
+    if mtn is None:
+        print_mountain_list()
+        mtn = prompt_selection()
 
     summit_m, wind_speed_var, wind_dir_var = wind_vars_for_elevation(mtn["elevation_m"])
     temp_var = temp_var_for_elevation(mtn["elevation_m"])
@@ -2650,7 +2671,7 @@ def main_single_mountain():
                                   terrain_profile=terrain.terrain_for(mtn["name"]))
     except requests.exceptions.RequestException as e:
         print(f"取得に失敗しました: {e}")
-        return
+        return 2
 
     day_scores = compute_day_scores(forecast, wind_speed_var, summit_m, temp_var)
     print_day_score_table(mtn, day_scores)
@@ -2673,6 +2694,7 @@ def main_single_mountain():
         print_ensemble_confidence_table(mtn, confidence_by_day)
     except requests.exceptions.RequestException as e:
         print(f"\n(ECMWF確信度の取得に失敗しました、点予報の表示には影響ありません: {e})")
+    return 0
 
 
 def main_gpx_route():
@@ -2717,7 +2739,33 @@ def main_gpx_route():
             print(f"地図を保存しました: {path}")
 
 
-def main():
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="ヤマビヨリ 診断モード。引数なしで起動すると対話式(1=山選択 / 2=GPXルート診断)。")
+    parser.add_argument("--list", action="store_true", help="山の番号一覧を表示して終了する")
+    parser.add_argument("--mountain", metavar="番号|山名",
+                        help="山を指定して非対話で診断する(例: --mountain 12 / --mountain 富士山)")
+    return parser.parse_args(argv)
+
+
+def main(argv=None) -> int:
+    """Exit code: 0 = done, 2 = unknown/ambiguous --mountain or the forecast fetch failed."""
+    args = parse_args(argv)
+    if args.list:
+        print_mountain_list()
+        return 0
+    if args.mountain is not None:
+        mtn, candidates = resolve_mountain(args.mountain)
+        if mtn is None:
+            if candidates:
+                print(f"「{args.mountain}」に当てはまる山が複数あります。番号か正確な山名で指定してください:")
+                for i, m in candidates:
+                    print(f"  {i}: {m['name']}")
+            else:
+                print(f"「{args.mountain}」に当てはまる山がありません(番号は1-{len(MOUNTAINS)}。--list で一覧を表示)。")
+            return 2
+        return main_single_mountain(mtn)
+
     print("\n=== モードを選んでください ===")
     print("1: 山を1つ選んで診断")
     print("2: GPX登山計画書からルート診断(waypoints)")
@@ -2725,9 +2773,9 @@ def main():
 
     if mode == "2":
         main_gpx_route()
-    else:
-        main_single_mountain()
+        return 0
+    return main_single_mountain()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

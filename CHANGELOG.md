@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+- 2026-09-24: **Codex(ChatGPT無料枠を含む)で clone → セットアップ → 実行 → 小さな改造 → テスト まで迷わず進めるための導線整備。スコアリング・較正・閾値・取得処理は変更なし**(`mountain_weather_core.py` は差分なし、参照3日は唐松岳9/6=55.0・立山9/5=95.6・槍ヶ岳9/5=67.8 で不変)。
+  - 理由: 初見のエージェントが Windows で扱うと、(1) 出力をパイプで受けると Python 3.10〜3.14 では標準出力が cp932 になり `⚠` で `UnicodeEncodeError` になる(作者環境の 3.15 は既定で UTF-8 モードのため見えていなかった)、(2) 診断モードの非対話例 `printf "1
+12
+" | …` が PowerShell で動かず、SKILL.md の `echo "12" | …` はモード番号が抜けていた、(3) `scratch_validate_refs.py` が gitignore 対象の `cache/` に依存し clone 直後は動かない、(4) AGENTS.md が最初に 550 行の SKILL.md を読ませ、数値が README/SKILL と重複していた、(5) 探索モードの初回実行が数分・数百行で、全山の取得に失敗しても終了コード0だった。
+  - 診断モード: `--list`(番号一覧)と `--mountain <番号|山名>`(非対話、山名は完全一致→一意な部分一致)を追加。引数なしは従来どおり対話式。不明・曖昧な指定と予報の取得失敗は終了コード2。
+  - 探索モード: `--limit N`(先頭N座だけの軽量実行)と `--region 地域`(`REGION_FILTER` を上書き、複数可)を追加。山の選別だけで、スコア・`MIN_SCORE_THRESHOLD`・対象日は不変。引数の誤りと全山の取得失敗は終了コード2。ランキングが空になるのは正常(AGENTS.md に明記)。
+  - `scratch_validate_refs.py` に `--cache-dir` を追加(既定は従来どおり `cache/`)。参照3日の入力6ファイルを `tests/fixtures/refs/` にコミット(Open-Meteo, CC BY 4.0、2026-09-09 取得。`tests/fixtures/README.md`)。
+  - テスト(`tests/`、標準ライブラリの unittest、pytest でも可): import、`MOUNTAINS` の構造(件数は `terrain_profiles.json` と一致)、`mountain_climb_score` の代表値と範囲、`CLOUD_CALIBRATION_TABLE` の形状、引数処理と終了コード、参照3日の完全一致。Open-Meteo 実通信の smoke は `YAMABIYORI_NETWORK_TESTS=1` のときだけ。
+  - `scripts/check_setup.py`: Python バージョン・必須パッケージ・venv・UTF-8 出力・`cache/` 書き込み(`--network` で Open-Meteo 疎通)を確認し、失敗時の次の手順を日本語で表示。
+  - AGENTS.md を再構成(141→82行): 最初に読むもの、セットアップ、実行、成功条件、テスト、保護領域/変更してよい領域、変更後の検証、ネットワーク拒否時の扱い。R1/R8/R12 の経緯と数値は削除して CHANGELOG を正とした。CLAUDE.md は `@AGENTS.md` で共通ルールを取り込み、Claude 固有のルールだけを残す。README に「Codexで試す」節、全コマンドに `-X utf8`。
+  - GitHub Actions(`.github/workflows/ci.yml`): push/PR で Windows・Ubuntu × Python 3.10・最新安定版のオフラインテストと `check_setup.py`。network smoke は手動実行のみ。
+
 ## v1.6.1 — 2026-09-24
 
 - 2026-09-24: **文書のみの修正(コードの変更なし)**。v1.6.0 の公開後、本体の main で「1.5」を現行版として書いている箇所を洗い出して直した。README 冒頭のお知らせを v1.6.0 の案内に更新(1〜2日目の雲量の補正を見直したこと、1〜2日目のスコアが山によって数点変わりうること(前後比較: 平均+0.98点、5点以上は11%、日別トップ10の入れ替わり0)、「行ける」の目安70点は v1.5.0 から変わっていないこと)。README「精度と限界」の「v1.4〜1.5で2つを直した」を「v1.4〜1.6で3つ」とし R12 の項目を追加。スコアの仕組みの表の雲量の説明を v1.6.0 に合わせた(基準値は行ごと、MSMの1〜2日目は7面で学習した行)。探索・診断モードの出力例(v1.5.0 の実出力)は変えず、直後に「v1.6.0 以降は1〜2日目の数字が少し変わりうる」と注記。SKILL.md の description に v1.6.0 の更新を追記。理由: 冒頭のお知らせが v1.5.0 のままで、v1.6.0 で1〜2日目のスコアが変わったことが利用者に伝わらないため。

@@ -28,6 +28,7 @@ Open-Meteoの無料APIだけで動き、気象庁MSM(5km格子・3日先まで)�
 - [スコアの仕組み](#スコアの仕組み)
 - [データソース](#データソース)
 - [精度と限界(正直なところ)](#精度と限界正直なところ)
+- [Codexで試す](#codexで試す)
 - [セットアップ](#セットアップ)
 - [使い方](#使い方)
 - [Claude Codeとの連携](#claude-codeとの連携)
@@ -236,12 +237,48 @@ MSM範囲内(今日〜+2日)は上記の物理ルールで時間単位に判定�
 検証の記録は `skills/yamabiyori/SKILL.md` の「未検証・今後の課題」と「既知の精度傾向」に1座ずつ、
 バックテストの結果は [yamabiyori-backtest](https://github.com/ktakemaru/yamabiyori-backtest) の `docs/` に残している。
 
+## Codexで試す
+
+プログラミングに慣れていなくても、自分のPCの Codex(OpenAI のコーディングエージェント。CLI・IDE拡張・デスクトップアプリ)に
+頼めばセットアップから実行・小さな改造まで進められるようにしてある(ChatGPT の無料枠でも試せるよう、
+Codex が読む量と試行回数を少なくする構成にしている)。Codex への指示は [AGENTS.md](AGENTS.md) にまとめてある。
+
+1. **Python を入れる(3.10以上)。** Windows は [python.org](https://www.python.org/downloads/) のインストーラーで、最初の画面の
+   「Add python.exe to PATH」にチェックを入れる(入れ忘れると `python` と打ったときに Microsoft Store が開く)。
+   macOS も python.org のインストーラーでよい。
+2. **このリポジトリを手元に置く。** Git があれば `git clone https://github.com/ktakemaru/yamabiyori.git`。
+   Git が無ければ GitHub のページの「Code」→「Download ZIP」で落として展開する。
+3. **Codex でそのフォルダを開く**(CLI ならフォルダに移動して `codex` を起動)。
+4. **次のように頼む。** そのままコピーして使える:
+
+```text
+このリポジトリを理解して、セットアップして実行してください。
+AGENTS.md の手順に従い、最初は軽量実行(--limit 3)で動作確認してください。
+```
+
+うまく動いたら、たとえば次のような改造も頼める:
+
+```text
+探索モードを、東京から近い山だけで実行できるようにしてください。
+スコアの計算には触れず、山の選び方だけを変えてください。
+```
+
+途中でネットワーク(pip や天気データの取得)の許可を求められたら、許可する。
+天気データの取得に失敗したときは、たいてい Open-Meteo 側の一時的な問題なので、時間をおいてやり直す。
+
 ## セットアップ
 
-```bash
+以下は Windows PowerShell 表記。macOS/Linux では `./venv/Scripts/python.exe` を `./venv/bin/python`、
+最初の `python` を `python3` に読み替える。
+
+```powershell
 python -m venv venv
 ./venv/Scripts/python.exe -m pip install -r requirements.txt
+./venv/Scripts/python.exe -X utf8 scripts/check_setup.py     # セットアップ確認([NG] があれば案内に従う)
 ```
+
+**実行するときは `-X utf8` を付ける。** Windows の Python 3.14 以前では、付けずに出力をパイプで受けると
+`⚠` などの記号で `UnicodeEncodeError` になる。
 
 必須の依存は `requests` と `numpy`(地形レイヤー)のみ。以下のオプション機能を使う場合は `requirements.txt` のコメントに従って追加インストールする。
 
@@ -252,15 +289,21 @@ python -m venv venv
 
 ## 使い方
 
-```bash
-# 探索モード: 全山ランキング(非対話)
-./venv/Scripts/python.exe mountain_weather_mvp.py
+```powershell
+# 探索モード: 全山ランキング(非対話。初回は数分かかる)
+./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py
+./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --limit 3        # 動作確認用: 先頭3座だけ
+./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --region 伊豆     # 地域で絞る(複数回指定可)
 
 # 診断モード: 対話的に山を選択(1=山選択 / 2=GPXルート診断)
-./venv/Scripts/python.exe mountain_weather_detail.py
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py
 
-# 診断モード: 非対話(モード1、番号12=富士山(剣ヶ峰)。番号はリスト順なので要確認)
-printf "1\n12\n" | ./venv/Scripts/python.exe mountain_weather_detail.py
+# 診断モード: 非対話(番号はリスト順なので --list で確認。山名の一部でも可)
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --list
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山
+
+# テスト(オフライン)
+./venv/Scripts/python.exe -X utf8 -m unittest
 ```
 
 探索モードの主な調整パラメータ(`mountain_weather_mvp.py` 冒頭): `REGION_FILTER`(空=全地域)、`TOP_N_PER_DAY`、`MIN_SCORE_THRESHOLD`(既定70点。v1.5.0で80から変更)。
@@ -286,6 +329,8 @@ claude --plugin-dir .
 | `mountain_weather_mvp.py` | 探索モード本体 |
 | `mountain_weather_detail.py` | 診断モード(山選択・GPXルート診断)本体。天気図取得・ルート地図PNG・アンサンブル確信度もここ |
 | `mountain_terrain.py` / `precompute_terrain.py` / `terrain_profiles.json` | 地形レイヤー。地理院DEMから76座分を事前計算済み(`terrain_cache/` はタイルキャッシュ、自動生成) |
+| `tests/`, `scripts/check_setup.py` | オフラインのテスト(参照3日の回帰チェックは `tests/fixtures/refs/` のフィクスチャで動く)とセットアップ確認 |
+| `AGENTS.md` | Codex などのコーディングエージェント向けの指示(セットアップ・成功条件・変更してよい範囲) |
 | `scratch_past_date.py` / `scratch_validate_refs.py` | 検証ツール。過去日付の再計算(実況照合用)と、参照3日の回帰チェック |
 | `skills/yamabiyori/SKILL.md` | 設計ドキュメント本体。スコア式の根拠、各機能の設計判断、既知の落とし穴、検証記録 |
 | `skills/yamabiyori/references/weather_map_reading.md` | 天気図読解の手引き(概況説明用) |

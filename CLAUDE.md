@@ -1,6 +1,11 @@
 # CLAUDE.md
 
-このリポジトリで作業する際の運用ルール。ヤマビヨリ自体の仕様・設計は`skills/yamabiyori/SKILL.md`を参照。
+エージェント共通のルール(セットアップ・実行・成功条件・変更してよい範囲・検証)は AGENTS.md にあり、ここで取り込む:
+
+@AGENTS.md
+
+以下は Claude Code 固有のルール。ヤマビヨリ自体の仕様・設計は`skills/yamabiyori/SKILL.md`を参照
+(Claude Code ではスコア式に関わらない作業でも、利用者への説明の根拠として SKILL.md を読んでよい)。
 
 ## 記録・確認に関するルール
 
