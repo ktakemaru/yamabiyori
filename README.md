@@ -2,7 +2,7 @@
 
 ![ヤマビヨリ](assets/yamabiyori_banner.png)
 
-[![version](https://img.shields.io/badge/version-1.6.1-2c7fb8)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-1.7.0-2c7fb8)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-3776ab)](requirements.txt)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](#claude-codeとの連携)
@@ -345,6 +345,7 @@ claude --plugin-dir .
 
 詳細は [CHANGELOG.md](CHANGELOG.md)。
 
+- **v1.7.0 (2026-09-24)** — Codex などのエージェントや初めての人が迷わず動かせるように、実行まわりを整備(スコアの計算は変更なし)。探索モードに `--limit`/`--region`、診断モードに `--list`/`--mountain`(非対話)、両方に `--out`(UTF-8でファイル保存)を追加。セットアップ確認 `scripts/check_setup.py`、オフラインのテスト、CI、README「Codexで試す」、AGENTS.md の再構成。Windows で文字コードのエラー(cp932)で止まらないようにした。
 - **v1.6.1 (2026-09-24)** — 文書のみ(コードの変更なし)。冒頭のお知らせ・「精度と限界」・スコアの仕組みの表・出力例の注記・SKILL.mdの説明を v1.6.0 の変更に合わせて更新。
 - **v1.6.0 (2026-09-23)** — MSM(直近1〜2日)の山頂雲量の較正を、本体と同じ山頂雲量の作り方(900/800hPaを含む補間)で学び直した(バックテスト R12)。1〜2日目のスコアが平均+1.0点動く(5点以上動くのは11%、3日目以降は変化なし)。既知の制約を「精度と限界」に追記。
 - **v1.5.0 (2026-09-19)** — 山頂雲量を過去の的中率で「晴れる確率」に直してから採点する(バックテストの較正テーブル)。スコア水準が下がったため「行ける」の目安を80→70点に変更。
