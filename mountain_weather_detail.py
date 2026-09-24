@@ -18,7 +18,7 @@ Usage:
     python -X utf8 mountain_weather_detail.py                 # interactive (1=mountain / 2=GPX route)
     python -X utf8 mountain_weather_detail.py --list          # numbered mountain list, then exit
     python -X utf8 mountain_weather_detail.py --mountain 12   # non-interactive, by number or name
-    python -X utf8 mountain_weather_detail.py --mountain 12 --out fuji.txt   # save as UTF-8 (BOM)
+    python -X utf8 mountain_weather_detail.py --mountain 12 --out out/fuji.txt   # save as UTF-8 (BOM)
 Exit code: 0 = done, 2 = unknown/ambiguous --mountain or the forecast fetch failed.
 """
 

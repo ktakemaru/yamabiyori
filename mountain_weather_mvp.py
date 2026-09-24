@@ -19,7 +19,7 @@ Usage:
     python -X utf8 mountain_weather_mvp.py                        # all mountains (first run takes minutes)
     python -X utf8 mountain_weather_mvp.py --limit 3              # quick check: first 3 mountains only
     python -X utf8 mountain_weather_mvp.py --region 伊豆 --region 東北南部
-    python -X utf8 mountain_weather_mvp.py --out ranking.txt      # save the output as UTF-8 (BOM) instead
+    python -X utf8 mountain_weather_mvp.py --out out/ranking.txt  # save the output as UTF-8 (BOM) instead
 Exit code: 0 = done (an empty ranking is a normal result), 2 = bad arguments
 or every mountain failed to fetch.
 """

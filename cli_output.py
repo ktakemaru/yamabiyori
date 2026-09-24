@@ -10,11 +10,13 @@ import os
 def run_with_output_file(path: str, func) -> int:
     """func() の標準出力を path へ書き、画面には保存先・行数・成否の1行だけを出す。func の終了コードを返す。"""
     try:
-        with open(path, "w", encoding="utf-8-sig", newline="") as f, contextlib.redirect_stdout(f):
-            code = func()
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)   # out/ などが無ければ作る
+        f = open(path, "w", encoding="utf-8-sig", newline="")
     except OSError as e:
         print(f"[NG] 出力ファイルに書き込めませんでした: {path} ({e})")
         return 2
+    with f, contextlib.redirect_stdout(f):
+        code = func()
     with open(path, encoding="utf-8-sig") as f:
         lines = sum(1 for _ in f)
     where = os.path.abspath(path)

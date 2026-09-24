@@ -295,7 +295,7 @@ Windows PowerShell 5.1 で `>` を使うと文字化けするので、出力を�
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --limit 3        # 動作確認用: 先頭3座だけ
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --region 伊豆     # 地域で絞る(複数回指定可)
-./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --out ranking.txt  # 結果をUTF-8でファイルに保存
+./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --out out/ranking.txt  # 結果をUTF-8でファイルに保存(out/ はgitignore済み)
 
 # 診断モード: 対話的に山を選択(1=山選択 / 2=GPXルート診断)
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py
