@@ -12,6 +12,8 @@ venv/
 cache/
 screenshots/
 maps/
+# --out の保存先(例: --out out/ranking.txt)
+out/
 
 # --- Dev/debug scratch output (stale runs, not part of the product) ---
 detail_test.txt

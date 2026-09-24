@@ -16,13 +16,22 @@ Requirements:
     pip install requests
 
 Usage:
-    python mountain_weather_mvp.py
+    python -X utf8 mountain_weather_mvp.py                        # all mountains (first run takes minutes)
+    python -X utf8 mountain_weather_mvp.py --limit 3              # quick check: first 3 mountains only
+    python -X utf8 mountain_weather_mvp.py --region 伊豆 --region 東北南部
+    python -X utf8 mountain_weather_mvp.py --out out/ranking.txt  # save the output as UTF-8 (BOM) instead
+Exit code: 0 = done (an empty ranking is a normal result), 2 = bad arguments
+or every mountain failed to fetch.
 """
+
+import argparse
+import sys
 
 import requests
 from datetime import date, datetime, timedelta
 
 import mountain_terrain as terrain
+from cli_output import run_with_output_file
 
 from mountain_weather_core import (
     MOUNTAINS, pad,
@@ -611,13 +620,48 @@ def print_ranking_table(rows):
         print(row)
 
 
-def main():
+def parse_args(argv=None):
+    """Command-line narrowing of the mountain pool (I/O only -- scoring is untouched)."""
+    parser = argparse.ArgumentParser(description="ヤマビヨリ 探索モード(全山ランキング)。引数なしなら全地域・全山。")
+    parser.add_argument("--region", action="append", metavar="地域",
+                        help="対象地域(複数回指定可)。指定するとファイル冒頭の REGION_FILTER より優先")
+    parser.add_argument("--limit", type=int, metavar="N",
+                        help="MOUNTAINS の並び順で先頭N座だけ計算する(動作確認用の軽量実行)")
+    parser.add_argument("--out", metavar="ファイル",
+                        help="出力を UTF-8(BOM付き)でファイルに保存し、画面には保存先と行数だけを出す")
+    return parser.parse_args(argv)
+
+
+def select_pool(regions, limit):
+    """(pool, error message or None). Filters MOUNTAINS by region, then keeps the first `limit`."""
+    known = sorted({m["region"] for m in MOUNTAINS})
+    unknown = [r for r in regions if r not in known]
+    if unknown:
+        return [], f"不明な地域: {'、'.join(unknown)}(指定できる地域: {'、'.join(known)})"
+    pool = [m for m in MOUNTAINS if m["region"] in regions] if regions else list(MOUNTAINS)
+    if limit is not None:
+        if limit < 1:
+            return [], "--limit には1以上の整数を指定してください"
+        pool = pool[:limit]
+    return pool, None
+
+
+def main(argv=None) -> int:
+    args = parse_args(argv)
+    regions = args.region or REGION_FILTER
+    pool, error = select_pool(regions, args.limit)
+    if error:
+        print(error)
+        return 2
+    if args.out:
+        return run_with_output_file(args.out, lambda: run_ranking(args, regions, pool))
+    return run_ranking(args, regions, pool)
+
+
+def run_ranking(args, regions, pool) -> int:
     today = date.today()
     target_dates = [str(today + timedelta(days=i)) for i in range(15)]  # today .. +14
-
-    pool = MOUNTAINS
-    if REGION_FILTER:
-        pool = [m for m in MOUNTAINS if m["region"] in REGION_FILTER]
+    fetched = 0
 
     # date -> list of per-mountain results for that date
     by_date: dict[str, list] = {d: [] for d in target_dates}
@@ -629,6 +673,7 @@ def main():
         except requests.exceptions.RequestException as e:
             print(f"  ({mtn['name']}: 取得失敗のためスキップ - {e})")
             continue
+        fetched += 1
         by_day = window_scores_by_day(forecast)
         for d in target_dates:
             if d in by_day:
@@ -693,7 +738,13 @@ def main():
                     }
                 )
 
-    region_label = "、".join(REGION_FILTER) if REGION_FILTER else "全地域"
+    if fetched == 0:
+        print("すべての山で予報の取得に失敗しました。Open-Meteo に接続できない可能性があります(コードの不具合ではありません)。")
+        return 2
+
+    region_label = "、".join(regions) if regions else "全地域"
+    if args.limit is not None:
+        region_label += f"(先頭{len(pool)}座)"
     count_label = "すべて" if TOP_N_PER_DAY is None else f"上位{TOP_N_PER_DAY}件"
     print(f"\n【対象地域: {region_label} / 1日あたり{count_label} / "
           f"score{MIN_SCORE_THRESHOLD}以上のみ / "
@@ -721,7 +772,11 @@ def main():
             note = precip_timing_note(i, day_rows)
             if note:
                 print(note)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    for _stream in (sys.stdout, sys.stderr):   # -X utf8 を付け忘れても cp932 で落ちないように(直接実行時のみ)
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8")
+    sys.exit(main())

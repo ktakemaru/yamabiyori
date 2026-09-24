@@ -2,7 +2,7 @@
   "name": "yamabiyori",
   "displayName": "ヤマビヨリ",
   "description": "MSM/ECMWFに基づく14日先までの登山特化型天気予報ツール。76座を横断比較する探索モード、1座を標高別に深掘りする診断モード、GPX登山計画書に沿ったルート診断を提供する。バックテストで精度を検証・較正済み(限界はREADMEに明示)。",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "author": {
     "name": "takemaru",
     "email": "ktakemaru@users.noreply.github.com"
