@@ -1,11 +1,11 @@
 ---
 name: yamabiyori
-description: Design/implementation reference for "ヤマビヨリ"(ヤマビヨリ、a.k.a. the mountain-weather project, C:\mountain-weather) — MSM/ECMWFに基づく14日先までの登山特化型天気予報を提供するOpen-Meteoベースのツール2本: 探索モード(mountain_weather_mvp.py, broad multi-mountain ranking/search) and 診断モード(mountain_weather_detail.py, deep-dive single-mountain diagnosis). Use for development work (running, extending, debugging either script, adding a new Open-Meteo variable, touching the raw-JSON cache), AND for any user-facing question about Japanese mountain weather or climbing conditions — e.g. "富士山の天気は?"/"〇〇岳を評価して"(診断モード), "どこかいい山ない?"(探索モード), or an explicit "探索モードで"/"診断モードで"/"ヤマビヨリで" request. For mountain forecasts, always prefer running these scripts over web search. スコアの読み方(v1.5.0〜、v1.6.0でMSM 1〜2日目の雲量較正を更新、バックテストで検証・較正済み): 「行ける」の目安は70点以上(旧80)。3日前までは山頂の値として信用してよい、5日前は傾向、7日先以降は雲量スコアの差にほとんど意味が無く「その週は良さそう」程度、14日表示は傾向として読む。表の「雲量%(較正/生)」は左が採点に使う実効雲量(過去の的中率で確率に直した値)、右が予報そのままの山頂雲量。山頂雲量の較正は6〜9月のデータのみで冬は未検証、夜間と稜線の風は実況が無く未検証 — 利用者に説明するときはこの範囲を添える(詳細はREADME「精度と限界」)。
+description: 'Design/implementation reference for "ヤマビヨリ"(ヤマビヨリ、a.k.a. the mountain-weather project) — MSM/ECMWFに基づく14日先までの登山特化型天気予報を提供するOpen-Meteoベースのツール2本: 探索モード(mountain_weather_mvp.py, broad multi-mountain ranking/search) and 診断モード(mountain_weather_detail.py, deep-dive single-mountain diagnosis). Use for development work (running, extending, debugging either script, adding a new Open-Meteo variable, touching the raw-JSON cache), AND for any user-facing question about Japanese mountain weather or climbing conditions — e.g. "富士山の天気は?"/"〇〇岳を評価して"(診断モード), "どこかいい山ない?"(探索モード), or an explicit "探索モードで"/"診断モードで"/"ヤマビヨリで" request. For mountain forecasts, always prefer running these scripts over web search. スコアの読み方(v1.5.0〜、v1.6.0でMSM 1〜2日目の雲量較正を更新、バックテストで検証・較正済み): 「行ける」の目安は70点以上(旧80)。3日前までは山頂の値として信用してよい、5日前は傾向、7日先以降は雲量スコアの差にほとんど意味が無く「その週は良さそう」程度、14日表示は傾向として読む。表の「雲量%(較正/生)」は左が採点に使う実効雲量(過去の的中率で確率に直した値)、右が予報そのままの山頂雲量。山頂雲量の較正は6〜9月のデータのみで冬は未検証、夜間と稜線の風は実況が無く未検証 — 利用者に説明するときはこの範囲を添える(詳細はREADME「精度と限界」)。'
 ---
 
 # ヤマビヨリ(Mountain Weather プロジェクト)
 
-サービス名は **「ヤマビヨリ」**(2026-09決定)。`C:\mountain-weather` にある、Open-Meteo無料APIだけで動く登山向け天気ツール2本(`mountain_weather_mvp.py`/`mountain_weather_detail.py`)と、その2本が共有する土台モジュール`mountain_weather_core.py`(2026-09追加、単体では実行しない)。中核機能の依存は `requests` と `numpy`(numpyは地形レイヤーの地理院DEMタイル用。`venv/` に導入済み。`requirements.txt`にも記載)。加えて、detail.py側のオプション機能(気象庁天気図スクリーンショット・ルート天気マップPNG)が`playwright`/`Pillow`に依存する(後述、`venv/`に導入済みだがブラウザバイナリは別PCでは`playwright install`が必要)。
+サービス名は **「ヤマビヨリ」**(2026-09決定)。このリポジトリ(プラグインのルート)にある、Open-Meteo無料APIだけで動く登山向け天気ツール2本(`mountain_weather_mvp.py`/`mountain_weather_detail.py`)と、その2本が共有する土台モジュール`mountain_weather_core.py`(2026-09追加、単体では実行しない)。中核機能の依存は `requests` と `numpy`(numpyは地形レイヤーの地理院DEMタイル用。必要なパッケージは`requirements.txt`に記載)。加えて、detail.py側のオプション機能(気象庁天気図スクリーンショット・ルート天気マップPNG)が`playwright`/`Pillow`に依存する(後述。`requirements.txt`には含まれず、別途`pip install`とブラウザバイナリ用の`playwright install`が必要)。
 
 ヤマビヨリの3本柱:
 - **探索モード**(`mountain_weather_mvp.py`) — 広く探す。76座を横断的にスコア比較し、週末の狙い目を探索する(**広域探索型**)。
@@ -28,7 +28,14 @@ description: Design/implementation reference for "ヤマビヨリ"(ヤマビヨ�
 
 **この禁止は「実際に回答を生成する瞬間」の話であり、開発時に行った精度検証(後述「既知の精度傾向」など各セクションに残る、てんきとくらす・Windy・SCW・Mountain-Forecast・WeatherNewsとの比較記録)とは別物。** それらは過去にスコア式の妥当性を検証した開発ログとして、サービス名を含めてそのまま残すこと(匿名化・一般化しない)。混同して比較記録まで書き換えないよう注意。
 
-このSkillは `C:\mountain-weather` をカレントディレクトリとして起動されている前提。もしファイルが見つからない場合は、まず `pwd` で作業ディレクトリを確認すること。
+## スクリプトの場所と実行方法（重要）
+
+- スクリプトはプラグインのルート `${CLAUDE_PLUGIN_ROOT}` にある。実行コマンドは `"${CLAUDE_PLUGIN_ROOT}/mountain_weather_detail.py"` のように絶対パスで指定し、`cd` に頼らない（カレントディレクトリがどこでも通る書き方にする）。
+- `${CLAUDE_PLUGIN_ROOT}` が展開されずに残っている、またはファイルが見つからないときは、カレントに `mountain_weather_core.py` があればそのフォルダをルートとして使う。それも無ければ、Glob で `~/.claude/plugins` 配下から `mountain_weather_core.py` を探し、見つかったフォルダを使ってよいかをユーザーに確認する。
+- Python: プラグインのルートに `venv` があればそれを使う（Windows は `venv\Scripts\python.exe`、それ以外は `venv/bin/python`）。無ければ、Windows は `py`、それ以外は `python3` を使う。常に `-X utf8` を付ける。以下、これを `<Python>` と書く。
+- `requests` と `numpy` が無い場合は、勝手にインストールしない。`scripts/check_setup.py` の結果を示し、`pip install -r requirements.txt` の実行をユーザーに提案して、承認を得る。
+- 出力をファイルに保存するときは `--out` を使う。相対パスで指定した場合の基準は、スクリプトのあるフォルダではなく、コマンドを実行したときのカレントディレクトリ（`cli_output.py` が `os.path.abspath` で解決する）。保存先は完了時に絶対パスで表示される。
+- `cache/`・`screenshots/`・`maps/`・`terrain_cache/` はプラグインのルート直下に作られる（現行の仕様）。プラグインの更新で消えうる。
 
 **このSKILL.mdは仕様変更のたびに更新すること。** コード側だけ直して説明を放置すると、次回このSkillを読んだ際に古い情報(山数・番号・関数名など)をそのままユーザーに答えてしまう。過去に「36座→実際は75座→76座(2026-09、棒ノ折山追加)」「唐松岳12番→実際は38番→39番(同追加でリスト全体が1つずつ後ろにずれた)」「`print_ridge_feel_table`という関数は実在しない」といった記載ズレが起きている。**山を1つ追加・削除するだけでリスト内の全ての番号がずれる**ので、`MOUNTAINS`に変更を加えたら必ず山数・番号の記載を全て洗い出して直すこと。数字・関数名を書く前に、可能なら `grep`/`python -c "import ...; print(...)"` で実際のコードを確認してから書くこと。
 
@@ -53,7 +60,7 @@ description: Design/implementation reference for "ヤマビヨリ"(ヤマビヨ�
 - `tests/`・`scripts/check_setup.py`(v1.7.0) — オフラインのテスト(参照3日の回帰チェックは `tests/fixtures/refs/` のフィクスチャで動く。実行は `py -X utf8 -m unittest`)と、セットアップ確認。
 - `AGENTS.md` — Codex などのコーディングエージェント向けの指示(セットアップ・成功条件・変更してよい範囲)。`CLAUDE.md` はこれを取り込み、Claude Code 固有のルールだけを足している。
 - `.github/workflows/ci.yml` — オフラインのテストとセットアップ確認を Windows/Ubuntu × Python 3.10/最新安定版で回すCI。
-- `venv/` — Python仮想環境。実行は `./venv/Scripts/python.exe <script>.py`。
+- `venv/` — 開発用の仮想環境(gitignore済みで、配布物には含まれない)。実行方法は上記「スクリプトの場所と実行方法」を参照。
 - `cache/` — 両スクリプト共通の生JSONキャッシュ置き場(後述)。同じディレクトリだが、ファイル名キーに`days`(mvp.py=15、detail.py=14)が含まれるため衝突はしない。
 - `screenshots/` — detail.py の `fetch_jma_weather_map()`(後述)が保存する気象庁天気図のPNG置き場、および core.py の `fetch_himawari_image()`(後述「気象衛星ひまわり画像取得機能」節)が保存するひまわり衛星画像のJPEG置き場(同じディレクトリを共用)。自動プルーニングなし(手動クリーンアップ前提)。
 - `maps/` — detail.py の `render_route_weather_map()`(後述、2026-09追加)が保存するルート天気マップPNG置き場。自動プルーニングなし。
@@ -127,7 +134,7 @@ mvp.py/detail.pyは**それぞれの独自機能については引き続き意�
     - **v1.6.0 (2026-09-23、バックテストR12)**: MSMのd1-2行を、本体と同じ7面(900/800hPaあり)の山頂雲量で学び直した行に差し替え(`mos_tables/r1-summit-cloud-sunny-msm7.json` 1.1.0)。R1のMSMの行はSingle Runs(900/800hPaが全null)の5面補間で学習されていて、本体の7面補間の山頂雲量に対して晴れの確率を低く見積もっていた(800hPa面≈2,000m付近で最大)。新しいMSM d1-2行は自分の0%ビン(0.822)で、MSM d3-4行はv1.5.0の0.719で正規化するので、MSM d3-4行とECMWFの行の値はv1.5.0と同じ。**既知の制約**: 冬は山頂に雲がかかる予報の日のスコアが低めに出る可能性、冬の3日目以降は未検証、MSMの3〜4日目の行は5面学習のまま(2027年3月に作り直し予定)。
     - **絶対値(案A)を使わない理由 — 代表性誤差**: テーブルの実況は麓アメダスの日照なので「山頂は晴れ・麓は谷雲」を予報の誤りに数えている。山頂実況を持つ富士山ではP(晴れ|0%)=0.86で麓4地点の0.64〜0.86より高く、絶対値は山頂を系統的に過小評価する。行ごとの正規化(案B)はlead依存(AUC 0.80→0.61の減衰)を消すので採らない。
     - **適用範囲: 全山頂**(検証済みは1700〜2899m)。当初は3000m超を生値のまま(2900〜3300mブレンド)にする案だったが、リリース前に撤回: (1) 探索モードで3000m超だけ雲量が持ち上がらず、日別トップ10に入る3000m超の山日が15日間で20→40に倍増する順位アーティファクトになった(全山頂較正なら20→19、日別Spearmanの中央値0.96→0.98)。(2) 富士山頂の日照では較正はd1〜3で生値より良く(Brier 0.21 vs 0.23)、悪いのはd7以降(全山が気候値並みの領域)だけ。2899〜3776mに検証データは無い(「検証できていないこと」の3000m帯)。ブレンドのコードは`CLOUD_CALIBRATION_FULL_SUMMIT_M`/`RAW_SUMMIT_M`で残してある。
-    - **暖候期(2026-06〜09)の標本のみ**。寒候期は未検証。確信度(下記)はスコアに乗っていないのでlead依存の二重計上は無い。A/B/Cの実効雲量表とビンごとのnは`C:/yamabiyori-backtest/docs/cloud-calibration-table.txt`。A/Bスイッチ`CLOUD_CALIBRATION_ENABLED`。
+    - **暖候期(2026-06〜09)の標本のみ**。寒候期は未検証。確信度(下記)はスコアに乗っていないのでlead依存の二重計上は無い。A/B/Cの実効雲量表とビンごとのnはyamabiyori-backtest リポジトリ(https://github.com/ktakemaru/yamabiyori-backtest)の`docs/cloud-calibration-table.txt`。A/Bスイッチ`CLOUD_CALIBRATION_ENABLED`。
   - 視程: `visibility_penalty(ridge_visibility_m)` — 変更なし(1000m以上で0、100m未満で70〜100)。
   - 降水: `precip_penalty(wet_pct, mm)` — 上記「降水の再設計」参照。`max(wet_pct, min(mm/PRECIP_FULL_PENALTY_TOTAL_MM,1)*100)`、mmは活動時間内の**合計**(2026-09-09夜〜、旧: ピークmm/h÷5)。
 - **スコアから外れた3軸 → 「危険信号」列**: `mountain_hazards(*, ridge_wind_ms, pm_cape, chill_c, precip_wet_pct, precip_mm) -> {"thunder": ..., "wind": ..., "cold": ..., "any": bool}` が`thunder_penalty`/`wind_penalty`/`temp_penalty`(閾値・計算式は変更なし)の0〜100点を`hazard_level()`で4段階(`-`/`注意`/`警戒`/`危険`、境界は0/40/80/100)にマップする。各ファイルの`hazard_warning_cell()`が「⚠雷警戒(CAPE1450)・強風危険(16時17.6m/s)・低体温症注意(体感2.1℃)」のような具体値付きの1セルにまとめ、mvp.pyのランキング表・detail.pyの日別表とも**山名のすぐ右という最も目立つ位置**に置く(スコアだけでは雷・強風・低体温症のリスクが一切わからなくなったため、見落とし厳禁の位置にした)。
@@ -201,7 +208,7 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 
 `render_route_weather_map(waypoints, target_date, start_time="05:00", out_dir=MAPS_DIR)` — 選択したGPX waypointsに、国土地理院(GSI)タイル地図を背景に天気アイコン(晴れ/曇り/雨)を配置したPNGを1枚生成する。SNS投稿等で「行動予定に沿った」天気の見通しを一目で伝えるための機能。`main_gpx_route()`の`diagnose_route()`呼び出し直後に「地図PNGを生成しますか? (y/N)」の追加プロンプトとして接続済み(y以外はスキップ、GPX診断自体には影響しない)。`diagnose_route()`と全く同じ per-waypoint fetch(`fetch_waypoint_hourly()`、2026-09にdiagnose_routeから抽出・共通化)を使うため、地図上の気温・アイコンはテキスト診断の数値と一致する。
 
-- **依存**: `Pillow`(`venv/`に導入済み、`pip install Pillow`)。中核機能(`requests`・`numpy`)とは別の追加依存で、`fetch_jma_weather_map()`のPlaywrightと同じ扱い(関数内で遅延import、モジュール先頭ではimportしない)。matplotlib+contextilyは検討したが不採用(下記参照)。
+- **依存**: `Pillow`(`requirements.txt`には含まれず、別途`pip install Pillow`が必要)。中核機能(`requests`・`numpy`)とは別の追加依存で、`fetch_jma_weather_map()`のPlaywrightと同じ扱い(関数内で遅延import、モジュール先頭ではimportしない)。matplotlib+contextilyは検討したが不採用(下記参照)。
 - **地図タイル実装方式 — matplotlib+contextily不採用、requests+Pillowで自前実装**: contextilyはrasterio(GDAL依存)等の重い地理空間スタックを追加で引き込み、Windows環境でのインストール失敗リスクが高い。GSIタイルは単なるXYZ形式のPNG画像なので、既存依存の`requests`でタイルをダウンロードし、`Pillow`で画像として合成・図形描画するだけで十分と判断し、そちらを採用した。
 - **GSIタイルの利用規約(2026-09確認、https://maps.gsi.go.jp/development/ichiran.html )**: 「地理院タイルをウェブサイトやソフトウェア、アプリケーション上で**リアルタイムに読み込んで**利用する場合」は申請不要だが、**タイルをダウンロードして静的PNGとして保存・再配布する行為(=この機能そのもの)はこの適用除外に当てはまらず**、「基本測量成果となっているタイルを利用する際には、測量法に基づく申請が必要な場合があります」との記載がある(標準地図/淡色地図は基本測量成果ベース)。これはユーザーに提示済みの既知のグレーゾーンで、**個人のSNS投稿程度の小規模利用と割り切ってGSIタイルのまま実装する**選択をユーザーが明示的に行った(代替案として提示したOpenStreetMapタイルへの切り替え、背景地図なしのルート図のみ、は不採用)。大量配布・商用利用等に用途が広がる場合は、この判断を鵜呑みにせずGSIへの申請要否を再検討すること。出典表記(`GSI_TILE_ATTRIBUTION`、「地図:地理院タイル(国土地理院)」+ 一覧ページURL)は生成する全画像に描画済み。
 - **使用タイル**: 淡色地図(`https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png`)。標準地図より彩度・情報量が控えめで、自前で重ねるアイコン・ラベルとの視認性の衝突が少ないため選択。タイル自体は内容が変わらない静的画像なので、Open-Meteo予報キャッシュ(3時間TTL)とは別に`cache/gsi_tiles/`へ**無期限キャッシュ**する(同じズーム・タイル座標は二度とGSIに取りに行かない)。
@@ -290,7 +297,7 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 
 `fetch_jma_weather_map(out_dir=SCREENSHOT_DIR)` — 気象庁の天気図ページ(https://www.jma.go.jp/bosai/weather_map/ )をPlaywrightでレンダリングし、天気図の`<img>`要素だけを切り出してスクリーンショット保存する。Open-Meteoの予報パイプラインとは完全に別系統(スコア計算には使わない、目視で実況天気図を確認するための補助機能)。`main()`には未接続で、`print_comparison_table()`と同様に手動で呼ぶ用途。
 
-- **依存**: `playwright`(`venv/`に導入済み)。中核機能(`requests`・`numpy`)とは別の追加依存であり、**別PCで環境構築する場合は`pip install playwright`に加えて`playwright install chromium`(ブラウザバイナリ取得)を忘れずに実行すること**。これを忘れると`fetch_jma_weather_map()`実行時にブラウザ起動でエラーになる。
+- **依存**: `playwright`(`requirements.txt`には含まれず、別途`pip install playwright`が必要)。中核機能(`requests`・`numpy`)とは別の追加依存であり、**別PCで環境構築する場合は`pip install playwright`に加えて`playwright install chromium`(ブラウザバイナリ取得)を忘れずに実行すること**。これを忘れると`fetch_jma_weather_map()`実行時にブラウザ起動でエラーになる。
 - **仕組み**: 気象庁のページはJSが天気図を`<img src="data/png/<タイムスタンプ付きファイル名>">`として動的に描画するため、素のHTTPリクエストでは今日の天気図が取得できない(固定URLの静的画像ではない)。そのため`requests`ではなくPlaywright(ヘッドレスChromium)でページを開き、天気図の`<img>`要素の読み込み完了(`el.complete && el.naturalWidth > 0`)を待ってから、その要素だけを`element.screenshot()`で切り出す。ページ全体ではなく要素単体を撮るため、メニュー・サイドバー・広告は最初から一切写り込まない(2026-09確認時点で天気図は600x581pxのネイティブ解像度)。
 - **デフォルト表示**: ページを開いた時点で既に「実況」天気図が表示されているため、タブ切り替え操作は不要(2026-09確認時点)。
 - **予想天気図(+24h/+48h)の取得(`fetch_jma_weather_map(include_forecast=True)`、2026-09追加)**: ユーザーから「ページ右上の▶ボタンで将来分の天気図を見られるのでは」と指摘を受け、実際にPlaywrightでボタンを押して検証したところ、その通りだった。
@@ -303,7 +310,7 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 
 ## 地形レイヤー(mountain_terrain.py、2026-09-10追加)
 
-**発端**: 2026-09-09〜10の他社5サービス比較で、食い違いの多くが「5km格子の値をその山頂・そのルートにどう落とすか」の解釈にあった(蔵王山9/12の奥羽山脈東斜面の層雲、唐松岳9/6の南西風での北アルプス西斜面の湿潤化、稜線と樹林帯の風の違い)。ユーザーから「ホシビヨリ(星空観測アプリ、`C:\hoshibiyori`)では周囲の地形を見て星の見え方を計算していた。同じことでヤマビヨリの精度は上がるか」と相談があり、「数値予報自体は変わらないが解釈の精度は上がる」と回答して着手。ホシビヨリ`step2_terrain`の`DemTileStore`(国土地理院 標高タイル)と`vincenty_direct`(測地線)を`mountain_terrain.py`へ移植した。
+**発端**: 2026-09-09〜10の他社5サービス比較で、食い違いの多くが「5km格子の値をその山頂・そのルートにどう落とすか」の解釈にあった(蔵王山9/12の奥羽山脈東斜面の層雲、唐松岳9/6の南西風での北アルプス西斜面の湿潤化、稜線と樹林帯の風の違い)。ユーザーから「ホシビヨリ(星空観測アプリ。hoshibiyori、姉妹プロジェクト。https://github.com/ktakemaru/hoshibiyori)では周囲の地形を見て星の見え方を計算していた。同じことでヤマビヨリの精度は上がるか」と相談があり、「数値予報自体は変わらないが解釈の精度は上がる」と回答して着手。ホシビヨリ`step2_terrain`の`DemTileStore`(国土地理院 標高タイル)と`vincenty_direct`(測地線)を`mountain_terrain.py`へ移植した。
 
 **データ**: 国土地理院 地理院タイル(標高タイル `dem`、ズーム11=1セル約76m)。**出典表示必須**(`mountain_terrain.ATTRIBUTION`、探索・診断モードの表の注記に自動で入る)。タイルは`terrain_cache/`にディスクキャッシュ(gitignore済み、新規取得ごとに0.1秒の小休止)。76座で約260タイル・初回74秒、2回目以降2秒。
 
@@ -333,7 +340,7 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 
 `fetch_himawari_image(lat, lon, imgtype="ir"|"strengthen")` — 気象庁の統合地図ページ(https://www.jma.go.jp/bosai/map.html 、気象衛星ひまわり)が使っているのと同じタイルURLを直接`requests`で叩き、指定した緯度経度を中心とする3x3タイル(既定、768x768px)のモザイク画像を合成してJPEG保存する。`fetch_jma_weather_map()`と違い**Playwright不要**(下記「仕組み」参照)。Open-Meteoの予報パイプラインとは完全に別系統(スコア計算には使わない、目視で実況の雲を確認するための補助機能)。`mountain_weather_core.py`にあるため`MOUNTAINS`や他の依存なしに緯度経度だけで呼び出せる(他プロジェクトからの再利用を想定)。
 
-- **依存**: `Pillow`(`venv/`に導入済み、`render_route_weather_map()`と共通)。関数内で遅延import、モジュール先頭ではimportしない。
+- **依存**: `Pillow`(`requirements.txt`には含まれず別途インストールが必要、`render_route_weather_map()`と共通)。関数内で遅延import、モジュール先頭ではimportしない。
 - **画像種別(`imgtype`)**: `HIMAWARI_IMG_TYPES`で2種のみ対応(2026-09時点でブラウザのNetwork tabで実測確認済みのものだけ、後述)。
   - `"ir"` — 赤外画像。夜間も撮影可能(温度ベースのセンサーのため太陽光不要)。日の出前の稜線・山頂の実況確認に使える。
   - `"strengthen"` — 雲頂強調画像(色分けされた雲頂温度、対流の強さの目安)。CAPE数値(雷リスク)の視覚的ダブルチェックに使える。
@@ -431,7 +438,7 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 
 ## 既知の精度傾向(他サービスとの比較、2026-09)
 
-### バックテストの結果(2026-09-19、`C:/yamabiyori-backtest`、[公開リポジトリ](https://github.com/ktakemaru/yamabiyori-backtest))
+### バックテストの結果(2026-09-19、yamabiyori-backtest リポジトリ(https://github.com/ktakemaru/yamabiyori-backtest)の`docs/`配下)
 
 利用者に精度を説明するときは、README「精度と限界」と同じ数字・期間を使うこと(短縮して「1年分」のような曖昧な表現に戻さない)。
 
@@ -533,8 +540,18 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 
 ## 実行方法
 
+利用者への回答時は、上記「スクリプトの場所と実行方法」の規則で決めた`<Python>`と`${CLAUDE_PLUGIN_ROOT}`を使い、カレントディレクトリに依存しない形で実行する。
+
 ```bash
-cd C:\mountain-weather
+"<Python>" -X utf8 "${CLAUDE_PLUGIN_ROOT}/mountain_weather_detail.py" --mountain 富士山   # 診断モード(番号でも可。--list で一覧)
+"<Python>" -X utf8 "${CLAUDE_PLUGIN_ROOT}/mountain_weather_detail.py" --list
+"<Python>" -X utf8 "${CLAUDE_PLUGIN_ROOT}/mountain_weather_mvp.py" --limit 3               # 探索モード(先頭3座だけ。--region で地域も絞れる)
+"<Python>" -X utf8 "${CLAUDE_PLUGIN_ROOT}/scripts/check_setup.py"                          # セットアップ確認
+```
+
+開発者向け(リポジトリのルートで実行):
+
+```bash
 ./venv/Scripts/python.exe -m pip install -r requirements.txt   # 初回セットアップ(requests・numpy)
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py                    # 対話的に山を選択
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山   # 非対話(番号でも可。--list で一覧)
