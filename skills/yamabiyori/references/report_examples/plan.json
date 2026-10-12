@@ -1,0 +1,560 @@
+{
+  "mode": "plan",
+  "eyebrow": "ヤマビヨリ · GPXルート診断",
+  "title": "槍ヶ岳 登山計画",
+  "sub": [
+    "上高地 → 横尾 → 槍沢 → 槍ヶ岳(3180m) → 上高地(往復)",
+    "**2026-09-12(土)〜09-14(月)**・2泊3日",
+    "track-wn-7298058.gpx(40地点)"
+  ],
+  "blocks": [
+    {
+      "type": "section",
+      "content": [
+        {
+          "type": "daycards",
+          "cards": [
+            {
+              "class": "safe",
+              "dd": "DAY 1",
+              "dt": "9/12(土)",
+              "route": "上高地 06:00 発 → 槍沢ロッヂ 10:25 着",
+              "verdict": "概ね良好",
+              "detail": "スコア71〜90。午後にCAPE680で雷注意(通常レベル)。稜線に出るまでは樹林帯のため影響小。"
+            },
+            {
+              "class": "warning",
+              "dd": "DAY 2",
+              "dt": "9/13(日)",
+              "route": "槍沢ロッヂ 発 → 槍ヶ岳山頂 13:29 着 → 槍ヶ岳山荘泊",
+              "verdict": "要注意・停滞/計画変更を検討",
+              "detail": "スコア全地点0.0。前線が北アルプスの緯度まで南下し停滞。CAPE1380で雷警戒、稜線風10〜11m/s、終日湿潤(雨天割合100%)。"
+            },
+            {
+              "class": "safe",
+              "dd": "DAY 3",
+              "dt": "9/14(月)",
+              "route": "槍ヶ岳山荘 発 → 上高地 14:58 着",
+              "verdict": "前線通過後、回復",
+              "detail": "スコア75〜99(標高が下がるほど回復)。CAPE1250で雷警戒は残るため午後は油断禁物。稜線部はまだ強風(9m/s前後)。"
+            }
+          ],
+          "id": "daycards"
+        },
+        {
+          "type": "alert",
+          "heading": "Day2(9/13)の槍ヶ岳山頂到着(13:29予定)は、前線接近によるCAPE1380(雷警戒)・稜線風10.8m/s(南西)・体感温度4.6℃・終日湿潤の重なるタイミングです",
+          "body": "槍ヶ岳山荘(13:03着)から山頂(13:29着)にかけての稜線は最も条件が厳しい区間。稜線雲量自体は28〜32%とそこまで高くありませんが、湿潤層・強制上昇により終日「濡れる/ガスの中」の扱いになっており、視界不良・低体温症(体感4.6〜5.5℃)のリスクも重なります。可能であれば、Day2をもう1日ずらす、槍沢ロッヂでの停滞日を挟む、または山頂アタックを早朝(前線接近前)に前倒しできないか、天候の直前再確認とあわせて検討することをおすすめします。"
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "ルート天気マップ",
+      "note": "各地点の実際の到着予定時刻(JST)における天気アイコン・気温。地図:国土地理院タイル。",
+      "content": [
+        {
+          "type": "map",
+          "src": "images/route_map.png",
+          "alt": "槍ヶ岳登山ルートの天気マップ",
+          "cap": "対象日: 2026-09-12〜2026-09-14(各地点、GPX計画の到着予定時刻の予報)",
+          "id": "map"
+        }
+      ]
+    },
+    {
+      "type": "section",
+      "title": "前線解説 — なぜDay2(9/13)だけ崩れるのか",
+      "note": "気象庁 実況・予想天気図(9/12取得、この登山計画と同じ期間)。出典:気象庁ホームページ。",
+      "content": [
+        {
+          "type": "images",
+          "items": [
+            {
+              "src": "images/jma_now.png",
+              "alt": "JMA実況天気図",
+              "cap": "実況(9/12 12時)"
+            },
+            {
+              "src": "images/jma_plus24h.png",
+              "alt": "JMA予想天気図 +24h",
+              "cap": "+24h予想(9/12 21時)"
+            },
+            {
+              "src": "images/jma_plus48h.png",
+              "alt": "JMA予想天気図 +48h",
+              "cap": "+48h予想(9/13 21時)"
+            }
+          ]
+        },
+        {
+          "type": "analysis",
+          "items": [
+            {
+              "tag": "Day1(9/12)",
+              "text": "槍ヶ岳周辺は高気圧(1022hPa、ほとんど停滞)の縁。南西に停滞前線があるが、まだ本州から離れている。日中は晴れ間が多いが、高気圧の縁で不安定なため午後にCAPE680(雷注意、通常レベル)まで上がる。"
+            },
+            {
+              "tag": "Day2(9/13)",
+              "text": "+48h予想天気図では、この前線がほぼ北アルプスの緯度まで南下・停滞している。これがDay2の稜線全域で終日湿潤・CAPE1380(雷警戒)という数値予報と整合する。前線本体が槍ヶ岳の稜線にほぼ重なる形。"
+            },
+            {
+              "tag": "Day3(9/14)",
+              "text": "点予報では前線通過直後にあたり、標高を下げるほど雲量が急減し回復が早い(横尾より下は98点台)。稜線側(播隆窟〜坊主岩屋下)はまだCAPE1250(雷警戒)・風9m/s台が残るため、午前中の通過を優先したい。"
+            }
+          ]
+        }
+      ],
+      "id": "synoptic"
+    },
+    {
+      "type": "section",
+      "title": "地点別 登山向けスコア",
+      "note": "値は各地点の実標高への補間。スコアは稜線帯滞在時間の総合評価(雲量・視程・降水の加重幾何平均)、危険信号(雷/強風/低体温症)は別枠。近接する地点はまとめて表示。",
+      "content": [
+        {
+          "type": "table",
+          "min_width": 720,
+          "columns": [
+            {
+              "key": "name",
+              "label": "地点",
+              "kind": "strong"
+            },
+            {
+              "key": "time",
+              "label": "到着(JST)",
+              "kind": "num"
+            },
+            {
+              "key": "elev",
+              "label": "標高",
+              "kind": "num"
+            },
+            {
+              "key": "score",
+              "label": "スコア",
+              "kind": "score"
+            },
+            {
+              "key": "hazard",
+              "label": "危険信号",
+              "kind": "badge"
+            },
+            {
+              "key": "cloud",
+              "label": "雲量(稜線/PM)",
+              "kind": "num"
+            },
+            {
+              "key": "wind",
+              "label": "風",
+              "kind": "num"
+            },
+            {
+              "key": "temp",
+              "label": "気温",
+              "kind": "num"
+            }
+          ],
+          "groups": [
+            {
+              "label": "DAY 1 · 2026-09-12(土)",
+              "rows": [
+                {
+                  "name": "上高地(BT/河童橋/VC/カッパトイレ)",
+                  "time": "06:00〜06:09",
+                  "elev": "1502〜1505m",
+                  "score": 90.4,
+                  "hazard": {
+                    "text": "⚠雷注意(CAPE680)",
+                    "class": "caution"
+                  },
+                  "cloud": "9.1〜9.2%",
+                  "wind": "1.3 m/s",
+                  "temp": "18.4℃"
+                },
+                {
+                  "name": "明神館",
+                  "time": "06:57",
+                  "elev": "1527m",
+                  "score": 90.3,
+                  "hazard": {
+                    "text": "⚠雷注意(CAPE680)",
+                    "class": "caution"
+                  },
+                  "cloud": "9.7%",
+                  "wind": "1.3 m/s",
+                  "temp": "18.3℃"
+                },
+                {
+                  "name": "徳本口",
+                  "time": "07:02",
+                  "elev": "1534m",
+                  "score": 90.2,
+                  "hazard": {
+                    "text": "⚠雷注意(CAPE680)",
+                    "class": "caution"
+                  },
+                  "cloud": "9.8%",
+                  "wind": "1.3 m/s",
+                  "temp": "18.3℃"
+                },
+                {
+                  "name": "徳沢(ロッヂ/公衆トイレ/徳澤園)",
+                  "time": "07:49〜07:52",
+                  "elev": "1559〜1562m",
+                  "score": 76.4,
+                  "hazard": {
+                    "text": "⚠雷注意(CAPE680)",
+                    "class": "caution"
+                  },
+                  "cloud": "33.3〜33.5%",
+                  "wind": "0.9 m/s",
+                  "temp": "16.9〜17.0℃"
+                },
+                {
+                  "name": "横尾",
+                  "time": "08:57",
+                  "elev": "1618m",
+                  "score": 71.9,
+                  "hazard": {
+                    "text": "⚠雷注意(CAPE680)",
+                    "class": "caution"
+                  },
+                  "cloud": "35.3%",
+                  "wind": "1.2 m/s",
+                  "temp": "16.6℃"
+                },
+                {
+                  "name": "槍見河原",
+                  "time": "09:35",
+                  "elev": "1674m",
+                  "score": 71.6,
+                  "hazard": {
+                    "text": "⚠雷注意(CAPE680)",
+                    "class": "caution"
+                  },
+                  "cloud": "36.3%",
+                  "wind": "1.6 m/s",
+                  "temp": "16.4℃"
+                },
+                {
+                  "name": "一ノ俣",
+                  "time": "09:46",
+                  "elev": "1705m",
+                  "score": 71.5,
+                  "hazard": {
+                    "text": "⚠雷注意(CAPE680)",
+                    "class": "caution"
+                  },
+                  "cloud": "36.9%",
+                  "wind": "1.9 m/s",
+                  "temp": "16.2℃"
+                },
+                {
+                  "name": "二ノ俣",
+                  "time": "09:53",
+                  "elev": "1706m",
+                  "score": 71.4,
+                  "hazard": {
+                    "text": "⚠雷注意(CAPE680)",
+                    "class": "caution"
+                  },
+                  "cloud": "36.9%",
+                  "wind": "1.9 m/s",
+                  "temp": "16.2℃"
+                },
+                {
+                  "name": "槍沢ロッヂ(泊)",
+                  "time": "10:25",
+                  "elev": "1818m",
+                  "score": 81.0,
+                  "hazard": {
+                    "text": "⚠雷注意(CAPE680)",
+                    "class": "caution"
+                  },
+                  "cloud": "30.3%",
+                  "wind": "2.4 m/s",
+                  "temp": "15.7℃"
+                }
+              ]
+            },
+            {
+              "label": "DAY 2 · 2026-09-13(日) — 前線接近・要注意",
+              "rows": [
+                {
+                  "name": "ババ平",
+                  "time": "08:42",
+                  "elev": "1991m",
+                  "score": 0.0,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1380)",
+                    "class": "warning"
+                  },
+                  "cloud": "64.1%",
+                  "wind": "2.8 m/s",
+                  "temp": "15.4℃"
+                },
+                {
+                  "name": "槍沢大曲り",
+                  "time": "09:16",
+                  "elev": "2097m",
+                  "score": 0.0,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1380)",
+                    "class": "warning"
+                  },
+                  "cloud": "71.9%",
+                  "wind": "3.0 m/s",
+                  "temp": "14.8℃"
+                },
+                {
+                  "name": "槍沢・天狗原分岐",
+                  "time": "10:18",
+                  "elev": "2363m",
+                  "score": 0.0,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1380)",
+                    "class": "warning"
+                  },
+                  "cloud": "61.1%",
+                  "wind": "4.9 m/s",
+                  "temp": "13.4℃"
+                },
+                {
+                  "name": "坊主岩屋下",
+                  "time": "11:29",
+                  "elev": "2659m",
+                  "score": 0.0,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1380)",
+                    "class": "warning"
+                  },
+                  "cloud": "48.9%",
+                  "wind": "7.0 m/s",
+                  "temp": "11.7℃"
+                },
+                {
+                  "name": "播隆窟",
+                  "time": "11:34",
+                  "elev": "2704m",
+                  "score": 0.0,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1380)",
+                    "class": "warning"
+                  },
+                  "cloud": "47.1%",
+                  "wind": "7.3 m/s",
+                  "temp": "11.5℃"
+                },
+                {
+                  "name": "殺生小屋",
+                  "time": "12:12",
+                  "elev": "2853m",
+                  "score": 0.0,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1380)・強風注意(14時9.0m/s)",
+                    "class": "warning"
+                  },
+                  "cloud": "41.0%",
+                  "wind": "8.4 m/s",
+                  "temp": "10.7℃"
+                },
+                {
+                  "name": "槍ヶ岳山荘(泊)",
+                  "time": "13:03",
+                  "elev": "3076m",
+                  "score": 0.0,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1380)・強風注意・低体温症注意(体感5.5℃)",
+                    "class": "warning"
+                  },
+                  "cloud": "32.3%",
+                  "wind": "10.0 m/s",
+                  "temp": "5.5℃"
+                },
+                {
+                  "name": "槍ヶ岳(山頂)",
+                  "time": "13:29",
+                  "elev": "3180m",
+                  "score": 0.0,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1380)・強風注意・低体温症注意(体感4.6℃)",
+                    "class": "warning"
+                  },
+                  "cloud": "28.4%",
+                  "wind": "10.8 m/s",
+                  "temp": "4.6℃"
+                }
+              ]
+            },
+            {
+              "label": "DAY 3 · 2026-09-14(月) — 前線通過後、回復",
+              "rows": [
+                {
+                  "name": "播隆窟",
+                  "time": "08:46",
+                  "elev": "2704m",
+                  "score": 80.8,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)・強風注意(11時10.3m/s)",
+                    "class": "warning"
+                  },
+                  "cloud": "16.6%",
+                  "wind": "9.6 m/s",
+                  "temp": "11.6℃"
+                },
+                {
+                  "name": "坊主岩屋下",
+                  "time": "08:51",
+                  "elev": "2659m",
+                  "score": 84.3,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)・強風注意(11時9.8m/s)",
+                    "class": "warning"
+                  },
+                  "cloud": "18.2%",
+                  "wind": "9.2 m/s",
+                  "temp": "11.8℃"
+                },
+                {
+                  "name": "槍沢・天狗原分岐",
+                  "time": "09:31",
+                  "elev": "2363m",
+                  "score": 81.5,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)",
+                    "class": "warning"
+                  },
+                  "cloud": "28.4%",
+                  "wind": "6.3 m/s",
+                  "temp": "12.9℃"
+                },
+                {
+                  "name": "槍沢大曲り",
+                  "time": "10:07",
+                  "elev": "2097m",
+                  "score": 75.1,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)",
+                    "class": "warning"
+                  },
+                  "cloud": "37.5%",
+                  "wind": "3.7 m/s",
+                  "temp": "14.0℃"
+                },
+                {
+                  "name": "ババ平",
+                  "time": "10:31",
+                  "elev": "1991m",
+                  "score": 76.2,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)",
+                    "class": "warning"
+                  },
+                  "cloud": "34.0%",
+                  "wind": "3.3 m/s",
+                  "temp": "14.6℃"
+                },
+                {
+                  "name": "槍沢ロッヂ",
+                  "time": "10:55",
+                  "elev": "1818m",
+                  "score": 86.5,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)",
+                    "class": "warning"
+                  },
+                  "cloud": "24.0%",
+                  "wind": "2.8 m/s",
+                  "temp": "15.6℃"
+                },
+                {
+                  "name": "二ノ俣・一ノ俣・槍見河原",
+                  "time": "11:18〜11:33",
+                  "elev": "1674〜1706m",
+                  "score": 98.8,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)",
+                    "class": "warning"
+                  },
+                  "cloud": "4.6%",
+                  "wind": "4.2〜4.7 m/s",
+                  "temp": "18.6〜18.8℃"
+                },
+                {
+                  "name": "横尾山荘",
+                  "time": "12:10",
+                  "elev": "1618m",
+                  "score": 98.8,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)",
+                    "class": "warning"
+                  },
+                  "cloud": "4.6%",
+                  "wind": "3.4 m/s",
+                  "temp": "19.2℃"
+                },
+                {
+                  "name": "徳澤園・徳沢公衆トイレ",
+                  "time": "13:09〜13:10",
+                  "elev": "1559〜1560m",
+                  "score": 98.9,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)",
+                    "class": "warning"
+                  },
+                  "cloud": "4.5%",
+                  "wind": "2.6〜2.7 m/s",
+                  "temp": "19.6℃"
+                },
+                {
+                  "name": "徳本口",
+                  "time": "13:58",
+                  "elev": "1534m",
+                  "score": 98.3,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)",
+                    "class": "warning"
+                  },
+                  "cloud": "6.5%",
+                  "wind": "1.6 m/s",
+                  "temp": "18.2℃"
+                },
+                {
+                  "name": "明神館",
+                  "time": "14:02",
+                  "elev": "1527m",
+                  "score": 98.4,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)",
+                    "class": "warning"
+                  },
+                  "cloud": "6.4%",
+                  "wind": "1.6 m/s",
+                  "temp": "18.2℃"
+                },
+                {
+                  "name": "上高地(VC/河童橋/カッパ/BT)",
+                  "time": "14:48〜14:58",
+                  "elev": "1502〜1505m",
+                  "score": 98.5,
+                  "hazard": {
+                    "text": "⚠雷警戒(CAPE1250)",
+                    "class": "warning"
+                  },
+                  "cloud": "6.0〜6.1%",
+                  "wind": "1.6 m/s",
+                  "temp": "18.3℃"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "id": "scores"
+    }
+  ],
+  "footer": "データ出典: Open-Meteo(気象庁MSM近距離+ECMWF IFS0.25、各地点の実標高へジオポテンシャル高度で補間)。気象庁実況・予想天気図は気象庁ホームページ(https://www.jma.go.jp/bosai/weather_map/ )より取得、公共データ利用規約(第1.0版)に基づき出典表記。地図は国土地理院タイル(https://maps.gsi.go.jp/development/ichiran.html )。他社の登山天気予報サービスは参照していません。危険信号(雷/強風/低体温症)はスコアに含まれない別枠評価です。降水タイミングは直前の再確認を推奨します。生成: ヤマビヨリ GPXルート診断(mountain_weather_detail.py)、2026-09-12時点のキャッシュ・気象庁データ。"
+}

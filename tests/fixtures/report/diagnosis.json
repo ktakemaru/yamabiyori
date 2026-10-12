@@ -1,0 +1,944 @@
+{
+ "schema": "yamabiyori-report-data/1",
+ "mode": "diagnosis",
+ "generated": "2026-10-12 08:47",
+ "mountain": {
+  "name": "立山(雄山)",
+  "elevation_m": 3003,
+  "lat": 36.5758,
+  "lon": 137.6197,
+  "region": "北陸信越",
+  "access": "バス/車"
+ },
+ "days": [
+  {
+   "date": "2026-10-12",
+   "label": "2026-10-12(月)",
+   "model": "MSM",
+   "score": 95.6,
+   "ridge_wind_ms": 3.1,
+   "cape": 160.0,
+   "cloud_pct": 16.4,
+   "cloud_pct_raw": 4.6,
+   "ridge_visibility": 42796,
+   "precip_wet_pct": 0.0,
+   "precip_wet_hours": 0.0,
+   "precip_total_hours": 13,
+   "precip_msm_hours": 13,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 0,
+   "precip_total_mm": 0.0,
+   "chill": 4.8,
+   "day_peak_wind_ms": 4.5,
+   "day_peak_wind_hour": 15,
+   "hazards": {
+    "thunder": "-",
+    "wind": "-",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 0.0,
+   "terrain": {
+    "windward_hours": 2,
+    "lee_hours": 8,
+    "neutral_hours": 3,
+    "mean_w_ms": 0.43,
+    "max_w_ms": 0.56,
+    "label": "風下",
+    "from": "南南西"
+   },
+   "terrain_base": {
+    "windward_hours": 7,
+    "lee_hours": 1,
+    "neutral_hours": 5,
+    "mean_w_ms": 0.46,
+    "max_w_ms": 0.69,
+    "label": "風上",
+    "from": "西南西"
+   },
+   "hazard_class": "caution",
+   "cells": {
+    "hazard": "⚠低体温症注意(体感4.8℃)",
+    "wet": "0.0(0/13h M)",
+    "cloud": "16.4/4.6",
+    "terrain": "頂:風下(南南西) 底:風上(西南西)7h w0.5"
+   }
+  },
+  {
+   "date": "2026-10-13",
+   "label": "2026-10-13(火)",
+   "model": "MSM",
+   "score": 100.0,
+   "ridge_wind_ms": 6.2,
+   "cape": 0.0,
+   "cloud_pct": 0.0,
+   "cloud_pct_raw": 0.0,
+   "ridge_visibility": 61112,
+   "precip_wet_pct": 0.0,
+   "precip_wet_hours": 0.0,
+   "precip_total_hours": 13,
+   "precip_msm_hours": 13,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 0,
+   "precip_total_mm": 0.0,
+   "chill": 2.7,
+   "day_peak_wind_ms": 8.5,
+   "day_peak_wind_hour": 17,
+   "hazards": {
+    "thunder": "-",
+    "wind": "注意",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 0.0,
+   "terrain": {
+    "windward_hours": 1,
+    "lee_hours": 4,
+    "neutral_hours": 8,
+    "mean_w_ms": 0.83,
+    "max_w_ms": 1.41,
+    "label": "並",
+    "from": "南西"
+   },
+   "terrain_base": {
+    "windward_hours": 0,
+    "lee_hours": 8,
+    "neutral_hours": 5,
+    "mean_w_ms": 0.49,
+    "max_w_ms": 0.71,
+    "label": "風下",
+    "from": "南西"
+   },
+   "hazard_class": "caution",
+   "cells": {
+    "hazard": "⚠強風注意(17時8.5m/s)・低体温症注意(体感2.7℃)",
+    "wet": "0.0(0/13h M)",
+    "cloud": "0.0/0.0",
+    "terrain": "頂:並(南西) 底:風下(南西)8h w0.5"
+   }
+  },
+  {
+   "date": "2026-10-14",
+   "label": "2026-10-14(水)",
+   "model": "MSM",
+   "score": 0.0,
+   "ridge_wind_ms": 16.5,
+   "cape": 110.0,
+   "cloud_pct": 89.8,
+   "cloud_pct_raw": 83.1,
+   "ridge_visibility": 1164,
+   "precip_wet_pct": 100.0,
+   "precip_wet_hours": 13.0,
+   "precip_total_hours": 13,
+   "precip_msm_hours": 13,
+   "precip_moist_hours": 4,
+   "precip_prob_hours": 0,
+   "precip_total_mm": 28.2,
+   "chill": -3.2,
+   "day_peak_wind_ms": 23.1,
+   "day_peak_wind_hour": 6,
+   "hazards": {
+    "thunder": "-",
+    "wind": "危険",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 29.1,
+   "terrain": {
+    "windward_hours": 12,
+    "lee_hours": 0,
+    "neutral_hours": 1,
+    "mean_w_ms": 2.82,
+    "max_w_ms": 3.84,
+    "label": "風上",
+    "from": "西南西"
+   },
+   "terrain_base": {
+    "windward_hours": 6,
+    "lee_hours": 0,
+    "neutral_hours": 7,
+    "mean_w_ms": 1.79,
+    "max_w_ms": 2.36,
+    "label": "並",
+    "from": "西"
+   },
+   "hazard_class": "warning",
+   "cells": {
+    "hazard": "⚠強風危険(06時23.1m/s)・低体温症注意(体感-3.2℃)",
+    "wet": "100.0(13/13h M 湿4) 28.2mm",
+    "cloud": "89.8/83.1",
+    "terrain": "頂:風上(西南西) 底:並(西)6h w1.8"
+   }
+  },
+  {
+   "date": "2026-10-15",
+   "label": "2026-10-15(木)",
+   "model": "MSM",
+   "score": 95.0,
+   "ridge_wind_ms": 12.1,
+   "cape": 0.0,
+   "cloud_pct": 18.6,
+   "cloud_pct_raw": 0.0,
+   "ridge_visibility": 44320,
+   "precip_wet_pct": 0.0,
+   "precip_wet_hours": 0.0,
+   "precip_total_hours": 13,
+   "precip_msm_hours": 11,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 2,
+   "precip_total_mm": 0.0,
+   "chill": -5.5,
+   "day_peak_wind_ms": 12.5,
+   "day_peak_wind_hour": 6,
+   "hazards": {
+    "thunder": "-",
+    "wind": "警戒",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 0.0,
+   "terrain": {
+    "windward_hours": 13,
+    "lee_hours": 0,
+    "neutral_hours": 0,
+    "mean_w_ms": 1.91,
+    "max_w_ms": 2.13,
+    "label": "風上",
+    "from": "西"
+   },
+   "terrain_base": {
+    "windward_hours": 12,
+    "lee_hours": 0,
+    "neutral_hours": 1,
+    "mean_w_ms": 1.06,
+    "max_w_ms": 1.17,
+    "label": "風上",
+    "from": "西"
+   },
+   "hazard_class": "warning",
+   "cells": {
+    "hazard": "⚠強風警戒(06時12.5m/s)・低体温症注意(体感-5.5℃)",
+    "wet": "0.0(0/13h M11 確2)",
+    "cloud": "18.6/0.0",
+    "terrain": "頂:風上(西) 底:風上(西)12h w1.1"
+   }
+  },
+  {
+   "date": "2026-10-16",
+   "label": "2026-10-16(金)",
+   "model": "ECMWF",
+   "score": 97.4,
+   "ridge_wind_ms": 9.5,
+   "cape": 0.0,
+   "cloud_pct": 5.4,
+   "cloud_pct_raw": 0.0,
+   "ridge_visibility": 76192,
+   "precip_wet_pct": 2.5,
+   "precip_wet_hours": 0.3,
+   "precip_total_hours": 13,
+   "precip_msm_hours": 0,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 13,
+   "precip_total_mm": 0.0,
+   "chill": -3.7,
+   "day_peak_wind_ms": 11.6,
+   "day_peak_wind_hour": 5,
+   "hazards": {
+    "thunder": "-",
+    "wind": "注意",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 0.0,
+   "terrain": {
+    "windward_hours": 2,
+    "lee_hours": 0,
+    "neutral_hours": 11,
+    "mean_w_ms": 1.31,
+    "max_w_ms": 1.95,
+    "label": "並",
+    "from": "西北西"
+   },
+   "terrain_base": {
+    "windward_hours": 2,
+    "lee_hours": 0,
+    "neutral_hours": 11,
+    "mean_w_ms": 0.86,
+    "max_w_ms": 1.32,
+    "label": "並",
+    "from": "西北西"
+   },
+   "hazard_class": "caution",
+   "cells": {
+    "hazard": "⚠強風注意(05時11.6m/s)・低体温症注意(体感-3.7℃)",
+    "wet": "2.5(0.3/13h 確13)",
+    "cloud": "5.4/0.0",
+    "terrain": "頂:並(西北西) 底:並(西北西)2h w0.9"
+   }
+  },
+  {
+   "date": "2026-10-17",
+   "label": "2026-10-17(土)",
+   "model": "ECMWF",
+   "score": 87.2,
+   "ridge_wind_ms": 7.2,
+   "cape": 0.0,
+   "cloud_pct": 31.5,
+   "cloud_pct_raw": 0.0,
+   "ridge_visibility": 56840,
+   "precip_wet_pct": 8.2,
+   "precip_wet_hours": 1.1,
+   "precip_total_hours": 13,
+   "precip_msm_hours": 0,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 13,
+   "precip_total_mm": 0.0,
+   "chill": -3.9,
+   "day_peak_wind_ms": 7.5,
+   "day_peak_wind_hour": 7,
+   "hazards": {
+    "thunder": "-",
+    "wind": "-",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 0.0,
+   "terrain": {
+    "windward_hours": 3,
+    "lee_hours": 0,
+    "neutral_hours": 10,
+    "mean_w_ms": 1.04,
+    "max_w_ms": 1.25,
+    "label": "並",
+    "from": "西北西"
+   },
+   "terrain_base": {
+    "windward_hours": 3,
+    "lee_hours": 0,
+    "neutral_hours": 10,
+    "mean_w_ms": 0.68,
+    "max_w_ms": 0.82,
+    "label": "並",
+    "from": "西北西"
+   },
+   "hazard_class": "caution",
+   "cells": {
+    "hazard": "⚠低体温症注意(体感-3.9℃)",
+    "wet": "8.2(1.1/13h 確13)",
+    "cloud": "31.5/0.0",
+    "terrain": "頂:並(西北西) 底:並(西北西)3h w0.7"
+   }
+  },
+  {
+   "date": "2026-10-18",
+   "label": "2026-10-18(日)",
+   "model": "ECMWF",
+   "score": 83.4,
+   "ridge_wind_ms": 1.3,
+   "cape": 0.0,
+   "cloud_pct": 31.5,
+   "cloud_pct_raw": 0.0,
+   "ridge_visibility": 23992,
+   "precip_wet_pct": 16.0,
+   "precip_wet_hours": 2.1,
+   "precip_total_hours": 13,
+   "precip_msm_hours": 0,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 13,
+   "precip_total_mm": 0.0,
+   "chill": 4.5,
+   "day_peak_wind_ms": 6.5,
+   "day_peak_wind_hour": 17,
+   "hazards": {
+    "thunder": "-",
+    "wind": "-",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 0.0,
+   "terrain": {
+    "windward_hours": 4,
+    "lee_hours": 8,
+    "neutral_hours": 1,
+    "mean_w_ms": 0.36,
+    "max_w_ms": 0.78,
+    "label": "風下",
+    "from": "南南西"
+   },
+   "terrain_base": {
+    "windward_hours": 4,
+    "lee_hours": 8,
+    "neutral_hours": 1,
+    "mean_w_ms": 0.3,
+    "max_w_ms": 0.62,
+    "label": "風下",
+    "from": "南南西"
+   },
+   "hazard_class": "caution",
+   "cells": {
+    "hazard": "⚠低体温症注意(体感4.5℃)",
+    "wet": "16.0(2.1/13h 確13)",
+    "cloud": "31.5/0.0",
+    "terrain": "頂:風下(南南西) 底:風下(南南西)8h w0.3"
+   }
+  },
+  {
+   "date": "2026-10-19",
+   "label": "2026-10-19(月)",
+   "model": "ECMWF",
+   "score": 32.5,
+   "ridge_wind_ms": 19.6,
+   "cape": 120.0,
+   "cloud_pct": 61.4,
+   "cloud_pct_raw": 39.4,
+   "ridge_visibility": 2952,
+   "precip_wet_pct": 43.8,
+   "precip_wet_hours": 5.7,
+   "precip_total_hours": 13,
+   "precip_msm_hours": 0,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 13,
+   "precip_total_mm": 16.6,
+   "chill": -2.1,
+   "day_peak_wind_ms": 21.4,
+   "day_peak_wind_hour": 13,
+   "hazards": {
+    "thunder": "-",
+    "wind": "危険",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 40.6,
+   "terrain": {
+    "windward_hours": 0,
+    "lee_hours": 0,
+    "neutral_hours": 13,
+    "mean_w_ms": 3.02,
+    "max_w_ms": 3.22,
+    "label": "並",
+    "from": "西南西"
+   },
+   "terrain_base": {
+    "windward_hours": 0,
+    "lee_hours": 0,
+    "neutral_hours": 13,
+    "mean_w_ms": 2.33,
+    "max_w_ms": 2.5,
+    "label": "並",
+    "from": "西南西"
+   },
+   "hazard_class": "warning",
+   "cells": {
+    "hazard": "⚠強風危険(13時21.4m/s)・低体温症注意(体感-2.1℃)",
+    "wet": "43.8(5.7/13h 確13) 16.6mm",
+    "cloud": "61.4/39.4",
+    "terrain": "頂:並(西南西) 底:並(西南西)0h w2.3"
+   }
+  },
+  {
+   "date": "2026-10-20",
+   "label": "2026-10-20(火)",
+   "model": "ECMWF",
+   "score": 61.0,
+   "ridge_wind_ms": 14.5,
+   "cape": 10.0,
+   "cloud_pct": 43.7,
+   "cloud_pct_raw": 2.3,
+   "ridge_visibility": 720,
+   "precip_wet_pct": 44.0,
+   "precip_wet_hours": 5.3,
+   "precip_total_hours": 12,
+   "precip_msm_hours": 0,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 12,
+   "precip_total_mm": 4.0,
+   "chill": -4.2,
+   "day_peak_wind_ms": 15.6,
+   "day_peak_wind_hour": 17,
+   "hazards": {
+    "thunder": "-",
+    "wind": "危険",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 23.0,
+   "terrain": {
+    "windward_hours": 12,
+    "lee_hours": 0,
+    "neutral_hours": 0,
+    "mean_w_ms": 2.41,
+    "max_w_ms": 2.64,
+    "label": "風上",
+    "from": "西"
+   },
+   "terrain_base": {
+    "windward_hours": 12,
+    "lee_hours": 0,
+    "neutral_hours": 0,
+    "mean_w_ms": 1.67,
+    "max_w_ms": 1.77,
+    "label": "風上",
+    "from": "西"
+   },
+   "hazard_class": "warning",
+   "cells": {
+    "hazard": "⚠強風危険(17時15.6m/s)・低体温症注意(体感-4.2℃)",
+    "wet": "44.0(5.3/12h 確12) 4.0mm",
+    "cloud": "43.7/2.3",
+    "terrain": "頂:風上(西) 底:風上(西)12h w1.7"
+   }
+  },
+  {
+   "date": "2026-10-21",
+   "label": "2026-10-21(水)",
+   "model": "ECMWF",
+   "score": 71.3,
+   "ridge_wind_ms": 15.5,
+   "cape": 10.0,
+   "cloud_pct": 43.7,
+   "cloud_pct_raw": 0.5,
+   "ridge_visibility": 12165,
+   "precip_wet_pct": 32.2,
+   "precip_wet_hours": 3.9,
+   "precip_total_hours": 12,
+   "precip_msm_hours": 0,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 12,
+   "precip_total_mm": 0.0,
+   "chill": -9.1,
+   "day_peak_wind_ms": 17.3,
+   "day_peak_wind_hour": 6,
+   "hazards": {
+    "thunder": "-",
+    "wind": "危険",
+    "cold": "警戒",
+    "any": true
+   },
+   "day_total_precip_mm": 0.0,
+   "terrain": {
+    "windward_hours": 12,
+    "lee_hours": 0,
+    "neutral_hours": 0,
+    "mean_w_ms": 2.53,
+    "max_w_ms": 2.93,
+    "label": "風上",
+    "from": "西"
+   },
+   "terrain_base": {
+    "windward_hours": 12,
+    "lee_hours": 0,
+    "neutral_hours": 0,
+    "mean_w_ms": 1.69,
+    "max_w_ms": 1.91,
+    "label": "風上",
+    "from": "西"
+   },
+   "hazard_class": "warning",
+   "cells": {
+    "hazard": "⚠強風危険(06時17.3m/s)・低体温症警戒(体感-9.1℃)",
+    "wet": "32.2(3.9/12h 確12)",
+    "cloud": "43.7/0.5",
+    "terrain": "頂:風上(西) 底:風上(西)12h w1.7"
+   }
+  },
+  {
+   "date": "2026-10-22",
+   "label": "2026-10-22(木)",
+   "model": "ECMWF",
+   "score": 70.0,
+   "ridge_wind_ms": 7.5,
+   "cape": 0.0,
+   "cloud_pct": 43.7,
+   "cloud_pct_raw": 0.8,
+   "ridge_visibility": 76945,
+   "precip_wet_pct": 34.7,
+   "precip_wet_hours": 4.2,
+   "precip_total_hours": 12,
+   "precip_msm_hours": 0,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 12,
+   "precip_total_mm": 0.0,
+   "chill": -5.9,
+   "day_peak_wind_ms": 9.0,
+   "day_peak_wind_hour": 6,
+   "hazards": {
+    "thunder": "-",
+    "wind": "注意",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 0.0,
+   "terrain": {
+    "windward_hours": 4,
+    "lee_hours": 0,
+    "neutral_hours": 8,
+    "mean_w_ms": 1.08,
+    "max_w_ms": 1.45,
+    "label": "並",
+    "from": "西"
+   },
+   "terrain_base": {
+    "windward_hours": 4,
+    "lee_hours": 0,
+    "neutral_hours": 8,
+    "mean_w_ms": 0.71,
+    "max_w_ms": 0.95,
+    "label": "並",
+    "from": "西"
+   },
+   "hazard_class": "caution",
+   "cells": {
+    "hazard": "⚠強風注意(06時9.0m/s)・低体温症注意(体感-5.9℃)",
+    "wet": "34.7(4.2/12h 確12)",
+    "cloud": "43.7/0.8",
+    "terrain": "頂:並(西) 底:並(西)4h w0.7"
+   }
+  },
+  {
+   "date": "2026-10-23",
+   "label": "2026-10-23(金)",
+   "model": "ECMWF",
+   "score": 64.0,
+   "ridge_wind_ms": 6.4,
+   "cape": 0.0,
+   "cloud_pct": 50.7,
+   "cloud_pct_raw": 7.7,
+   "ridge_visibility": 60560,
+   "precip_wet_pct": 41.7,
+   "precip_wet_hours": 5.0,
+   "precip_total_hours": 12,
+   "precip_msm_hours": 0,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 12,
+   "precip_total_mm": 0.0,
+   "chill": -0.3,
+   "day_peak_wind_ms": 12.7,
+   "day_peak_wind_hour": 17,
+   "hazards": {
+    "thunder": "-",
+    "wind": "警戒",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 0.8,
+   "terrain": {
+    "windward_hours": 0,
+    "lee_hours": 10,
+    "neutral_hours": 2,
+    "mean_w_ms": 0.93,
+    "max_w_ms": 1.33,
+    "label": "風下",
+    "from": "南南西"
+   },
+   "terrain_base": {
+    "windward_hours": 0,
+    "lee_hours": 10,
+    "neutral_hours": 2,
+    "mean_w_ms": 0.65,
+    "max_w_ms": 0.82,
+    "label": "風下",
+    "from": "南南西"
+   },
+   "hazard_class": "warning",
+   "cells": {
+    "hazard": "⚠強風警戒(17時12.7m/s)・低体温症注意(体感-0.3℃)",
+    "wet": "41.7(5/12h 確12)",
+    "cloud": "50.7/7.7",
+    "terrain": "頂:風下(南南西) 底:風下(南南西)10h w0.7"
+   }
+  },
+  {
+   "date": "2026-10-24",
+   "label": "2026-10-24(土)",
+   "model": "ECMWF",
+   "score": 0.0,
+   "ridge_wind_ms": 15.4,
+   "cape": 10.0,
+   "cloud_pct": 68.5,
+   "cloud_pct_raw": 53.8,
+   "ridge_visibility": 20350,
+   "precip_wet_pct": 32.8,
+   "precip_wet_hours": 3.9,
+   "precip_total_hours": 12,
+   "precip_msm_hours": 0,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 12,
+   "precip_total_mm": 33.6,
+   "chill": -4.2,
+   "day_peak_wind_ms": 16.9,
+   "day_peak_wind_hour": 9,
+   "hazards": {
+    "thunder": "-",
+    "wind": "危険",
+    "cold": "注意",
+    "any": true
+   },
+   "day_total_precip_mm": 57.6,
+   "terrain": {
+    "windward_hours": 6,
+    "lee_hours": 0,
+    "neutral_hours": 6,
+    "mean_w_ms": 2.0,
+    "max_w_ms": 2.87,
+    "label": "並",
+    "from": "西"
+   },
+   "terrain_base": {
+    "windward_hours": 6,
+    "lee_hours": 0,
+    "neutral_hours": 6,
+    "mean_w_ms": 1.4,
+    "max_w_ms": 1.91,
+    "label": "並",
+    "from": "西"
+   },
+   "hazard_class": "warning",
+   "cells": {
+    "hazard": "⚠強風危険(09時16.9m/s)・低体温症注意(体感-4.2℃)",
+    "wet": "32.8(3.9/12h 確12) 33.6mm",
+    "cloud": "68.5/53.8",
+    "terrain": "頂:並(西) 底:並(西)6h w1.4"
+   }
+  },
+  {
+   "date": "2026-10-25",
+   "label": "2026-10-25(日)",
+   "model": "ECMWF",
+   "score": 72.0,
+   "ridge_wind_ms": 11.6,
+   "cape": 0.0,
+   "cloud_pct": 43.7,
+   "cloud_pct_raw": 0.7,
+   "ridge_visibility": 11450,
+   "precip_wet_pct": 31.0,
+   "precip_wet_hours": 1.9,
+   "precip_total_hours": 6,
+   "precip_msm_hours": 0,
+   "precip_moist_hours": 0,
+   "precip_prob_hours": 6,
+   "precip_total_mm": 4.2,
+   "chill": -11.3,
+   "day_peak_wind_ms": 11.9,
+   "day_peak_wind_hour": 8,
+   "hazards": {
+    "thunder": "-",
+    "wind": "注意",
+    "cold": "警戒",
+    "any": true
+   },
+   "day_total_precip_mm": 16.0,
+   "terrain": {
+    "windward_hours": 9,
+    "lee_hours": 0,
+    "neutral_hours": 3,
+    "mean_w_ms": 1.74,
+    "max_w_ms": 2.16,
+    "label": "風上",
+    "from": "北西"
+   },
+   "terrain_base": {
+    "windward_hours": 9,
+    "lee_hours": 0,
+    "neutral_hours": 3,
+    "mean_w_ms": 1.22,
+    "max_w_ms": 1.55,
+    "label": "風上",
+    "from": "北西"
+   },
+   "hazard_class": "warning",
+   "cells": {
+    "hazard": "⚠強風注意(08時11.9m/s)・低体温症警戒(体感-11.3℃)",
+    "wet": "31.0(1.9/6h 確6) 4.2mm",
+    "cloud": "43.7/0.7",
+    "terrain": "頂:風上(北西) 底:風上(北西)9h w1.2"
+   }
+  }
+ ],
+ "precip_timing_note": "※この先の降水タイミングは日によって変わりやすいため、直前に再確認することをおすすめします。",
+ "cloud_sea": [
+  {
+   "date": "2026-10-19",
+   "time": "06:00",
+   "summit_cloud_pct": 13.718028696194635,
+   "deck_band": "surface",
+   "deck_cloud_pct": 100,
+   "deck_humidity_pct": null,
+   "label": "2026-10-19(月)"
+  },
+  {
+   "date": "2026-10-19",
+   "time": "07:00",
+   "summit_cloud_pct": 18.306351183063512,
+   "deck_band": "surface",
+   "deck_cloud_pct": 100,
+   "deck_humidity_pct": null,
+   "label": "2026-10-19(月)"
+  },
+  {
+   "date": "2026-10-20",
+   "time": "06:00",
+   "summit_cloud_pct": 3.079325421611493,
+   "deck_band": "surface",
+   "deck_cloud_pct": 87,
+   "deck_humidity_pct": null,
+   "label": "2026-10-20(火)"
+  },
+  {
+   "date": "2026-10-20",
+   "time": "07:00",
+   "summit_cloud_pct": 2.8173858661663544,
+   "deck_band": "surface",
+   "deck_cloud_pct": 83,
+   "deck_humidity_pct": null,
+   "label": "2026-10-20(火)"
+  },
+  {
+   "date": "2026-10-24",
+   "time": "06:00",
+   "summit_cloud_pct": 12.618125,
+   "deck_band": "surface",
+   "deck_cloud_pct": 100,
+   "deck_humidity_pct": null,
+   "label": "2026-10-24(土)"
+  },
+  {
+   "date": "2026-10-24",
+   "time": "07:00",
+   "summit_cloud_pct": 14.597126795752654,
+   "deck_band": "surface",
+   "deck_cloud_pct": 100,
+   "deck_humidity_pct": null,
+   "label": "2026-10-24(土)"
+  },
+  {
+   "date": "2026-10-25",
+   "time": "06:00",
+   "summit_cloud_pct": 0.6509372979961228,
+   "deck_band": "surface",
+   "deck_cloud_pct": 99,
+   "deck_humidity_pct": null,
+   "label": "2026-10-25(日)"
+  },
+  {
+   "date": "2026-10-25",
+   "time": "07:00",
+   "summit_cloud_pct": 0.7563025210084007,
+   "deck_band": "surface",
+   "deck_cloud_pct": 98,
+   "deck_humidity_pct": null,
+   "label": "2026-10-25(日)"
+  }
+ ],
+ "transitions": [],
+ "confidence": [
+  {
+   "date": "2026-10-14",
+   "label": "2026-10-14(水)",
+   "forecast": "雨",
+   "confidence": 65.0,
+   "cloud": 36.8,
+   "precip": 80.8,
+   "temp": 77.5
+  },
+  {
+   "date": "2026-10-15",
+   "label": "2026-10-15(木)",
+   "forecast": "晴れ",
+   "confidence": 92.2,
+   "cloud": 100.0,
+   "precip": 100.0,
+   "temp": 76.5
+  },
+  {
+   "date": "2026-10-16",
+   "label": "2026-10-16(金)",
+   "forecast": "晴れ",
+   "confidence": 89.8,
+   "cloud": 88.3,
+   "precip": 96.0,
+   "temp": 85.1
+  },
+  {
+   "date": "2026-10-17",
+   "label": "2026-10-17(土)",
+   "forecast": "晴れ",
+   "confidence": 68.9,
+   "cloud": 52.5,
+   "precip": 88.8,
+   "temp": 65.5
+  },
+  {
+   "date": "2026-10-18",
+   "label": "2026-10-18(日)",
+   "forecast": "晴れ",
+   "confidence": 61.3,
+   "cloud": 61.4,
+   "precip": 69.6,
+   "temp": 52.8
+  },
+  {
+   "date": "2026-10-19",
+   "label": "2026-10-19(月)",
+   "forecast": "晴れ",
+   "confidence": 25.0,
+   "cloud": 20.3,
+   "precip": 16.8,
+   "temp": 38.0
+  },
+  {
+   "date": "2026-10-20",
+   "label": "2026-10-20(火)",
+   "forecast": "晴れ",
+   "confidence": 28.9,
+   "cloud": 38.3,
+   "precip": 16.0,
+   "temp": 32.4
+  },
+  {
+   "date": "2026-10-21",
+   "label": "2026-10-21(水)",
+   "forecast": "晴れ",
+   "confidence": 33.7,
+   "cloud": 20.1,
+   "precip": 40.0,
+   "temp": 40.8
+  },
+  {
+   "date": "2026-10-22",
+   "label": "2026-10-22(木)",
+   "forecast": "晴れ",
+   "confidence": 36.5,
+   "cloud": 34.7,
+   "precip": 38.0,
+   "temp": 36.8
+  },
+  {
+   "date": "2026-10-23",
+   "label": "2026-10-23(金)",
+   "forecast": "晴れ",
+   "confidence": 28.3,
+   "cloud": 47.5,
+   "precip": 22.0,
+   "temp": 15.3
+  },
+  {
+   "date": "2026-10-24",
+   "label": "2026-10-24(土)",
+   "forecast": "晴れ",
+   "confidence": 25.5,
+   "cloud": 42.6,
+   "precip": 34.0,
+   "temp": 0.0
+  },
+  {
+   "date": "2026-10-25",
+   "label": "2026-10-25(日)",
+   "forecast": "晴れ",
+   "confidence": 17.0,
+   "cloud": 28.9,
+   "precip": 22.0,
+   "temp": 0.0
+  }
+ ],
+ "confidence_error": null
+}

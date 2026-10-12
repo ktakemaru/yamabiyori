@@ -35,6 +35,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import mountain_terrain as terrain
 from cli_output import run_with_output_file
+from report_data import row_to_json, write_report_json
 
 from mountain_weather_core import (
     MOUNTAINS, pad,
@@ -2660,7 +2661,60 @@ def resolve_mountain(query: str):
     return (partial[0][1], []) if len(partial) == 1 else (None, partial)
 
 
-def main_single_mountain(mtn: dict = None) -> int:
+def report_cells(r) -> dict:
+    """画面の表と同じ整形済みの文字列(--json-out 用。表示用の関数をそのまま使う)。"""
+    return {
+        "hazard": hazard_warning_cell(r), "wet": wet_fraction_cell(r), "cloud": cloud_cell(r),
+        "terrain": terrain.terrain_cell(r.get("terrain"), r.get("terrain_base")),
+    }
+
+
+def build_report_data(mtn: dict, day_scores: dict, opportunities: list, rows: list,
+                      confidence_by_day, confidence_error) -> dict:
+    """診断モードの結果を --json-out 用の dict にまとめる(画面に出した各節と同じ内容。計算はしない)。"""
+    days = []
+    for day_str in sorted(day_scores):
+        r = day_scores[day_str]
+        days.append({
+            "date": day_str, "label": format_date_with_weekday(day_str),
+            # MSM の時間が1時間でも判定に使われた日は MSM 範囲(=近い日)、それ以外は ECMWF のみ
+            "model": "MSM" if r.get("precip_msm_hours", 0) > 0 else "ECMWF",
+            **row_to_json(r, report_cells(r)),
+        })
+    by_date: dict = {}
+    for r in rows:
+        by_date.setdefault(r["date"], []).append(r)
+    transitions = []
+    for day_str in sorted(by_date):
+        transition = detect_weather_transition(by_date[day_str])
+        if transition is not None:
+            transitions.append({"date": day_str, "label": format_date_with_weekday(day_str),
+                                "note": transition_note(transition)})
+    confidence = None
+    if confidence_by_day:
+        confidence = []
+        for day_str in sorted(confidence_by_day):
+            c = confidence_by_day[day_str]
+            kind = pick_weather_icon(c["cloud_pct"], c["precip_prob"], c["precip_mm"])
+            confidence.append({
+                "date": day_str, "label": format_date_with_weekday(day_str),
+                "forecast": {"sunny": "晴れ", "cloudy": "曇り", "rain": "雨"}[kind],
+                "confidence": c["confidence"], "cloud": c["cloud_confidence"],
+                "precip": c["precip_confidence"], "temp": c["temp_confidence"],
+            })
+    return {
+        "mode": "diagnosis", "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "mountain": {k: mtn.get(k) for k in ("name", "elevation_m", "lat", "lon", "region", "access")},
+        "days": days,
+        "precip_timing_note": precip_timing_note(day_scores), "terrain_attribution": terrain.ATTRIBUTION,
+        "cloud_sea": [dict(o, label=format_date_with_weekday(o["date"])) for o in opportunities],
+        "transitions": transitions,
+        "confidence": confidence, "confidence_error": confidence_error,
+    }
+
+
+def main_single_mountain(mtn: dict = None, report: dict = None) -> int:
+    """report が dict のときだけ、画面に出した内容と同じ数値をそこへ溜める(--json-out 用。表示・計算には影響しない)。"""
     if mtn is None:
         print_mountain_list()
         mtn = prompt_selection()
@@ -2686,6 +2740,7 @@ def main_single_mountain(mtn: dict = None) -> int:
 
     print_weather_transitions(mtn, rows)
 
+    confidence_by_day, confidence_error = None, None
     try:
         # The ensemble API needs REAL level names (no interpolation there),
         # so this one call still snaps to the nearest standard level.
@@ -2695,7 +2750,10 @@ def main_single_mountain(mtn: dict = None) -> int:
         )
         print_ensemble_confidence_table(mtn, confidence_by_day)
     except requests.exceptions.RequestException as e:
+        confidence_error = str(e)
         print(f"\n(ECMWF確信度の取得に失敗しました、点予報の表示には影響ありません: {e})")
+    if report is not None:
+        report.update(build_report_data(mtn, day_scores, opportunities, rows, confidence_by_day, confidence_error))
     return 0
 
 
@@ -2749,6 +2807,8 @@ def parse_args(argv=None):
                         help="山を指定して非対話で診断する(例: --mountain 12 / --mountain 富士山)")
     parser.add_argument("--out", metavar="ファイル",
                         help="出力を UTF-8(BOM付き)でファイルに保存する。--mountain / --list と一緒にだけ使える")
+    parser.add_argument("--json-out", metavar="ファイル",
+                        help="画面に出す表と同じ数値を、列も行も省かずに JSON で保存する(レポートHTML用。--mountain と一緒にだけ使える)")
     return parser.parse_args(argv)
 
 
@@ -2756,6 +2816,9 @@ def main(argv=None) -> int:
     """Exit code: 0 = done, 2 = bad arguments (unknown/ambiguous --mountain, --out without
     --mountain/--list) or the forecast fetch failed."""
     args = parse_args(argv)
+    if args.json_out and args.mountain is None:
+        print("--json-out は --mountain と一緒に使ってください(対話モード・--list では使えません)。")
+        return 2
     if args.out and not (args.list or args.mountain is not None):
         # 対話モード(引数なし・GPX)では input() のプロンプトがファイル側に行き、止まって見えるため受け付けない
         print("--out は --mountain か --list と一緒に使ってください(対話モードでは使えません)。")
@@ -2775,9 +2838,14 @@ def main(argv=None) -> int:
             else:
                 print(f"「{args.mountain}」に当てはまる山がありません(番号は1-{len(MOUNTAINS)}。--list で一覧を表示)。")
             return 2
+        report = {} if args.json_out else None
         if args.out:
-            return run_with_output_file(args.out, lambda: main_single_mountain(mtn))
-        return main_single_mountain(mtn)
+            code = run_with_output_file(args.out, lambda: main_single_mountain(mtn, report))
+        else:
+            code = main_single_mountain(mtn, report)
+        if code == 0 and args.json_out:
+            return write_report_json(args.json_out, report)
+        return code
 
     print("\n=== モードを選んでください ===")
     print("1: 山を1つ選んで診断")

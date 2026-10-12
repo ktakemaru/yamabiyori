@@ -32,6 +32,7 @@ from datetime import date, datetime, timedelta
 
 import mountain_terrain as terrain
 from cli_output import run_with_output_file
+from report_data import hazard_class, row_to_json, write_report_json
 
 from mountain_weather_core import (
     MOUNTAINS, pad,
@@ -620,6 +621,32 @@ def print_ranking_table(rows):
         print(row)
 
 
+def report_cells(r) -> dict:
+    """画面の表と同じ整形済みの文字列(--json-out 用。表示用の関数をそのまま使う)。"""
+    return {
+        "hazard": hazard_warning_cell(r), "wet": wet_fraction_cell(r), "cloud": cloud_cell(r),
+        "terrain": terrain.terrain_cell(r.get("terrain"), r.get("terrain_base")),
+    }
+
+
+def report_day(day_index: int, date_str: str, all_rows: list, day_rows: list, note) -> dict:
+    """--json-out の1日分: 表に出る行(順位つき・全列)と、全山のスコア(山域サマリー用の集計元)。"""
+    return {
+        "index": day_index, "date": date_str, "label": format_date_with_weekday(date_str),
+        "rows": [
+            {"rank": n, "mountain": r["mountain"], "region": r["region"], "access": r["access"],
+             **row_to_json(r, report_cells(r))}
+            for n, r in enumerate(day_rows, start=1)
+        ],
+        "all": [
+            {"mountain": r["mountain"], "region": r["region"], "score": r["score"],
+             "hazard_class": hazard_class(r["hazards"])}
+            for r in all_rows
+        ],
+        "timing_note": note,
+    }
+
+
 def parse_args(argv=None):
     """Command-line narrowing of the mountain pool (I/O only -- scoring is untouched)."""
     parser = argparse.ArgumentParser(description="ヤマビヨリ 探索モード(全山ランキング)。引数なしなら全地域・全山。")
@@ -629,6 +656,8 @@ def parse_args(argv=None):
                         help="MOUNTAINS の並び順で先頭N座だけ計算する(動作確認用の軽量実行)")
     parser.add_argument("--out", metavar="ファイル",
                         help="出力を UTF-8(BOM付き)でファイルに保存し、画面には保存先と行数だけを出す")
+    parser.add_argument("--json-out", metavar="ファイル",
+                        help="画面に出す表と同じ数値を、列も行も省かずに JSON で保存する(レポートHTML用。scripts/render_report.py --data)")
     return parser.parse_args(argv)
 
 
@@ -654,8 +683,13 @@ def main(argv=None) -> int:
         print(error)
         return 2
     if args.out:
-        return run_with_output_file(args.out, lambda: run_ranking(args, regions, pool))
-    return run_ranking(args, regions, pool)
+        code = run_with_output_file(args.out, lambda: run_ranking(args, regions, pool))
+    else:
+        code = run_ranking(args, regions, pool)
+    json_out = getattr(args, "json_out", None)
+    if code == 0 and json_out:
+        return write_report_json(json_out, args.report_data)
+    return code
 
 
 def run_ranking(args, regions, pool) -> int:
@@ -757,6 +791,14 @@ def run_ranking(args, regions, pool) -> int:
           f"日没+{ACTIVITY_END_GRACE_MINUTES}分 PM開始:{PM_START_HOUR}時 / "
           f"地形(活動時間)=山頂風向に対する風上/風下の時間数と地形性上昇流w[m/s](terrain_profiles.json、{terrain.ATTRIBUTION}、スコアには未反映)】")
 
+    # --json-out 用: 画面に出す内容と同じ数値を、整形せずに溜めておく(表示・計算には影響しない)
+    report = {
+        "mode": "explore", "generated": today.isoformat(), "region_label": region_label,
+        "pool_size": len(pool), "fetched": fetched,
+        "min_score": MIN_SCORE_THRESHOLD, "top_n_per_day": TOP_N_PER_DAY,
+        "precip_timing_note": PRECIP_TIMING_NOTE, "terrain_attribution": terrain.ATTRIBUTION, "days": [],
+    }
+
     for week_label, day_range in (("=== 今週 (0-6日先) ===", range(0, 7)),
                                    ("=== 来週以降 (7-14日先) ===", range(7, 15))):
         print(f"\n{week_label}")
@@ -765,6 +807,7 @@ def run_ranking(args, regions, pool) -> int:
             qualifying = [r for r in by_date[d] if r["score"] >= MIN_SCORE_THRESHOLD]
             ranked = sorted(qualifying, key=lambda r: r["score"], reverse=True)
             day_rows = ranked if TOP_N_PER_DAY is None else ranked[:TOP_N_PER_DAY]
+            report["days"].append(report_day(i, d, by_date[d], day_rows, precip_timing_note(i, day_rows)))
             if not day_rows:
                 continue
             print(f"\n-- {format_date_with_weekday(d)} --")
@@ -772,6 +815,7 @@ def run_ranking(args, regions, pool) -> int:
             note = precip_timing_note(i, day_rows)
             if note:
                 print(note)
+    args.report_data = report
     return 0
 
 
