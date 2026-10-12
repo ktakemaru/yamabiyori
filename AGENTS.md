@@ -22,6 +22,7 @@
 
 ## 最初に読むもの
 - このファイルと README.md の「Codexで試す」「3つのモード」節で足りる。`skills/yamabiyori/SKILL.md`(長い)は**スコア式・閾値・較正に関わる変更をするときだけ**読む。 レポート(HTML)を出すときは `skills/yamabiyori/references/report_style.md`(手順・必須要素)と `weather_map_reading.md` を読む。
+- 山・山域をすすめるとき(「家族向け」「デート向け」「初心者向け」など)は `skills/yamabiyori/references/recommend_guide.md` に従う。
 - 版ごとの経緯と数値の根拠は `CHANGELOG.md`。山数・閾値などの**数値はここに書かない。コードと CHANGELOG を正とする**
   (例: `python -X utf8 -c "import mountain_weather_core as c; print(len(c.MOUNTAINS))"`)。
 
