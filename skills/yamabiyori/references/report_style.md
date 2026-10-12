@@ -12,6 +12,17 @@
 - エラーは「エラー: SpecError: …」と出て終了コード2。メッセージに従って JSON を直す(CSS や生成コードは直さない)。
 - 画像は `out/images/` などに保存し、JSON の `src` には JSON からの相対パスを書く。
 
+## 事前準備(天気図・ひまわり画像の取得に必要なもの)
+`requirements.txt` には入っていない任意パッケージ(`playwright`・`Pillow`)が必要。新しい venv では最初に1回だけ入れる。
+```powershell
+./venv/Scripts/python.exe -m pip install playwright Pillow
+./venv/Scripts/python.exe -X utf8 -m playwright install chromium
+./venv/Scripts/python.exe -X utf8 scripts/check_setup.py        # playwright・Pillow が [OK] になること
+```
+- 入っていないと `fetch_synoptic.py` は取得に失敗する(`failed` に理由が出る)。**その場合は黙って進めず**、ユーザーに上のインストールの承認を求める(AGENTS.md「ネットワークが拒否されたとき」と同じ扱い)。
+- 承認されない・ネットワークが拒否されたときは、`synoptic` ブロックに `"images_omitted": "<failed の reason>"` を書いて、天気図なしのレポートを出し、報告にその理由を含める。
+- 数値(`--json-out`)だけなら追加のインストールは不要。
+
 ## 作る手順(診断・探索モード: 数値は自動、エージェントは解説だけ)
 表・危険信号・集計・出典は**スクリプトが書き出した数値から自動で組み立てる**ので、エージェントが表を写す必要はない
 (写し間違い・列の抜けが起きない。解説を何も書かなくても、数値部分が揃った基本ページになる)。
