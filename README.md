@@ -334,6 +334,8 @@ claude --plugin-dir .
 | `cli_output.py` | `--out`(出力を UTF-8 BOM付きでファイルに保存)の共通処理 |
 | `tests/`, `scripts/check_setup.py` | オフラインのテスト(参照3日の回帰チェックは `tests/fixtures/refs/` のフィクスチャで動く)とセットアップ確認 |
 | `AGENTS.md` | Codex などのコーディングエージェント向けの指示(セットアップ・成功条件・変更してよい範囲) |
+| `CLAUDE.md` | Claude Code 向けの指示。`AGENTS.md` を取り込み、Claude 固有のルール(記録・確認の運用)だけを足している |
+| `.github/workflows/ci.yml` | CI。オフラインのテストとセットアップ確認を Windows/Ubuntu × Python 3.10/最新安定版で実行(Open-Meteo 実通信の smoke は手動実行のみ) |
 | `scratch_past_date.py` / `scratch_validate_refs.py` | 検証ツール。過去日付の再計算(実況照合用)と、参照3日の回帰チェック |
 | `skills/yamabiyori/SKILL.md` | 設計ドキュメント本体。スコア式の根拠、各機能の設計判断、既知の落とし穴、検証記録 |
 | `skills/yamabiyori/references/weather_map_reading.md` | 天気図読解の手引き(概況説明用) |

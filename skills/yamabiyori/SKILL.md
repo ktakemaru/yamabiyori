@@ -5,7 +5,7 @@ description: Design/implementation reference for "ヤマビヨリ"(ヤマビヨ�
 
 # ヤマビヨリ(Mountain Weather プロジェクト)
 
-サービス名は **「ヤマビヨリ」**(2026-09決定)。`C:\mountain-weather` にある、Open-Meteo無料APIだけで動く登山向け天気ツール2本(`mountain_weather_mvp.py`/`mountain_weather_detail.py`)と、その2本が共有する土台モジュール`mountain_weather_core.py`(2026-09追加、単体では実行しない)。中核機能の依存は `requests` のみ(`venv/` に導入済み。`requirements.txt`にも記載)。加えて、detail.py側のオプション機能(気象庁天気図スクリーンショット・ルート天気マップPNG)が`playwright`/`Pillow`に依存する(後述、`venv/`に導入済みだがブラウザバイナリは別PCでは`playwright install`が必要)。
+サービス名は **「ヤマビヨリ」**(2026-09決定)。`C:\mountain-weather` にある、Open-Meteo無料APIだけで動く登山向け天気ツール2本(`mountain_weather_mvp.py`/`mountain_weather_detail.py`)と、その2本が共有する土台モジュール`mountain_weather_core.py`(2026-09追加、単体では実行しない)。中核機能の依存は `requests` と `numpy`(numpyは地形レイヤーの地理院DEMタイル用。`venv/` に導入済み。`requirements.txt`にも記載)。加えて、detail.py側のオプション機能(気象庁天気図スクリーンショット・ルート天気マップPNG)が`playwright`/`Pillow`に依存する(後述、`venv/`に導入済みだがブラウザバイナリは別PCでは`playwright install`が必要)。
 
 ヤマビヨリの3本柱:
 - **探索モード**(`mountain_weather_mvp.py`) — 広く探す。76座を横断的にスコア比較し、週末の狙い目を探索する(**広域探索型**)。
@@ -48,7 +48,11 @@ description: Design/implementation reference for "ヤマビヨリ"(ヤマビヨ�
 - `mountain_weather_core.py`(2026-09追加) — mvp.py/detail.pyが共有する土台モジュール。`MOUNTAINS`リスト、標高補間レイヤー(`LEVEL_STACK_HPA`/`level_stack_vars`/`interp_at_altitude`/`add_altitude_columns`/`climb_layer_moist_series`/`FIXED_ALTITUDE_BANDS_M`/`BAND_VARS`/`WIND_SPEED_BAND_VARS`/`SUMMIT_VARS`/`altitude_col`、2026-09-09〜。旧: `nearest_pressure_level`/`ALTITUDE_BAND_HPA`/`nearest_band`による気圧面スナップ。`nearest_pressure_level`はアンサンブルAPI用に残存)、スコア算出ロジック(penalty関数群/`wet_chill_adjustment_c`/`SCORE_WEIGHTS`/`mountain_climb_score`/雷・強風の危険信号判定`hazard_level`/`mountain_hazards`/`hazard_cell`/`safe_avg`/`safe_avg_or_none`/`wind_chill_c`/`KMH_TO_MS`/`WIND_PEAK_WARNING_MS`)、生JSONキャッシュ層(`fetch_open_meteo`/`_cache_path`/`_load_cache`/`_save_cache`/`get_with_retry`/`CACHE_DIR`/`CACHE_TTL_SECONDS`/`OPEN_METEO_URL`)、日付/表示ヘルパー(`display_width`/`pad`/`WEEKDAY_JA`/`format_date_with_weekday`)、`PRECIP_TIMING_*`定数、気象衛星ひまわり画像取得(`fetch_himawari_image`/`fetch_himawari_tile`/`himawari_latest_basetime`/`latlon_to_tile_xy`/`HIMAWARI_IMG_TYPES`、後述「気象衛星ひまわり画像取得機能」節)を1箇所で定義する。単体では実行しない(`if __name__ == "__main__"`を持たない)、mvp.py/detail.pyから`from mountain_weather_core import (...)`されるだけのモジュール。**2026-09より前はこれら全てが2ファイルへ手でコピーされていたが、この移行で単一のソースに統合した**(詳細は各セクション参照)。
 - `mountain_weather_mvp.py` — 候補となる山76座を、指定期間内で登山向け総合スコア(`mountain_climb_score`、後述)が高い順にランキング表示する非対話スクリプト。Open-Meteoレスポンスのディスクキャッシュも実装済み(core.py経由)。
 - `mountain_weather_detail.py` — 山を1つ対話的に選び、(1)登山向け総合スコアの日別サマリーと(2)14日分の1時間ごと詳細(雲量・風など)の2段構成で表示する。Open-Meteoレスポンスのディスクキャッシュも実装済み(core.py経由)。
-- `requirements.txt` — 中核機能の依存(`requests`)を記載。オプション機能(`playwright`/`Pillow`)は別途コメントで案内(後述のオプション依存セクション参照)。
+- `requirements.txt` — 中核機能の依存(`requests`・`numpy`)を記載。オプション機能(`playwright`/`Pillow`)は別途コメントで案内(後述のオプション依存セクション参照)。
+- `cli_output.py`(v1.7.0) — `--out`(出力をUTF-8 BOM付きでファイルに保存)の共通処理。mvp.py/detail.pyが使う。
+- `tests/`・`scripts/check_setup.py`(v1.7.0) — オフラインのテスト(参照3日の回帰チェックは `tests/fixtures/refs/` のフィクスチャで動く。実行は `py -X utf8 -m unittest`)と、セットアップ確認。
+- `AGENTS.md` — Codex などのコーディングエージェント向けの指示(セットアップ・成功条件・変更してよい範囲)。`CLAUDE.md` はこれを取り込み、Claude Code 固有のルールだけを足している。
+- `.github/workflows/ci.yml` — オフラインのテストとセットアップ確認を Windows/Ubuntu × Python 3.10/最新安定版で回すCI。
 - `venv/` — Python仮想環境。実行は `./venv/Scripts/python.exe <script>.py`。
 - `cache/` — 両スクリプト共通の生JSONキャッシュ置き場(後述)。同じディレクトリだが、ファイル名キーに`days`(mvp.py=15、detail.py=14)が含まれるため衝突はしない。
 - `screenshots/` — detail.py の `fetch_jma_weather_map()`(後述)が保存する気象庁天気図のPNG置き場、および core.py の `fetch_himawari_image()`(後述「気象衛星ひまわり画像取得機能」節)が保存するひまわり衛星画像のJPEG置き場(同じディレクトリを共用)。自動プルーニングなし(手動クリーンアップ前提)。
@@ -197,7 +201,7 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 
 `render_route_weather_map(waypoints, target_date, start_time="05:00", out_dir=MAPS_DIR)` — 選択したGPX waypointsに、国土地理院(GSI)タイル地図を背景に天気アイコン(晴れ/曇り/雨)を配置したPNGを1枚生成する。SNS投稿等で「行動予定に沿った」天気の見通しを一目で伝えるための機能。`main_gpx_route()`の`diagnose_route()`呼び出し直後に「地図PNGを生成しますか? (y/N)」の追加プロンプトとして接続済み(y以外はスキップ、GPX診断自体には影響しない)。`diagnose_route()`と全く同じ per-waypoint fetch(`fetch_waypoint_hourly()`、2026-09にdiagnose_routeから抽出・共通化)を使うため、地図上の気温・アイコンはテキスト診断の数値と一致する。
 
-- **依存**: `Pillow`(`venv/`に導入済み、`pip install Pillow`)。中核機能(`requests`のみ)とは別の追加依存で、`fetch_jma_weather_map()`のPlaywrightと同じ扱い(関数内で遅延import、モジュール先頭ではimportしない)。matplotlib+contextilyは検討したが不採用(下記参照)。
+- **依存**: `Pillow`(`venv/`に導入済み、`pip install Pillow`)。中核機能(`requests`・`numpy`)とは別の追加依存で、`fetch_jma_weather_map()`のPlaywrightと同じ扱い(関数内で遅延import、モジュール先頭ではimportしない)。matplotlib+contextilyは検討したが不採用(下記参照)。
 - **地図タイル実装方式 — matplotlib+contextily不採用、requests+Pillowで自前実装**: contextilyはrasterio(GDAL依存)等の重い地理空間スタックを追加で引き込み、Windows環境でのインストール失敗リスクが高い。GSIタイルは単なるXYZ形式のPNG画像なので、既存依存の`requests`でタイルをダウンロードし、`Pillow`で画像として合成・図形描画するだけで十分と判断し、そちらを採用した。
 - **GSIタイルの利用規約(2026-09確認、https://maps.gsi.go.jp/development/ichiran.html )**: 「地理院タイルをウェブサイトやソフトウェア、アプリケーション上で**リアルタイムに読み込んで**利用する場合」は申請不要だが、**タイルをダウンロードして静的PNGとして保存・再配布する行為(=この機能そのもの)はこの適用除外に当てはまらず**、「基本測量成果となっているタイルを利用する際には、測量法に基づく申請が必要な場合があります」との記載がある(標準地図/淡色地図は基本測量成果ベース)。これはユーザーに提示済みの既知のグレーゾーンで、**個人のSNS投稿程度の小規模利用と割り切ってGSIタイルのまま実装する**選択をユーザーが明示的に行った(代替案として提示したOpenStreetMapタイルへの切り替え、背景地図なしのルート図のみ、は不採用)。大量配布・商用利用等に用途が広がる場合は、この判断を鵜呑みにせずGSIへの申請要否を再検討すること。出典表記(`GSI_TILE_ATTRIBUTION`、「地図:地理院タイル(国土地理院)」+ 一覧ページURL)は生成する全画像に描画済み。
 - **使用タイル**: 淡色地図(`https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png`)。標準地図より彩度・情報量が控えめで、自前で重ねるアイコン・ラベルとの視認性の衝突が少ないため選択。タイル自体は内容が変わらない静的画像なので、Open-Meteo予報キャッシュ(3時間TTL)とは別に`cache/gsi_tiles/`へ**無期限キャッシュ**する(同じズーム・タイル座標は二度とGSIに取りに行かない)。
@@ -286,7 +290,7 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 
 `fetch_jma_weather_map(out_dir=SCREENSHOT_DIR)` — 気象庁の天気図ページ(https://www.jma.go.jp/bosai/weather_map/ )をPlaywrightでレンダリングし、天気図の`<img>`要素だけを切り出してスクリーンショット保存する。Open-Meteoの予報パイプラインとは完全に別系統(スコア計算には使わない、目視で実況天気図を確認するための補助機能)。`main()`には未接続で、`print_comparison_table()`と同様に手動で呼ぶ用途。
 
-- **依存**: `playwright`(`venv/`に導入済み)。中核機能(`requests`のみ)とは別の追加依存であり、**別PCで環境構築する場合は`pip install playwright`に加えて`playwright install chromium`(ブラウザバイナリ取得)を忘れずに実行すること**。これを忘れると`fetch_jma_weather_map()`実行時にブラウザ起動でエラーになる。
+- **依存**: `playwright`(`venv/`に導入済み)。中核機能(`requests`・`numpy`)とは別の追加依存であり、**別PCで環境構築する場合は`pip install playwright`に加えて`playwright install chromium`(ブラウザバイナリ取得)を忘れずに実行すること**。これを忘れると`fetch_jma_weather_map()`実行時にブラウザ起動でエラーになる。
 - **仕組み**: 気象庁のページはJSが天気図を`<img src="data/png/<タイムスタンプ付きファイル名>">`として動的に描画するため、素のHTTPリクエストでは今日の天気図が取得できない(固定URLの静的画像ではない)。そのため`requests`ではなくPlaywright(ヘッドレスChromium)でページを開き、天気図の`<img>`要素の読み込み完了(`el.complete && el.naturalWidth > 0`)を待ってから、その要素だけを`element.screenshot()`で切り出す。ページ全体ではなく要素単体を撮るため、メニュー・サイドバー・広告は最初から一切写り込まない(2026-09確認時点で天気図は600x581pxのネイティブ解像度)。
 - **デフォルト表示**: ページを開いた時点で既に「実況」天気図が表示されているため、タブ切り替え操作は不要(2026-09確認時点)。
 - **予想天気図(+24h/+48h)の取得(`fetch_jma_weather_map(include_forecast=True)`、2026-09追加)**: ユーザーから「ページ右上の▶ボタンで将来分の天気図を見られるのでは」と指摘を受け、実際にPlaywrightでボタンを押して検証したところ、その通りだった。
