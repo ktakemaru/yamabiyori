@@ -1,0 +1,1427 @@
+{
+  "mode": "explore",
+  "eyebrow": "探索モード・登山向けランキング",
+  "title": "3連休の山天気",
+  "sub": [
+    "2026-10-10(土)〜10/12(月・祝) — 3日とも高気圧で全国的に好天。10/12は北から少しずつ下り坂",
+    "対象: **全76座**",
+    "生成: **2026-10-07(水)(JST)**"
+  ],
+  "blocks": [
+    {
+      "type": "section",
+      "title": "概況 — 日本付近は高気圧に覆われ、台風は東へ離れる",
+      "content": [
+        {
+          "type": "analysis",
+          "items": [
+            {
+              "text": "**10/7 3時の実況**: 日本の東の海上に**台風27号(970hPa、東へ55km/h)**があり、北海道の北東には978hPaの低気圧と前線があります。一方、黄海付近には1024hPaなどの高気圧が連なり、西から本州へ張り出す配置です。ひまわり画像でも、本州の内陸〜日本海側は雲が少ない状態です。"
+            },
+            {
+              "text": "**予想天気図では、10/7 21時(+24時間)に前線が日本の東へ抜け、10/8 21時(+48時間)には日本付近に1026hPaの高気圧が入ります。**南東の海上には台風28号(985hPa)が見えますが、日本からは遠く離れています。"
+            },
+            {
+              "text": "**重要な限界: 予想天気図は10/8 21時までで、3連休(10/10〜12)はその2〜4日先にあたり、天気図では直接確認できません。**高気圧が日本付近に居座れば全国的に快晴になりやすく、スコアの「10/10は76座すべて94点以上」と整合します。出発前日に最新の天気図と台風情報で再確認してください。"
+            }
+          ]
+        },
+        {
+          "type": "images",
+          "items": [
+            {
+              "src": "images/weathermap_now_1010.png",
+              "alt": "実況天気図 10/7 3時",
+              "cap": "実況天気図(10/7 3時)"
+            },
+            {
+              "src": "images/weathermap_plus24h_1010.png",
+              "alt": "予想天気図 +24時間",
+              "cap": "予想天気図・+24時間(10/7 21時)"
+            },
+            {
+              "src": "images/weathermap_plus48h_1010.png",
+              "alt": "予想天気図 +48時間",
+              "cap": "予想天気図・+48時間(10/8 21時)"
+            },
+            {
+              "src": "images/himawari_japan_1010.jpg",
+              "alt": "ひまわり赤外画像",
+              "cap": "ひまわり赤外画像・本州(10/7 7:40JST)"
+            }
+          ]
+        }
+      ],
+      "id": "synoptic"
+    },
+    {
+      "type": "section",
+      "title": "山域サマリー — どの山域がいつ安定しているか",
+      "note": "21の山域について、日ごとの平均スコアを平均の高い順に並べました(本見本は抜粋)。色は95点以上が緑、85〜94点が黄です。ゴールドの点は雲海条件を検出した日です。",
+      "content": [
+        {
+          "type": "table",
+          "min_width": 480,
+          "columns": [
+            {
+              "key": "region",
+              "label": "山域",
+              "kind": "strong"
+            },
+            {
+              "key": "d0",
+              "label": "10/10 土",
+              "kind": "num"
+            },
+            {
+              "key": "d1",
+              "label": "10/11 日",
+              "kind": "num"
+            },
+            {
+              "key": "d2",
+              "label": "10/12 月",
+              "kind": "num"
+            }
+          ],
+          "rows": [
+            {
+              "region": "谷川連峰",
+              "d0": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d1": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d2": {
+                "text": "99",
+                "class": "sc-good",
+                "gold": false
+              }
+            },
+            {
+              "region": "南アルプス",
+              "d0": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d1": {
+                "text": "99",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d2": {
+                "text": "99",
+                "class": "sc-good",
+                "gold": false
+              }
+            },
+            {
+              "region": "中信高原",
+              "d0": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d1": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d2": {
+                "text": "98",
+                "class": "sc-good",
+                "gold": true
+              }
+            },
+            {
+              "region": "乗鞍・御嶽",
+              "d0": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d1": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d2": {
+                "text": "98",
+                "class": "sc-good",
+                "gold": true
+              }
+            },
+            {
+              "region": "八ヶ岳連峰",
+              "d0": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d1": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d2": {
+                "text": "97",
+                "class": "sc-good",
+                "gold": false
+              }
+            },
+            {
+              "region": "上信越高原",
+              "d0": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d1": {
+                "text": "99",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d2": {
+                "text": "98",
+                "class": "sc-good",
+                "gold": false
+              }
+            },
+            {
+              "region": "中央アルプス",
+              "d0": {
+                "text": "100",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d1": {
+                "text": "99",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d2": {
+                "text": "97",
+                "class": "sc-good",
+                "gold": false
+              }
+            },
+            {
+              "region": "上毛三山",
+              "d0": {
+                "text": "99",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d1": {
+                "text": "99",
+                "class": "sc-good",
+                "gold": false
+              },
+              "d2": {
+                "text": "98",
+                "class": "sc-good",
+                "gold": false
+              }
+            }
+          ]
+        }
+      ],
+      "id": "regions"
+    },
+    {
+      "type": "section",
+      "title": "日ごとのランキング(上位15座)",
+      "note": "ほぼ満点が並ぶため、スコアが同点圏のときはアンサンブル確信度の高い順に並べています。確信度は上位候補30座のみ計算しており、それ以外は「-」です。",
+      "content": [
+        {
+          "type": "tabs",
+          "tabs": [
+            {
+              "label": "10/10",
+              "wk": "土",
+              "heading": "10月10日(土) — 全76座が94点以上、73座が98点以上",
+              "content": [
+                {
+                  "type": "summary",
+                  "text": "日本付近が高気圧に覆われ、**全国で雲量ほぼ0%・雨天割合ほぼ0%**。最低でも白山94.8点・赤城山96.1点・立山97.0点で、北陸の白山・立山は雨天割合が6〜7%と最も崩れやすい側です。3000m級は雷・強風の警戒なし(風は最大でも11m/s程度)。確信度は上位でも89〜95%と高く、**3日間でいちばん確かな日**です。"
+                },
+                {
+                  "type": "table",
+                  "min_width": 640,
+                  "columns": [
+                    {
+                      "key": "rank",
+                      "label": "#",
+                      "kind": "muted"
+                    },
+                    {
+                      "key": "name",
+                      "label": "山",
+                      "kind": "strong"
+                    },
+                    {
+                      "key": "region",
+                      "label": "山域",
+                      "kind": "muted"
+                    },
+                    {
+                      "key": "score",
+                      "label": "スコア",
+                      "kind": "score"
+                    },
+                    {
+                      "key": "cloud",
+                      "label": "雲量",
+                      "kind": "num"
+                    },
+                    {
+                      "key": "wet",
+                      "label": "雨天割合",
+                      "kind": "num"
+                    },
+                    {
+                      "key": "vis",
+                      "label": "視程",
+                      "kind": "num"
+                    },
+                    {
+                      "key": "hazard",
+                      "label": "危険信号",
+                      "kind": "badge"
+                    },
+                    {
+                      "key": "conf",
+                      "label": "確信度",
+                      "kind": "conf"
+                    }
+                  ],
+                  "rows": [
+                    {
+                      "rank": "1",
+                      "name": {
+                        "text": "槍ヶ岳",
+                        "sub": "3180m",
+                        "gold": false
+                      },
+                      "region": "北アルプス",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "78.2km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "2",
+                      "name": {
+                        "text": "常念岳",
+                        "sub": "2857m",
+                        "gold": false
+                      },
+                      "region": "北アルプス",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "78.2km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "3",
+                      "name": {
+                        "text": "西穂高岳",
+                        "sub": "2909m",
+                        "gold": false
+                      },
+                      "region": "北アルプス",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "78.2km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "4",
+                      "name": {
+                        "text": "八ヶ岳(赤岳)",
+                        "sub": "2899m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "55.5km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "5",
+                      "name": {
+                        "text": "横岳",
+                        "sub": "2830m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "55.5km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "6",
+                      "name": {
+                        "text": "硫黄岳",
+                        "sub": "2760m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "55.5km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "7",
+                      "name": {
+                        "text": "東天狗岳",
+                        "sub": "2640m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "55.5km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "8",
+                      "name": {
+                        "text": "権現岳",
+                        "sub": "2715m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "55.5km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "9",
+                      "name": {
+                        "text": "編笠山",
+                        "sub": "2524m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "58.8km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "10",
+                      "name": {
+                        "text": "北横岳",
+                        "sub": "2480m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "55.5km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "11",
+                      "name": {
+                        "text": "蓼科山",
+                        "sub": "2531m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "50.5km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "12",
+                      "name": {
+                        "text": "乗鞍岳(剣ヶ峰)",
+                        "sub": "3026m",
+                        "gold": false
+                      },
+                      "region": "乗鞍・御嶽",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "43.3km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "13",
+                      "name": {
+                        "text": "木曽御嶽山",
+                        "sub": "3067m",
+                        "gold": false
+                      },
+                      "region": "乗鞍・御嶽",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "24.1km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "95%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "14",
+                      "name": {
+                        "text": "甲斐駒ヶ岳",
+                        "sub": "2967m",
+                        "gold": false
+                      },
+                      "region": "南アルプス",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "60.5km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "94%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "15",
+                      "name": {
+                        "text": "北岳",
+                        "sub": "3193m",
+                        "gold": false
+                      },
+                      "region": "南アルプス",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "78.3km",
+                      "hazard": {
+                        "text": "⚠低体温注意",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "94%",
+                        "class": "high"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "10/11",
+              "wk": "日",
+              "heading": "10月11日(日) — 引き続き好天。98点以上は39座に減り、丹沢・伊豆が少し崩れる",
+              "content": [
+                {
+                  "type": "summary",
+                  "text": "98点以上は39座(土曜は73座)。谷川岳・槍ヶ岳・乗鞍岳・美ヶ原・御嶽山が100点です。下位は**天城山93.3点、唐松岳94.9点、蔵王95.0点、会津駒ヶ岳95.2点、丹沢(塔ノ岳・丹沢山・蛭ヶ岳)95.6点**。南岸側(丹沢・伊豆)は雨天割合が約9%、ピーク風速10m/s前後に上がります。大きな崩れではありませんが、**丹沢・伊豆は風と雲の出方に注意**。確信度は78〜93%。"
+                },
+                {
+                  "type": "table",
+                  "min_width": 640,
+                  "columns": [
+                    {
+                      "key": "rank",
+                      "label": "#",
+                      "kind": "muted"
+                    },
+                    {
+                      "key": "name",
+                      "label": "山",
+                      "kind": "strong"
+                    },
+                    {
+                      "key": "region",
+                      "label": "山域",
+                      "kind": "muted"
+                    },
+                    {
+                      "key": "score",
+                      "label": "スコア",
+                      "kind": "score"
+                    },
+                    {
+                      "key": "cloud",
+                      "label": "雲量",
+                      "kind": "num"
+                    },
+                    {
+                      "key": "wet",
+                      "label": "雨天割合",
+                      "kind": "num"
+                    },
+                    {
+                      "key": "vis",
+                      "label": "視程",
+                      "kind": "num"
+                    },
+                    {
+                      "key": "hazard",
+                      "label": "危険信号",
+                      "kind": "badge"
+                    },
+                    {
+                      "key": "conf",
+                      "label": "確信度",
+                      "kind": "conf"
+                    }
+                  ],
+                  "rows": [
+                    {
+                      "rank": "1",
+                      "name": {
+                        "text": "美ヶ原(王ヶ頭)",
+                        "sub": "2034m",
+                        "gold": false
+                      },
+                      "region": "中信高原",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "61.4km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "2",
+                      "name": {
+                        "text": "乗鞍岳(剣ヶ峰)",
+                        "sub": "3026m",
+                        "gold": false
+                      },
+                      "region": "乗鞍・御嶽",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "18.8km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "3",
+                      "name": {
+                        "text": "木曽御嶽山",
+                        "sub": "3067m",
+                        "gold": false
+                      },
+                      "region": "乗鞍・御嶽",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "58.2km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "4",
+                      "name": {
+                        "text": "八ヶ岳(赤岳)",
+                        "sub": "2899m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "68.6km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "5",
+                      "name": {
+                        "text": "横岳",
+                        "sub": "2830m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "68.6km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "6",
+                      "name": {
+                        "text": "硫黄岳",
+                        "sub": "2760m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "68.6km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "7",
+                      "name": {
+                        "text": "東天狗岳",
+                        "sub": "2640m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "68.6km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "8",
+                      "name": {
+                        "text": "権現岳",
+                        "sub": "2715m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "68.6km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "9",
+                      "name": {
+                        "text": "編笠山",
+                        "sub": "2524m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "54.8km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "10",
+                      "name": {
+                        "text": "北横岳",
+                        "sub": "2480m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "68.6km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "11",
+                      "name": {
+                        "text": "蓼科山",
+                        "sub": "2531m",
+                        "gold": false
+                      },
+                      "region": "八ヶ岳連峰",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "69.3km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "12",
+                      "name": {
+                        "text": "槍ヶ岳",
+                        "sub": "3180m",
+                        "gold": false
+                      },
+                      "region": "北アルプス",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "0%",
+                      "vis": "56.1km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "13",
+                      "name": {
+                        "text": "西穂高岳",
+                        "sub": "2909m",
+                        "gold": false
+                      },
+                      "region": "北アルプス",
+                      "score": "100",
+                      "cloud": "2%",
+                      "wet": "0%",
+                      "vis": "56.1km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "14",
+                      "name": {
+                        "text": "常念岳",
+                        "sub": "2857m",
+                        "gold": false
+                      },
+                      "region": "北アルプス",
+                      "score": "100",
+                      "cloud": "2%",
+                      "wet": "0%",
+                      "vis": "56.1km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "91%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "15",
+                      "name": {
+                        "text": "霧ヶ峰(車山)",
+                        "sub": "1925m",
+                        "gold": false
+                      },
+                      "region": "中信高原",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "68.8km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "90%",
+                        "class": "high"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "label": "10/12",
+              "wk": "月・祝",
+              "heading": "10月12日(月・祝) — 好天は続くが、北から少しずつ下り坂。確信度は低め",
+              "content": [
+                {
+                  "type": "summary",
+                  "text": "98点以上は17座に減り、最低は**安達太良山86.7点・西吾妻山89.2点・蔵王90.1点**と東北南部が先に下がります(雨天割合8〜9%)。立山は雨天割合14%で、日本海側から気圧の谷が近づく傾向です。一方、美ヶ原・谷川岳・榛名山・妙義山・南アルプス(北岳・甲斐駒ヶ岳・仙丈ヶ岳)は99点前後を保ちます。**確信度は71〜85%で、3日間でいちばん低い**。首都圏の低山(高尾山71%・御岳山72%)は特に低めです。"
+                },
+                {
+                  "type": "table",
+                  "min_width": 640,
+                  "columns": [
+                    {
+                      "key": "rank",
+                      "label": "#",
+                      "kind": "muted"
+                    },
+                    {
+                      "key": "name",
+                      "label": "山",
+                      "kind": "strong"
+                    },
+                    {
+                      "key": "region",
+                      "label": "山域",
+                      "kind": "muted"
+                    },
+                    {
+                      "key": "score",
+                      "label": "スコア",
+                      "kind": "score"
+                    },
+                    {
+                      "key": "cloud",
+                      "label": "雲量",
+                      "kind": "num"
+                    },
+                    {
+                      "key": "wet",
+                      "label": "雨天割合",
+                      "kind": "num"
+                    },
+                    {
+                      "key": "vis",
+                      "label": "視程",
+                      "kind": "num"
+                    },
+                    {
+                      "key": "hazard",
+                      "label": "危険信号",
+                      "kind": "badge"
+                    },
+                    {
+                      "key": "conf",
+                      "label": "確信度",
+                      "kind": "conf"
+                    }
+                  ],
+                  "rows": [
+                    {
+                      "rank": "1",
+                      "name": {
+                        "text": "美ヶ原(王ヶ頭)",
+                        "sub": "2034m",
+                        "gold": true
+                      },
+                      "region": "中信高原",
+                      "score": "100",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "3.2km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "84%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "2",
+                      "name": {
+                        "text": "谷川岳",
+                        "sub": "1977m",
+                        "gold": false
+                      },
+                      "region": "谷川連峰",
+                      "score": "99",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "6.2km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "85%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "3",
+                      "name": {
+                        "text": "甲斐駒ヶ岳",
+                        "sub": "2967m",
+                        "gold": false
+                      },
+                      "region": "南アルプス",
+                      "score": "99",
+                      "cloud": "0%",
+                      "wet": "2%",
+                      "vis": "65.8km",
+                      "hazard": {
+                        "text": "⚠低体温注意",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "84%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "4",
+                      "name": {
+                        "text": "北岳",
+                        "sub": "3193m",
+                        "gold": false
+                      },
+                      "region": "南アルプス",
+                      "score": "99",
+                      "cloud": "0%",
+                      "wet": "2%",
+                      "vis": "75.9km",
+                      "hazard": {
+                        "text": "⚠低体温注意",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "84%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "5",
+                      "name": {
+                        "text": "仙丈ヶ岳",
+                        "sub": "3033m",
+                        "gold": false
+                      },
+                      "region": "南アルプス",
+                      "score": "99",
+                      "cloud": "0%",
+                      "wet": "2%",
+                      "vis": "68.1km",
+                      "hazard": {
+                        "text": "⚠低体温注意",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "84%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "6",
+                      "name": {
+                        "text": "妙義山(相馬岳)",
+                        "sub": "1104m",
+                        "gold": false
+                      },
+                      "region": "上毛三山",
+                      "score": "99",
+                      "cloud": "0%",
+                      "wet": "2%",
+                      "vis": "35.8km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "80%",
+                        "class": "mid"
+                      }
+                    },
+                    {
+                      "rank": "7",
+                      "name": {
+                        "text": "榛名山(掃部ヶ岳)",
+                        "sub": "1449m",
+                        "gold": false
+                      },
+                      "region": "上毛三山",
+                      "score": "99",
+                      "cloud": "0%",
+                      "wet": "1%",
+                      "vis": "13.2km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "74%",
+                        "class": "mid"
+                      }
+                    },
+                    {
+                      "rank": "8",
+                      "name": {
+                        "text": "高尾山",
+                        "sub": "599m",
+                        "gold": false
+                      },
+                      "region": "奥多摩",
+                      "score": "99",
+                      "cloud": "0%",
+                      "wet": "2%",
+                      "vis": "42.2km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "71%",
+                        "class": "mid"
+                      }
+                    },
+                    {
+                      "rank": "9",
+                      "name": {
+                        "text": "陣馬山",
+                        "sub": "855m",
+                        "gold": false
+                      },
+                      "region": "奥多摩",
+                      "score": "99",
+                      "cloud": "0%",
+                      "wet": "2%",
+                      "vis": "51.2km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "71%",
+                        "class": "mid"
+                      }
+                    },
+                    {
+                      "rank": "10",
+                      "name": {
+                        "text": "天城山(万三郎岳)",
+                        "sub": "1406m",
+                        "gold": false
+                      },
+                      "region": "伊豆",
+                      "score": "99",
+                      "cloud": "0%",
+                      "wet": "2%",
+                      "vis": "13.1km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "-",
+                        "class": "low"
+                      }
+                    },
+                    {
+                      "rank": "11",
+                      "name": {
+                        "text": "瑞牆山",
+                        "sub": "2230m",
+                        "gold": false
+                      },
+                      "region": "奥秩父",
+                      "score": "98",
+                      "cloud": "0%",
+                      "wet": "4%",
+                      "vis": "68.8km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "84%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "12",
+                      "name": {
+                        "text": "乗鞍岳(剣ヶ峰)",
+                        "sub": "3026m",
+                        "gold": true
+                      },
+                      "region": "乗鞍・御嶽",
+                      "score": "98",
+                      "cloud": "0%",
+                      "wet": "4%",
+                      "vis": "39.6km",
+                      "hazard": {
+                        "text": "⚠低体温注意",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "84%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "13",
+                      "name": {
+                        "text": "木曽御嶽山",
+                        "sub": "3067m",
+                        "gold": true
+                      },
+                      "region": "乗鞍・御嶽",
+                      "score": "98",
+                      "cloud": "0%",
+                      "wet": "4%",
+                      "vis": "39.4km",
+                      "hazard": {
+                        "text": "⚠低体温注意",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "84%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "14",
+                      "name": {
+                        "text": "苗場山",
+                        "sub": "2145m",
+                        "gold": false
+                      },
+                      "region": "上信越高原",
+                      "score": "98",
+                      "cloud": "0%",
+                      "wet": "3%",
+                      "vis": "37.9km",
+                      "hazard": {
+                        "text": "-",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "84%",
+                        "class": "high"
+                      }
+                    },
+                    {
+                      "rank": "15",
+                      "name": {
+                        "text": "槍ヶ岳",
+                        "sub": "3180m",
+                        "gold": false
+                      },
+                      "region": "北アルプス",
+                      "score": "98",
+                      "cloud": "0%",
+                      "wet": "5%",
+                      "vis": "17.4km",
+                      "hazard": {
+                        "text": "⚠低体温注意",
+                        "class": "warning"
+                      },
+                      "conf": {
+                        "text": "84%",
+                        "class": "high"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "id": "ranking"
+    },
+    {
+      "type": "section",
+      "title": "稜線の晴れ間 — 麓は雲でも山頂は雲の上",
+      "note": "夜明け前後に、山頂の雲量が低いまま麓側だけが雲デッキに覆われる時間帯を検出したものです。数日先の予測なので、当日朝の実況確認を。",
+      "content": [
+        {
+          "type": "panels",
+          "panels": [
+            {
+              "title": "10/12(月)",
+              "rows": [
+                {
+                  "l": "美ヶ原(王ヶ頭) 2034m 06:00頃",
+                  "v": "山頂雲量0% / 麓側雲量91%"
+                },
+                {
+                  "l": "乗鞍岳(剣ヶ峰) 3026m 06:00頃",
+                  "v": "山頂雲量0% / 麓側雲量87%"
+                },
+                {
+                  "l": "木曽御嶽山 3067m 06:00頃",
+                  "v": "山頂雲量0% / 麓側雲量87%"
+                },
+                {
+                  "l": "磐梯山 1816m 06:00頃",
+                  "v": "山頂雲量0% / 麓側雲量98%"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "footer": [
+    "**MSMとECMWFの範囲について**: 取得時点(10/7)から10/10は3日先でMSM範囲の端、10/11・10/12は範囲外です。範囲外の雨天割合・降水量はECMWF降水確率の期待値ベースの粗い見積もりです。",
+    "**ECMWFアンサンブル確信度について**: 51メンバーが「乾き」「湿り」どちらかにどれだけ一致しているかの指標(0=五分五分、100=全員一致)。**天気の良さそのものではありません**。",
+    "**ランキング表の「危険信号」は一括計算のため、個別診断(診断モード)より見逃しが起きやすい**です。有望な山ほど、行く前に診断モードで個別に確認することを勧めます。",
+    "スコアは雲量・視程・降水の重み付き幾何平均。雷・強風・低体温症はスコアに含めず「危険信号」列で別枠警告。データソース: Open-Meteo経由のMSM(気象庁)+ECMWF IFS 0.25、天気図・ひまわり画像は気象庁ホームページの公開データ、地形は国土地理院 標高タイル。"
+  ]
+}

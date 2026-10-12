@@ -7,6 +7,13 @@
 以下は Claude Code 固有のルール。ヤマビヨリ自体の仕様・設計は`skills/yamabiyori/SKILL.md`を参照
 (Claude Code ではスコア式に関わらない作業でも、利用者への説明の根拠として SKILL.md を読んでよい)。
 
+## レポートの出力(Claude Code 固有)
+- AGENTS.md の完了条件6のとおり、HTML を `out/` に保存する(`scripts/render_report.py`。手順は `skills/yamabiyori/references/report_style.md`)。
+- そのうえで、Artifact ツールが使える環境では、同じ HTML(`--embed-images` で作ったもの)を artifact として公開する。
+  同じ山・同じモードの再実行は、新しく作らず既存の artifact を更新する。公開前に、位置が特定できる行程(GPXの地点・時刻)を載せていないか確認する。
+- Artifact ツールが使えない環境では HTML ファイルの場所を伝えて終える(これは失敗ではない)。
+- これは AGENTS.md の公開に関する制限(4〜5)の例外ではない: GitHub への push・Pages 公開は引き続き別途の承認が必要。
+
 ## 記録・確認に関するルール
 
 ### 「言っていない」「やっていない」と断言する前に必ず確認すること

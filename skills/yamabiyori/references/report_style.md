@@ -1,0 +1,120 @@
+# レポート出力の仕様(3モード共通)
+
+ヤマビヨリの結果を人に見せるときは、**HTML を自分で書かず**、レポート仕様(JSON)を作って
+`scripts/render_report.py` に渡す。見た目(配色・フォント・カード構成・ダークモード)は
+`assets/report/report.css` とレンダラーで固定されるので、Claude Code でも Codex でも同じページになる。
+
+```powershell
+./venv/Scripts/python.exe -X utf8 scripts/render_report.py out/report.json --out out/report.html
+./venv/Scripts/python.exe -X utf8 scripts/render_report.py out/report.json --out out/report.html --embed-images   # 画像も埋め込み、1ファイルで完結
+```
+- 標準ライブラリのみ。外部通信なし(Google Fonts はブラウザが開くときに読み込む。オフラインでは代替フォントになる)。
+- エラーは「エラー: SpecError: …」と出て終了コード2。メッセージに従って JSON を直す(CSS や生成コードは直さない)。
+- 画像は `out/images/` などに保存し、JSON の `src` には JSON からの相対パスを書く。
+
+## 作る手順(診断・探索モード: 数値は自動、エージェントは解説だけ)
+表・危険信号・集計・出典は**スクリプトが書き出した数値から自動で組み立てる**ので、エージェントが表を写す必要はない
+(写し間違い・列の抜けが起きない。解説を何も書かなくても、数値部分が揃った基本ページになる)。
+
+1. **数値**: `--json-out` を付けて実行する(画面・`--out` のテキスト出力は従来どおり)。
+   - 診断: `mountain_weather_detail.py --mountain <山> --out out/<山>.txt --json-out out/<山>.json`
+   - 探索: `mountain_weather_mvp.py <従来の引数> --out out/explore.txt --json-out out/explore.json`
+2. **天気図・衛星画像**: `scripts/fetch_synoptic.py --mountain <山> --out out/synoptic.json`(1診断につき1回。気象庁サイトへの節度あるアクセス)。
+   実況・+24h・+48h の天気図とひまわり画像が `out/images/` に保存される。探索モードは `--lat 36 --lon 138 --tile-span 5`(本州全体)。
+3. **読み取り**: 保存された画像を実際に開いて見る。`references/weather_map_reading.md` に従い、次の3点を書く
+   (a)どの高気圧・低気圧・前線の影響下か (b)衛星で見える実際の雲(山頂にかかっているか) (c)点予報の数値がその現況と整合しているか(+中期的な懸念)。
+   画像を開けない環境では、読んだふりをしない(数値から言える範囲だけを書き、「画像は確認できなかった」と書く)。
+4. **解説 JSON を書く**(`out/commentary.json`。全項目が省略可):
+   ```json
+   {"overview": "総評(1〜3文)",
+    "alert": {"heading": "注意", "body": "最も気をつける点"},
+    "synoptic": {"analysis": [{"tag": "気圧配置", "text": "…"}, {"tag": "衛星", "text": "…"}, {"tag": "整合", "text": "…"}]},
+    "forecast_maps": {"analysis": [{"tag": "+24h", "text": "…"}, {"tag": "+48h", "text": "…"}]},
+    "footer_extra": ["…"]}
+   ```
+5. **変換**:
+   ```powershell
+   ./venv/Scripts/python.exe -X utf8 scripts/render_report.py --data out/<山>.json --synoptic out/synoptic.json --commentary out/commentary.json --out out/<山>.html
+   ```
+   - `--embed-images` で画像も埋め込み、HTML 1ファイルで完結(artifact 公開向け)。
+   - 探索モードは既定で日別タブ7日・日ごと上位15座。`--days 0` で全日、`--top 0` で全座(列は常に全部載る)。
+   - 解説・天気図が無いときは、その旨がページ上に表示される(黙って抜けない)。`fetch_synoptic.py` の `failed` はそのままページに出る。
+   - **必須要素が足りないとエラーで止まる**(メッセージに従う)。
+6. 報告では HTML の場所と、**省略した要素があればその理由**を伝える(AGENTS.md の完了条件)。
+
+### 計画モード(GPX)
+対話式のため `--json-out` は未対応。従来どおり、レポート仕様 JSON を作って `render_report.py <spec.json>` に渡す(見本は `report_examples/plan.json`)。
+`--data` で扱えるのは診断・探索のみ。
+
+### 今の自動化の範囲
+- 診断: スコア表(全日・地形・MSM/ECMWF 区分)、雲海、天候の変わり目、ECMWF 確信度、出典、数値からの自動要約。
+- 探索: 山域サマリー、日別ランキング(全列)、出典。探索モードの山ごとの確信度・雲海・1時間ごとの表は JSON に未収録(テキスト出力で確認する)。
+
+## 手でJSONを書く場合(計画モード・独自構成)
+以降の「情報量チェックリスト」と「JSON の形」は、`--data` を使わず仕様 JSON を直接書くときの規則(`--data` の自動生成もこの規則を満たす)。
+
+## 情報量チェックリスト(従来の Claude 版ページに載っていたもの)
+`id` を付けたブロックは変換時に存在確認される(`omitted` で理由つき省略も可)。
+- **診断モード**: `hero`(今日のスコア・危険信号・風/雲量/視程/雨天割合/体感/降水・翌2日)/ `synoptic`(実況天気図+ひまわり+3観点の解説)/
+  前線の接近(+24h/+48h 予想天気図と解説。MSM範囲の翌日以降に崩れが見えるとき)/ `scores`(14日間表。MSM・ECMWF のタグつき、危険信号は別枠バッジ)/
+  雲海・快晴チャンス・天候の変わり目(スクリプト出力に該当があるとき)/ ECMWF確信度表(2日先以降)/ フッターの出典と注意。
+- **計画モード**: `daycards`(日ごとの判定)/ `alert`(最も厳しい区間)/ `map`(ルート天気マップ)/ `synoptic` / `scores`(地点別、日ごとに `groups`)。
+- **探索モード**: `synoptic`(概況と限界の明記)/ `regions`(山域サマリー)/ `ranking`(日別タブ、確信度つき)/ 稜線の晴れ間 / フッター(MSM範囲・確信度の説明)。
+  - `ranking` の表の列は、スクリプト出力にある項目を**落とさない**: 順位・山(標高)・山域・アクセス・スコア・危険信号・稜線風速・雷CAPE・雲量(較正/生)・視程・雨天割合・体感温度・降水量(全日)・地形、
+    上位候補は確信度。従来の Claude 版は風・CAPE・アクセス・地形を省いていたが、Codex 版にはあった。両方を満たす(=上位互換にする)。
+  - 表が横に長くなるときは、列を省くのではなく `min_width` を広げて横スクロールにする(スマホでも情報を減らさない)。
+  - 日ごとの上位15座に絞り、全山×全日の一覧ダンプにしない(数万pxの縦長ページになり、どこが良い日か分からなくなる)。絞った分は `summary` に「全◯座中、◯座が◯点以上」と書く。
+
+## やること / やらないこと
+- **やる**: データ(表・数値)は実行結果から**そのまま**JSONに写す。解説文(気圧配置・点予報との整合・懸念)は自分で書く。
+- **やらない**: HTML・CSS の直書き、配色やフォントの変更、独自レイアウトの追加。足りない部品があるときは
+  レンダラーに `block_*` を足す提案をユーザーにする(見た目がエージェントごとにずれるため)。
+- 数値は SKILL.md の「出力フォーマット」と同じ意味で載せる(雲量は「較正/生」、危険信号はスコアと別枠)。
+- 天気図・ひまわり画像・GSIタイルを載せるときは、出典表記をフッターに入れる(SKILL.md の各「利用規約」節)。
+- 位置が特定できる計画(GPXの地点・時刻)は、共有する前にユーザーへ確認する。
+
+## モード別の組み立て(見本は `report_examples/` の3ファイル)
+| モード | `mode` | 構成(上から) |
+|---|---|---|
+| 診断モード | `diagnosis` | `hero`(今日のスコア・危険信号・統計6つ・翌2日) → 気圧配置と実況(`images`+`analysis`) → 前線の接近 → 14日間スコア表(`table`) → 雲海/天候の変わり目(`panels`) → 確信度表(`confbar`) |
+| 計画モード | `plan` | `daycards`(日別3枚)+`alert` → ルート天気マップ(`map`) → 前線解説(`images`+`analysis`) → 地点別スコア表(`table` の `groups` で日ごとに区切る) |
+| 探索モード | `explore` | 概況(`analysis`+`images`) → 山域サマリー表 → 日別ランキング(`tabs` の中に `summary`+`table`) → 稜線の晴れ間(`panels`) |
+
+探索モードだけ配色がスレート基調になる(`mode` で自動切替)。
+
+## JSON の形
+最上位: `mode`(必須)、`title`(必須)、`eyebrow`(例「ヤマビヨリ · 診断モード」)、`sub`(文字列の配列)、`blocks`(配列)、`footer`(文字列、または段落の配列)。
+文字列は HTML として解釈されない(自動でエスケープ)。使えるのは `**太字**` だけ。
+
+`blocks` の要素は `type` で決まる:
+
+| type | 主なフィールド |
+|---|---|
+| `section` | `title`, `note`, `content`(以下のブロックの配列) |
+| `hero` | `label`, `score`, `hazard`{`text`,`class`}, `stats`[{`l`,`v`}], `next`[{`d`,`h`,`s`,`class`}] |
+| `daycards` | `cards`[{`class`,`dd`,`dt`,`route`,`verdict`,`detail`}] |
+| `alert` | `heading`, `body` |
+| `note` / `summary` | `text`(黄色の注記 / グレーの要約) |
+| `images` | `items`[{`src`,`alt`,`cap`}] ※天気図・衛星画像。2〜4枚 |
+| `map` | `src`, `alt`, `cap` |
+| `analysis` | `items`[{`tag`,`text`}] ※`tag` は省略可 |
+| `panels` | `panels`[{`title`,`note`,`rows`[{`l`,`v`}] または `items`[文字列]}] |
+| `tabs` | `tabs`[{`label`,`wk`,`heading`,`content`[ブロック]}] |
+| `table` | `columns`[{`key`,`label`,`kind`}], `rows` または `groups`[{`label`,`rows`}], `min_width` |
+
+`class` は `safe` / `caution` / `warning` のいずれか。
+
+### table の列 `kind`
+`text`(既定)、`strong`(太字)、`muted`、`nowrap`、`num`(数字・右側の等幅)、
+`score`(数値。80以上=緑、40以上=黄、未満=赤を自動で付ける。`0.0` のように**小数で書くと小数1桁**、`"100"` のように文字列ならそのまま)、
+`badge`(危険信号。値は `{"text":..., "class":"warning"}`、無ければ `"-"`)、`conf`(確信度ピル。`class` は `high`/`mid`/`low`)、
+`confbar`(`{"text":"81","score":81}` で横棒つき)。
+
+セルの値は文字列・数値、または辞書 `{"text","class","sub"(標高など小さい補足),"tag"(MSM/ECMWFなど),"gold":true(雲海の点)}`。
+探索モードの山域サマリー表は `class` に `sc-good`(95点以上)/`sc-mid`(85〜94)/`sc-poor` を付ける。
+
+## 判断の目安(従来ページの運用)
+- スコア色: 80以上=safe、40以上=caution、未満=warning。
+- 危険信号(雷/強風/低体温症)は**スコアに含めない別枠**として `badge` 列に出す。
+- MSM範囲外(約3日より先)は ECMWF のみで粗い見積もりであることを、`note` か表の注記で書く。
+- 「点予報の数値を置き換えるものではない」旨(天気図・衛星画像は目視の定性的な補足)をフッターに入れる。

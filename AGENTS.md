@@ -18,10 +18,10 @@
    決めず選択肢を示す。実行前に「方法・場所(リポジトリとブランチ)・公開範囲・公開されるファイル」を示し、承認を得る。
 5. **GitHub の設定変更(Pages の有効化など)は、ほかの作業とは別に個別の承認を得る。** **main へは直接 push しない。**
    このリポジトリ(ktakemaru/yamabiyori)の main への反映は Claude Code プラグインのマーケットプレイス公開になるため、PR 経由のみ。
-6. **生成したレポートはローカル(`out/`)に保存し、場所を伝えて終える。**
+6. **生成したレポートはローカル(`out/`)に保存し、場所を伝えて終える。** 人に見せる結果は HTML で出す。HTML は自分で書かず、`skills/yamabiyori/references/report_style.md` の手順(`--json-out` で数値を保存 → 天気図を取得して解説を書く → `scripts/render_report.py --data` で変換)に従う。必須要素の欠落はエラーになる。載せられなかった要素は理由を報告に含める。
 
 ## 最初に読むもの
-- このファイルと README.md の「Codexで試す」「3つのモード」節で足りる。`skills/yamabiyori/SKILL.md`(長い)は**スコア式・閾値・較正に関わる変更をするときだけ**読む。
+- このファイルと README.md の「Codexで試す」「3つのモード」節で足りる。`skills/yamabiyori/SKILL.md`(長い)は**スコア式・閾値・較正に関わる変更をするときだけ**読む。 レポート(HTML)を出すときは `skills/yamabiyori/references/report_style.md`(手順・必須要素)と `weather_map_reading.md` を読む。
 - 版ごとの経緯と数値の根拠は `CHANGELOG.md`。山数・閾値などの**数値はここに書かない。コードと CHANGELOG を正とする**
   (例: `python -X utf8 -c "import mountain_weather_core as c; print(len(c.MOUNTAINS))"`)。
 
@@ -44,8 +44,7 @@ python -m venv venv                       # python が無ければ py -m venv ve
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --list        # 山の番号一覧
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山   # 診断モード(番号でも可)
 ```
-- 引数なしの `mountain_weather_detail.py` は対話式(GPXルート診断もこちら)。エージェントからは `--mountain` を使う。
-- 山の番号はリスト順なので、使う前に `--list` で確認する。2回目以降は `cache/` が効いて速い。
+- 引数なしの `mountain_weather_detail.py` は対話式(GPXルート診断もこちら)。エージェントからは `--mountain` を使う。山の番号はリスト順なので、使う前に `--list` で確認する。2回目以降は `cache/` が効いて速い。
 - **PowerShell では python の出力を `>`・`|`・`$x = ...` で受けない。** Windows PowerShell 5.1 では日本語が化け、`>` の
   ファイルは UTF-16 になる。`| Select-Object -First` は途中でプロセスを止め終了コードも壊す。コマンドはそのまま実行して出力を読む。
   長い出力は `--out out/ファイル名`(UTF-8 BOM付きで保存、画面には1行だけ)で残す。`out/` は gitignore 済み。別の場所に保存したファイルはコミットしない。
