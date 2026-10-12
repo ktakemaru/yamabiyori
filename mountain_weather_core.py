@@ -1419,8 +1419,12 @@ HIMAWARI_IMG_TYPES = {
 
 
 def himawari_latest_basetime(area: str = "jp") -> str:
-    """Most recent basetime (JST, "YYYYMMDDHHMMSS") with imagery available
-    for `area` ("jp" updates every ~2.5-10 minutes). No persistent cache
+    """Most recent basetime (UTC, "YYYYMMDDHHMMSS" -- NOT JST; measured
+    2026-10-12, see CHANGELOG) with imagery available for `area` ("jp"
+    updates every ~2.5-10 minutes). Add 9 hours to show it in JST. It is
+    only ever used as a string (URL / filename), never parsed as a time,
+    and the lexicographic max() is correct for fixed-width digits in any
+    timezone. No persistent cache
     (mirrors fetch_jma_weather_map()'s own no-cache stance) -- call
     sparingly, not in a loop; a caller doing several fetches for the same
     moment should call this once and pass the result as basetime= to
@@ -1476,8 +1480,10 @@ def fetch_himawari_image(lat: float, lon: float, imgtype: str = "ir", basetime: 
     mountain_weather_detail.py -- not part of this project's core
     `pip install requests` dependency; see SKILL.md).
 
-    Returns {"path": saved JPEG path, "basetime": the JST
-    "YYYYMMDDHHMMSS" actually used, "attribution": HIMAWARI_ATTRIBUTION}
+    Returns {"path": saved JPEG path, "basetime": the UTC (not JST)
+    "YYYYMMDDHHMMSS" actually used -- also the <basetime> in the default
+    filename himawari_<imgtype>_<basetime>.jpg, so that name is UTC too --
+    "attribution": HIMAWARI_ATTRIBUTION}
     -- keep that attribution string alongside the image wherever it's
     shown/shared (see banner comment's 利用規約 note)."""
     from PIL import Image, ImageDraw

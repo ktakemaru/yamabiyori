@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- 2026-10-12: **ひまわり画像の `basetime` のタイムゾーン表記を JST → UTC に訂正(文書・docstring のみ。コード・定数・スコア・テストの動作は不変)**。対象: `mountain_weather_core.py` の `himawari_latest_basetime()`/`fetch_himawari_image()` の docstring、SKILL.md「気象衛星ひまわり画像取得機能」節(URL形式の説明・ファイル名 `himawari_<imgtype>_<basetime>.jpg` の注記・人間向け表示は9時間足してJSTに直す旨の一文)。理由: 姉妹プロジェクト hoshibiyori のスモークテスト(2026-10-12)の実測で、`targetTimes_jp.json` の最新 basetime が `20261012004000` のとき実行時点は 2026-10-12 00:47:12 UTC(09:47 JST、サーバー Date ヘッダー 00:47:13 GMT)で、UTC と読むと7.2分前・JST と読むと約9時間前になり UTC だけが該当した。出典(リポジトリ外の資料): `hoshibiyori-archive/phase2-review/` の `timezone_evidence.md` と `smoke_result.json`。コード内の basetime は URL とファイル名に使う文字列と `max()` の文字列比較だけで、時刻として変換・比較する箇所は無いため動作への影響は無い。
 - 2026-09-25: c734220(Codex が PR を経ずに main へ push した `docs/weekend_forecast.html`)を `git revert` で取り消し、AGENTS.md の完了条件に「公開・共有を頼まれたとき」の4〜6を追加(HTML ファイルを直接送る方法を先に案内し、公開URLは選択肢を示す/実行前に方法・場所(リポジトリとブランチ)・公開範囲・公開されるファイルを示して承認を得る/GitHub の設定変更は個別に承認を得る/main へは直接 push せず PR 経由のみ/レポートは `out/` に保存)。100行に収めるため既存の記述を意味を変えずに短縮(完了条件1〜3の文言は不変)。理由: 公開URLでの共有を頼んだところ、方法と場所の確認なしに main(= Claude Code プラグインのマーケットプレイス公開)へ直接 push され、GitHub Pages も有効化されていたため。Pages の設定自体はこの変更では戻していない(作者が手動で無効化する)。文書のみの変更(コードの変更なし)。
 - 2026-09-24: CLAUDE.md に「単発の分析(`sw_*.py` のような検証スクリプト)は、入力に使う `cache/`・`screenshots/` のファイルを分析開始時にリポジトリの外の日付付きフォルダ(例: `../yamabiyori-archive/<分析名>-<日付>/`)へコピーしてから使う」を追加。理由: シルバーウィーク分析(2026-09-19、worktree -r8)の退避時に、「今回」の予報の元データ(`cache/*_15d.json`)が 9/21 の実行で TTL により上書きされていて、分析を再現できなくなっていたため。文書のみの変更(コードの変更なし)。
 

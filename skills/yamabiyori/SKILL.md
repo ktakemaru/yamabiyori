@@ -337,9 +337,9 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 - **仕組み**: 気象庁の統合地図ページは天気図スクリーンショット機能(`fetch_jma_weather_map()`)と違い、ひまわり画像を**固定URLの静的タイル画像**として配信している(`<canvas>`描画ではなくLeafletの通常のタイルレイヤー)。そのため素の`requests.get()`で直接取得できる。ただし2点、ページのUI表示だけでは分からない実装詳細があり、2026-09にブラウザのDevTools Network tabで実際の通信を確認して初めて判明した:
   1. **ドロップダウンの表示コードとタイルURLの内部コードは別物**。UIの`elem=ir`(URLハッシュのクエリ)がそのままタイルパスに使われるわけではなく、`ir`→`B13/TBB`、`strengthen`→`SND/ETC`という別の内部パスコードに変換されている。ここを素直に`elem`の値のまま組み立てると404になる(実際に試して確認済み)。
   2. **日本域("jp")タイルはズーム固定(z=6)**。ページ自身のタイルレイヤー設定で`minZoom=maxZoom=6`に固定されており、地図をどれだけズームしても同じz=6のタイルが使い回される(全球版"fd"は別のズーム範囲を使うが、今回は日本域のみ対応のため未実装)。z=6の1タイルは経度換算で約5.6度四方 — 山頂ピンポイントというよりは「この山の周辺に本当に雲があるか」を確認する広域的な粒度である。
-  - URL形式: `https://www.jma.go.jp/bosai/himawari/data/satimg/{basetime}/jp/{basetime}/{内部パスコード}/6/{x}/{y}.jpg`(`basetime`はJST「YYYYMMDDHHMMSS」形式、`targetTimes_jp.json`から取得)。
+  - URL形式: `https://www.jma.go.jp/bosai/himawari/data/satimg/{basetime}/jp/{basetime}/{内部パスコード}/6/{x}/{y}.jpg`(`basetime`は**UTC**「YYYYMMDDHHMMSS」形式(JSTではない。2026-10-12実測、CHANGELOG参照)、`targetTimes_jp.json`から取得)。**人間向けの回答で撮影時刻を示すときは、basetimeに9時間足してJSTに直して書くこと**(例: `20261012004000` = 2026-10-12 09:40 JST)。
 - **タイル座標**: `latlon_to_tile_xy(lat, lon)` が緯度経度から標準Web Mercatorのスリッピータイル座標(x, y)を計算(Leaflet/OSM/JMA自身の地図と同じ方式)。`fetch_himawari_image()`は対象地点を中心に3x3タイル取得し、モザイク画像内の正確なピクセル位置に赤い丸印を重ねて場所を明示する。
-- **保存先・ファイル名**: `screenshots/himawari_<imgtype>_<basetime>.jpg`(`fetch_jma_weather_map()`と同じ`screenshots/`ディレクトリを共用)。
+- **保存先・ファイル名**: `screenshots/himawari_<imgtype>_<basetime>.jpg`(ファイル名の`<basetime>`もUTC。`fetch_jma_weather_map()`と同じ`screenshots/`ディレクトリを共用)。
 - **利用規約**: `fetch_jma_weather_map()`と同じ「公共データ利用規約(第1.0版)」の扱い(前セクション参照) — **出典表記が必要**(戻り値の`attribution`キー、`HIMAWARI_ATTRIBUTION`定数 = 「出典:気象庁ホームページ (https://www.jma.go.jp/bosai/map.html)」をそのまま画像と一緒に提示すること)。気象業務法第17条・第23条により、これを元にした独自予報・警報を気象庁発表であるかのように見せる利用は禁止(ヤマビヨリの通常利用の範囲では問題にならない想定)。
 - **運用ルール(節度を持ったアクセス)**: `fetch_jma_weather_map()`と同じ判断で、持続的なディスクキャッシュは持たせていない。**1回の診断につき1回程度の取得にとどめ、ループ処理や短時間の連続呼び出しはしないこと**。
 - **`main()`には未接続**(手動呼び出し用途)。診断モードで使う場合は、次節「診断モードの標準フロー」の天気図読解と同じ判断基準(判断に迷うスコア域・ユーザーの明示的な要求など)で、`fetch_jma_weather_map()`と合わせて/代わりに呼び出すことを想定(状況に応じてどちらか一方でも両方でもよい — 天気図は広域の気圧配置、ひまわり画像はその地点の実際の雲の有無、という補完関係)。
