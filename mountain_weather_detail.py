@@ -2664,6 +2664,34 @@ def resolve_mountain(query: str):
     return (partial[0][1], []) if len(partial) == 1 else (None, partial)
 
 
+# 登録外の山を診断する引数(--name/--lat/--lon/--elevation)。日本の範囲外は座標の取り違え(緯度と経度の入れ替えなど)を疑う。
+CUSTOM_LAT_RANGE = (24.0, 46.0)
+CUSTOM_LON_RANGE = (122.0, 154.0)
+CUSTOM_ELEVATION_RANGE = (100, 4000)
+
+
+def custom_mountain_from_args(args):
+    """--name/--lat/--lon/--elevation から MOUNTAINS 外の山の dict を作る。
+    戻り値 (山 or None, エラー文 or None)。4つ揃っていないとき・範囲外・登録済みの山名と同じときはエラー。
+    地形データ(terrain_profiles.json)は登録山の分だけなので、登録外の山には地形風の表示が付かない。"""
+    given = {"--name": args.name, "--lat": args.lat, "--lon": args.lon, "--elevation": args.elevation}
+    missing = [k for k, v in given.items() if v is None]
+    if missing:
+        return None, f"登録外の山を指定するには --name・--lat・--lon・--elevation をすべて指定してください(不足: {' '.join(missing)})。"
+    name = args.name.strip()
+    if not name:
+        return None, "--name が空です。"
+    registered = [m for m in MOUNTAINS if m["name"] == name]
+    if registered:
+        return None, f"「{name}」は登録済みの山です。--mountain {name} で指定してください(登録済みは地形データも使われます)。"
+    for label, value, (lo, hi) in (("--lat", args.lat, CUSTOM_LAT_RANGE), ("--lon", args.lon, CUSTOM_LON_RANGE),
+                                   ("--elevation", args.elevation, CUSTOM_ELEVATION_RANGE)):
+        if not lo <= value <= hi:
+            return None, f"{label} {value} は範囲外です({lo}〜{hi})。緯度と経度を取り違えていないか確認してください。"
+    return {"name": name, "lat": args.lat, "lon": args.lon, "elevation_m": int(round(args.elevation)),
+            "access": "指定", "region": "登録外"}, None
+
+
 def report_cells(r) -> dict:
     """画面の表と同じ整形済みの文字列(--json-out 用。表示用の関数をそのまま使う)。"""
     return {
@@ -2837,10 +2865,15 @@ def parse_args(argv=None):
     parser.add_argument("--list", action="store_true", help="山の番号一覧を表示して終了する")
     parser.add_argument("--mountain", metavar="番号|山名",
                         help="山を指定して非対話で診断する(例: --mountain 12 / --mountain 富士山)")
+    parser.add_argument("--name", metavar="山名",
+                        help="登録外の山を診断する: 山名(--lat・--lon・--elevation と4つ一緒に指定。--mountain とは併用不可)")
+    parser.add_argument("--lat", type=float, metavar="緯度", help="登録外の山の緯度(十進法。例: 38.9609)")
+    parser.add_argument("--lon", type=float, metavar="経度", help="登録外の山の経度(十進法。例: 140.7884)")
+    parser.add_argument("--elevation", type=float, metavar="標高m", help="登録外の山の標高(m。例: 1626)")
     parser.add_argument("--out", metavar="ファイル",
-                        help="出力を UTF-8(BOM付き)でファイルに保存する。--mountain / --list と一緒にだけ使える")
+                        help="出力を UTF-8(BOM付き)でファイルに保存する。--mountain / --list / --name と一緒にだけ使える")
     parser.add_argument("--json-out", metavar="ファイル",
-                        help="画面に出す表と同じ数値を、列も行も省かずに JSON で保存する(レポートHTML用。--mountain と一緒にだけ使える)")
+                        help="画面に出す表と同じ数値を、列も行も省かずに JSON で保存する(レポートHTML用。--mountain / --name と一緒にだけ使える)")
     return parser.parse_args(argv)
 
 
@@ -2848,20 +2881,33 @@ def main(argv=None) -> int:
     """Exit code: 0 = done, 2 = bad arguments (unknown/ambiguous --mountain, --out without
     --mountain/--list) or the forecast fetch failed."""
     args = parse_args(argv)
-    if args.json_out and args.mountain is None:
-        print("--json-out は --mountain と一緒に使ってください(対話モード・--list では使えません)。")
+    custom_given = any(v is not None for v in (args.name, args.lat, args.lon, args.elevation))
+    if custom_given and (args.mountain is not None or args.list):
+        print("--name・--lat・--lon・--elevation(登録外の山)は --mountain・--list と一緒に使えません。")
         return 2
-    if args.out and not (args.list or args.mountain is not None):
+    custom_mtn = None
+    if custom_given:
+        custom_mtn, error = custom_mountain_from_args(args)
+        if error:
+            print(error)
+            return 2
+    if args.json_out and args.mountain is None and custom_mtn is None:
+        print("--json-out は --mountain か --name と一緒に使ってください(対話モード・--list では使えません)。")
+        return 2
+    if args.out and not (args.list or args.mountain is not None or custom_mtn is not None):
         # 対話モード(引数なし・GPX)では input() のプロンプトがファイル側に行き、止まって見えるため受け付けない
-        print("--out は --mountain か --list と一緒に使ってください(対話モードでは使えません)。")
+        print("--out は --mountain・--name・--list のどれかと一緒に使ってください(対話モードでは使えません)。")
         return 2
     if args.list:
         def show_list():
             print_mountain_list()
             return 0
         return run_with_output_file(args.out, show_list) if args.out else show_list()
-    if args.mountain is not None:
-        mtn, candidates = resolve_mountain(args.mountain)
+    if args.mountain is not None or custom_mtn is not None:
+        if custom_mtn is not None:
+            mtn, candidates = custom_mtn, []
+        else:
+            mtn, candidates = resolve_mountain(args.mountain)
         if mtn is None:
             if candidates:
                 print(f"「{args.mountain}」に当てはまる山が複数あります。番号か正確な山名で指定してください:")
@@ -2871,10 +2917,13 @@ def main(argv=None) -> int:
                 print(f"「{args.mountain}」に当てはまる山がありません(番号は1-{len(MOUNTAINS)}。--list で一覧を表示)。")
             return 2
         report = {} if args.json_out else None
-        if args.out:
-            code = run_with_output_file(args.out, lambda: main_single_mountain(mtn, report))
-        else:
-            code = main_single_mountain(mtn, report)
+
+        def run_single():
+            if custom_mtn is not None:
+                print(f"※登録外の山として診断します(指定値: 緯度{mtn['lat']} 経度{mtn['lon']} 標高{mtn['elevation_m']}m)。"
+                      "地形(風上/風下)のデータはありません。座標・標高が山頂からずれていると標高補間の値もずれます。")
+            return main_single_mountain(mtn, report)
+        code = run_with_output_file(args.out, run_single) if args.out else run_single()
         if code == 0 and args.json_out:
             return write_report_json(args.json_out, report)
         return code

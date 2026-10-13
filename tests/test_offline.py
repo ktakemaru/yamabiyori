@@ -140,6 +140,44 @@ class TestDetailCli(unittest.TestCase):
         self.assertIn("取得に失敗しました", out)
 
 
+class TestDetailCustomMountain(unittest.TestCase):
+    """診断モードの登録外の山の引数 (--name/--lat/--lon/--elevation)。ネットワークには出ない。"""
+    ARGS = ["--name", "テスト山", "--lat", "38.9", "--lon", "140.7", "--elevation", "1600"]
+
+    def test_missing_arguments_exit_2(self):
+        code, out = run_quietly(detail.main, ["--name", "テスト山", "--lat", "38.9"])
+        self.assertEqual(code, 2)
+        self.assertIn("--lon", out)
+        self.assertIn("--elevation", out)
+
+    def test_registered_name_is_rejected(self):
+        code, out = run_quietly(detail.main, ["--name", core.MOUNTAINS[0]["name"], "--lat", "36", "--lon", "138", "--elevation", "2000"])
+        self.assertEqual(code, 2)
+        self.assertIn("登録済み", out)
+
+    def test_swapped_lat_lon_exits_2(self):
+        code, out = run_quietly(detail.main, ["--name", "テスト山", "--lat", "140.7", "--lon", "38.9", "--elevation", "1600"])
+        self.assertEqual(code, 2)
+        self.assertIn("範囲外", out)
+
+    def test_cannot_combine_with_mountain_or_list(self):
+        self.assertEqual(run_quietly(detail.main, ["--mountain", "1"] + self.ARGS)[0], 2)
+        self.assertEqual(run_quietly(detail.main, ["--list"] + self.ARGS)[0], 2)
+
+    def test_runs_with_unregistered_mountain_and_no_terrain(self):
+        with mock.patch.object(detail, "fetch_forecast", side_effect=requests.exceptions.ConnectionError("offline")) as fetch:
+            code, out = run_quietly(detail.main, self.ARGS)
+        self.assertEqual(code, 2)   # 取得失敗(オフライン)。ここでは引数が通って取得まで進むことを見る
+        self.assertIn("登録外の山として診断します", out)
+        kwargs = fetch.call_args.kwargs
+        self.assertIsNone(kwargs["terrain_profile"])
+        self.assertEqual((fetch.call_args.args[0], fetch.call_args.args[1]), (38.9, 140.7))
+
+    def test_default_behavior_unchanged(self):
+        # 新しい引数を付けないときの --mountain の解決は従来どおり
+        self.assertIs(detail.resolve_mountain("1")[0], core.MOUNTAINS[0])
+
+
 class TestMvpCli(unittest.TestCase):
     """探索モードの山の選別 (--region / --limit)。ネットワークには出ない。"""
 
