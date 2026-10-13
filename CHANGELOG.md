@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- 2026-10-14: **README の3モードの節に、レポートの画像(`assets/mode_explore.png`・`mode_diagnosis.png`・`mode_gpx.png`)を載せた(文書のみ。コード・スコア・テストの動作は不変。版番号は上げていない)**。従来のテキスト出力の例は `<details>` に折りたたんで残した。理由: GitHub のトップで3モードの表示がテキストだけで、実際のレポートの見た目が伝わらなかったため。
+
 ## v1.8.0 — 2026-10-14
 
 - 2026-10-14: **バージョンを 1.7.0 → 1.8.0 に上げた(マイナー)**。理由: 解説つき HTML レポート出力(`--json-out`・`scripts/render_report.py`・`report_baseline.py`・`fetch_synoptic.py`)と、日付指定(`dates`)・おすすめ表(`picks`/`avoid`)・時間別表、山をすすめる指針 `recommend_guide.md` が加わり、利用者が使える機能が増えたため。スコア・較正・閾値・既定の動作は v1.7.0 と同じ(予報の数字は変わらない)。以下の v1.7.0 以降の記録をこの版に含める。
