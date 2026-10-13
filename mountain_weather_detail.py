@@ -2470,6 +2470,9 @@ def compute_ensemble_confidence_by_day(lat: float, lon: float, cloud_var: str, t
         temp_vals = [hourly[m][idx] for m in temp_members if m in hourly and hourly[m][idx] is not None]
         precip_vals = [hourly[m][idx] for m in precip_members if m in hourly and hourly[m][idx] is not None]
 
+        if not (cloud_vals or temp_vals or precip_vals):
+            continue    # アンサンブルの予報範囲外(全メンバーが空)の時間は数えない。数えると確信度0になる
+
         cloud_std = statistics.pstdev(cloud_vals) if len(cloud_vals) >= 2 else None
         wet_fraction = (
             sum(1 for v in precip_vals if v >= ENSEMBLE_PRECIP_WET_THRESHOLD_MM) / len(precip_vals)
@@ -2669,6 +2672,34 @@ def report_cells(r) -> dict:
     }
 
 
+def hourly_report_rows(mtn: dict, rows: list) -> dict:
+    """時間別の降水確率・雲量・風(--json-out 用。print_hourly_table と同じ値・同じ整形。計算はしない)。"""
+    summit_label = f"山頂{mtn['elevation_m']}m"
+    labels = {
+        "precip": "降水確率%(地上)", "precip_mm": "降水量mm/h", "cloud": "雲量地上%",
+        "cloud_1000m": f"雲量{band_altitude_label(1000)}%", "cloud_2000m": f"雲量{band_altitude_label(2000)}%",
+        "cloud_3000m": f"雲量{band_altitude_label(3000)}%", "cloud_summit": f"雲量{summit_label}%",
+        "wind10": "風地上", "wind_1000m": f"風{band_altitude_label(1000)}", "wind_2000m": f"風{band_altitude_label(2000)}",
+        "wind_3000m": f"風{band_altitude_label(3000)}", "wind_summit": f"風{summit_label}",
+        "upslope": "地形風(山頂/稜線帯下端)",
+    }
+    out = []
+    for r in rows:
+        out.append({
+            "date": r["date"], "label": format_date_with_weekday(r["date"]), "time": r["time"],
+            "precip": fmt(r["precip"]), "precip_mm": fmt(r["precip_mm"]), "cloud": fmt(r["cloud"]), "cloud_1000m": fmt(r["cloud_1000m"]),
+            "cloud_2000m": fmt(r["cloud_2000m"]), "cloud_3000m": fmt(r["cloud_3000m"]),
+            "cloud_summit": fmt(r["cloud_summit"]),
+            "wind10": wind_band_cell(r["wind10_speed_kmh"], r["wind10_dir"]),
+            "wind_1000m": wind_band_cell(r["wind_speed_1000m_kmh"], r["wind_dir_1000m"]),
+            "wind_2000m": wind_band_cell(r["wind_speed_2000m_kmh"], r["wind_dir_2000m"]),
+            "wind_3000m": wind_band_cell(r["wind_speed_3000m_kmh"], r["wind_dir_3000m"]),
+            "wind_summit": wind_band_cell(r["wind_speed"], r["wind_dir"]),
+            "upslope": upslope_cell(r.get("upslope"), r.get("upslope_base")),
+        })
+    return {"labels": labels, "rows": out}
+
+
 def build_report_data(mtn: dict, day_scores: dict, opportunities: list, rows: list,
                       confidence_by_day, confidence_error) -> dict:
     """診断モードの結果を --json-out 用の dict にまとめる(画面に出した各節と同じ内容。計算はしない)。"""
@@ -2710,6 +2741,7 @@ def build_report_data(mtn: dict, day_scores: dict, opportunities: list, rows: li
         "cloud_sea": [dict(o, label=format_date_with_weekday(o["date"])) for o in opportunities],
         "transitions": transitions,
         "confidence": confidence, "confidence_error": confidence_error,
+        "hourly": hourly_report_rows(mtn, rows),
     }
 
 

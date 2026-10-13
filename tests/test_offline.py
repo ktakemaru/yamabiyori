@@ -207,6 +207,24 @@ class TestOutFile(unittest.TestCase):
         self.assertFalse(os.path.exists(self.path))
         self.assertIn("--limit", screen)
 
+class TestEnsembleConfidenceGap(unittest.TestCase):
+    def test_hours_without_member_data_are_skipped(self):
+        """アンサンブルの全メンバーが空の日は確信度0にせず、結果に含めない。"""
+        from datetime import date, timedelta
+        d_ok, d_gap = date.today() + timedelta(days=3), date.today() + timedelta(days=4)
+        times = [f"{d.isoformat()}T{h:02d}:00" for d in (d_ok, d_gap) for h in range(24)]
+        hourly = {"time": times}
+        for i in range(1, detail.ENSEMBLE_MEMBER_COUNT + 1):
+            for var in ("cloud_x", "temp_x", "precipitation"):
+                hourly[f"{var}_member{i:02d}"] = [
+                    (10.0 + i % 5 if var != "precipitation" else 0.0) if t.startswith(d_ok.isoformat()) else None
+                    for t in times]
+        sunrise = {d.isoformat(): f"{d.isoformat()}T05:30" for d in (d_ok, d_gap)}
+        with mock.patch.object(detail, "fetch_ensemble", return_value={"hourly": hourly}):
+            result = detail.compute_ensemble_confidence_by_day(35.0, 137.0, "cloud_x", "temp_x", sunrise)
+        self.assertIn(d_ok.isoformat(), result)
+        self.assertNotIn(d_gap.isoformat(), result)
+
 
 if __name__ == "__main__":
     unittest.main()

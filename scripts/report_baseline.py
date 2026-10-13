@@ -9,6 +9,12 @@ commentary.json(すべて省略可):
    "synoptic": {"title": "...", "note": "...", "analysis": [{"tag": "気圧配置", "text": "..."}]},
    "forecast_maps": {"analysis": [{"tag": "+24h", "text": "..."}]},
    "footer_extra": ["..."], "dates": ["2026-10-17", "2026-10-18"]}
+  picks: ["天上山(カチカチ山)", "霧ヶ峰(車山)"] — 探索モードで、おすすめの山の日ごとの数値表を先頭(総評の次)に出す(山名は数値データの山に一意に当たる名前。
+         標高や括弧の補足は省略可)。表の数値は自動で入る。picks を指定すると、日別タブの要約から「上位: …」の列挙を外す(おすすめと食い違わないように)。
+         picks_title: 表の見出し。avoid: ["美ヶ原", ...] — 避ける山の表(同じ列)。avoid_title: その見出し。
+  dates: 出す日だけに絞る(「今週末」なら土日の2日)。診断モードでは先頭の大きなカード・表・確信度などがその日だけになり、
+         1〜2日なら時間ごとの降水確率・雲量・風の表も載る(日帰り・1泊2日の計画向け)。
+         探索モードでは日別タブと山域サマリーがその日だけになる。省略時は従来どおり(診断=全日、探索=今日から7日)。
 synoptic.json(scripts/fetch_synoptic.py の出力): 天気図・ひまわり画像の保存先と、取得に失敗したものの理由。
 """
 import re
@@ -122,13 +128,15 @@ def forecast_maps_section(cm, fc_images):
 
 
 # ----------------------------------------------------------------------------- フッター
-def footer(data, attributions, has_analysis, extra, kind):
+def footer(data, attributions, has_analysis, extra, kind, msm_only=False):
     p = ["データ出典: Open-Meteo(気象庁MSM+ECMWF IFS 0.25、山頂標高へジオポテンシャル高度で補間)。"
          "他社の登山天気予報サービスは参照していません。スコアは雲量・視程・降水(活動時間中の雨天割合)の重み付き幾何平均。"
          "危険信号(雷/強風/低体温症)はスコアに含まれない別枠評価です。降水タイミングは直前の再確認を推奨します。"]
     if kind == "explore":
         p.append("MSM範囲外(約3日より先)の雨天割合・降水量はECMWF降水確率の期待値ベースの粗い見積もりです。"
                  "ランキング表の危険信号は一括計算のため、個別診断(診断モード)より見逃しが起きやすいです。有望な山ほど、行く前に診断モードで個別に確認してください。")
+    elif msm_only:
+        p.append("このページの日は気象庁MSM(約3日先まで)の範囲内です。ECMWFアンサンブル確信度は参考値で、スコアには含まれません。")
     else:
         p.append("9日目以降などMSM範囲外はECMWFのみの粗い見積もりです。ECMWFアンサンブル確信度は参考値で、スコアには含まれません。")
     if data.get("terrain_attribution"):
@@ -146,6 +154,11 @@ def footer(data, attributions, has_analysis, extra, kind):
 # ----------------------------------------------------------------------------- 診断モード
 def auto_summary_diagnosis(days):
     """数値だけから言える事実を並べた要約(気象の解釈は書かない)。"""
+    if len(days) == 1:      # 1日だけ(日付を指定したとき): 「1日間で最も…」ではなく、その日の事実だけ
+        d = days[0]
+        hz = d["cells"]["hazard"] if d["hazard_class"] != "none" else HAZARD_PLAIN
+        src = "気象庁MSM+ECMWF" if d.get("model") == "MSM" else "ECMWFのみの粗い見積もり"
+        return f"{md(d['label'])}のスコアは **{score_text(d['score'])}点** です(危険信号はスコアとは別枠: {hz})。予報は{src}です。"
     best = max(days, key=lambda d: d["score"])
     good = [md(d["label"]) for d in days if d["score"] >= 80]
     bad = [md(d["label"]) for d in days if d["score"] < 40]
@@ -166,28 +179,71 @@ def diagnosis_spec(data, cm, syn):
     m, days = data["mountain"], data["days"]
     if not days:
         raise ValueError("data に days がありません")
+    first_of_data = days[0]
+    if cm.get("dates"):
+        wanted = set(cm["dates"])
+        days = [d for d in days if d["date"] in wanted]
+        if not days:
+            raise ValueError(f"commentary の dates {sorted(wanted)} に当たる日が data にありません")
+    labels = {d["label"] for d in days} if cm.get("dates") else None
     now_images, fc_images, attributions, failed_text = synoptic_images(syn)
+    def stats_of(t):
+        return [
+            {"l": "稜線風速", "v": num(t["ridge_wind_ms"], " m/s")},
+            {"l": "稜線雲量(較正/生)", "v": t["cells"]["cloud"] + "%"},
+            {"l": "視程", "v": num(t["ridge_visibility"], " m", thousands=True)},
+            {"l": "雨天割合", "v": re.sub(r"^([\d.]+)", r"\1%", t["cells"]["wet"])},
+            {"l": "体感温度", "v": num(t["chill"], "℃")},
+            {"l": "全日降水", "v": num(t["day_total_precip_mm"], " mm")},
+            {"l": "雷CAPE", "v": num(t["cape"], digits=0)},
+            {"l": "地形", "v": t["cells"]["terrain"]},
+        ]
+
+    def hazard_text(t):
+        return t["cells"]["hazard"] if t["hazard_class"] != "none" else HAZARD_PLAIN
+
     t = days[0]
-    stats = [
-        {"l": "稜線風速", "v": num(t["ridge_wind_ms"], " m/s")},
-        {"l": "稜線雲量(較正/生)", "v": t["cells"]["cloud"] + "%"},
-        {"l": "視程", "v": num(t["ridge_visibility"], " m", thousands=True)},
-        {"l": "雨天割合", "v": t["cells"]["wet"] + "%"},
-        {"l": "体感温度", "v": num(t["chill"], "℃")},
-        {"l": "全日降水", "v": num(t["day_total_precip_mm"], " mm")},
-        {"l": "雷CAPE", "v": num(t["cape"], digits=0)},
-        {"l": "地形", "v": t["cells"]["terrain"]},
-    ]
-    hero = {
-        "type": "hero", "id": "hero",
-        "label": f"今日 {md(t['label'])} — 稜線帯滞在の総合スコア", "score": score_text(t["score"]),
-        "hazard": ({"class": t["hazard_class"], "text": t["cells"]["hazard"]} if t["hazard_class"] != "none"
-                   else {"class": "safe", "text": HAZARD_PLAIN}),
-        "stats": stats,
-        "next": [{"d": md(d["label"]), "s": score_text(d["score"]), "class": level_of(d["score"]),
-                  "h": f"雨天割合{d['cells']['wet'].split('(')[0]}%・" + (d["cells"]["hazard"] if d["hazard_class"] != "none" else HAZARD_PLAIN)}
-                 for d in days[1:3]],
-    }
+    conf_by_label = {c["label"]: c for c in data.get("confidence") or []}
+
+    def day_panel(d):
+        rows = [{"l": "危険信号", "v": hazard_text(d)}] + [{"l": x["l"], "v": x["v"]} for x in stats_of(d)]
+        c = conf_by_label.get(d["label"])
+        if c:
+            rows.append({"l": "確信度(参考)", "v": f"{c['confidence']:.0f}(雲量/降水/気温 {c['cloud']:.0f}/{c['precip']:.0f}/{c['temp']:.0f})"})
+        title = f"{md(d['label'])} — 総合スコア **{score_text(d['score'])}** / 100"
+        return {"title": title, "rows": rows}
+
+    if cm.get("dates") and len(days) > 1:
+        # 日付を指定した(週末など)ときは、先頭を「今日+翌2日の要約」ではなく、指定した各日を同じ項目で並べる
+        hero = {"type": "section", "id": "hero", "title": "指定日の見込み",
+                "content": [{"type": "panels", "panels": [day_panel(d) for d in days]}]}
+    elif not cm.get("dates") and cm.get("hero") != "today" and len(days) > 1:
+        # 日付の指定が無いときは「いつ行くか」を選ぶ質問なので、先頭を今日ではなく、スコアの高い日の候補にする
+        # (今日の様子を聞かれたときは commentary に "hero": "today" を入れる)
+        gen = (data.get("generated") or "")[:10]
+        future = [d for d in days if d["date"] > gen] or days    # 今日(生成日)はもう行けないので、明日以降から選ぶ
+        best = sorted(future, key=lambda d: (-d["score"], d["date"]))[:3]
+        hero = {"type": "section", "id": "hero", "title": "行く日の候補(スコアの高い3日)",
+                "note": f"明日以降の{len(future)}日間のうち、スコアの高い順です。危険信号はスコアとは別枠なので、各日の危険信号も確かめてください。",
+                "content": [{"type": "panels", "panels": [day_panel(d) for d in best]}]}
+    else:
+        if cm.get("dates") and len(days) == 1:
+            # 1日だけ指定: 右側は、その日の次の2日(日程を変えるときの目安)にする(空白にしない)
+            full = data["days"]
+            at = next(i for i, x in enumerate(full) if x["date"] == t["date"])
+            next_days = full[at + 1:at + 3]
+        else:
+            next_days = days[1:3]
+        hero = {
+            "type": "hero", "id": "hero",
+            "label": f"{'今日 ' if t is first_of_data else ''}{md(t['label'])} — 稜線帯滞在の総合スコア", "score": score_text(t["score"]),
+            "hazard": ({"class": t["hazard_class"], "text": t["cells"]["hazard"]} if t["hazard_class"] != "none"
+                       else {"class": "safe", "text": HAZARD_PLAIN}),
+            "stats": stats_of(t),
+            "next": [{"d": md(d["label"]), "s": score_text(d["score"]), "class": level_of(d["score"]),
+                      "h": f"雨天割合{d['cells']['wet'].split('(')[0]}%・" + hazard_text(d)}
+                     for d in next_days],
+        }
     blocks = [hero, {"type": "summary", "text": auto_summary_diagnosis(days)}]
     if cm.get("overview"):
         blocks.append({"type": "analysis", "items": [{"tag": "総評", "text": cm["overview"]}]})
@@ -200,8 +256,9 @@ def diagnosis_spec(data, cm, syn):
     if fm:
         blocks.append(fm)
 
-    msm_n = sum(1 for d in days if d.get("model") == "MSM")
-    note = (f"{md(days[0]['label'])}〜{md(days[msm_n - 1]['label'])}は気象庁MSM+ECMWF決定論のマージ(実測に近い)、それ以降はECMWF決定論のみ(ECMWFタグ)。"
+    msm_days = [d for d in days if d.get("model") == "MSM"]
+    msm_n = len(msm_days)
+    note = (f"{md(msm_days[0]['label'])}〜{md(msm_days[-1]['label'])}は気象庁MSM+ECMWF決定論のマージ(実測に近い)、それ以降はECMWF決定論のみ(ECMWFタグ)。"
             if 0 < msm_n < len(days) else "ECMWF決定論のみの見積もり。")
     if data.get("precip_timing_note"):
         note += " " + data["precip_timing_note"]
@@ -228,24 +285,61 @@ def diagnosis_spec(data, cm, syn):
     blocks.append({"type": "section", "id": "scores", "title": f"{len(days)}日間の登山向けスコア", "note": note,
                    "content": [{"type": "table", "min_width": 1000, "columns": sized(cols), "rows": rows}]})
 
+    if cm.get("dates") and len(days) <= 2:
+        # 山と日が決まっている(日帰り・1泊2日)ときは、時間ごとの降水確率・雲量・風を載せる
+        hourly = data.get("hourly")
+        hrows = [h for h in (hourly or {}).get("rows", []) if h["date"] in {d["date"] for d in days}]
+        if not hrows:
+            blocks.append({"type": "note", "text": "時間ごとの降水確率・雲量・風は、この数値データに含まれていません(診断モードを `--json-out` 付きで実行し直してください)。"})
+        else:
+            lb = hourly["labels"]
+            keys = ["precip"] + (["precip_mm"] if "precip_mm" in lb else []) + ["cloud", "cloud_summit", "cloud_1000m", "cloud_2000m", "cloud_3000m",
+                    "wind10", "wind_summit", "wind_1000m", "wind_2000m", "wind_3000m", "upslope"]
+            hcols = [{"key": "time", "label": "時刻", "kind": "nowrap"}] + [
+                {"key": k, "label": lb[k], "kind": "num" if k != "upslope" else "text"} for k in keys]
+            groups = []
+            for d in days:
+                grows = [{k: h[k] for k in ["time"] + keys} for h in hrows if h["date"] == d["date"]]
+                if grows:
+                    groups.append({"label": md(d["label"]), "rows": grows})
+            blocks.append({"type": "section", "id": "hourly", "title": "時間ごとの降水確率・雲量・風",
+                           "note": "日の出の少し前から日の入りまで1時間ごと。雲量・風は地上・山頂と、標高1000/2000/3000m付近(気圧面から補間)。地形風は山頂風/稜線帯下端風の風上・風下と上昇流。",
+                           "content": [{"type": "table", "min_width": 1700, "columns": hcols, "groups": groups}]})
+
     panels = []
-    if data.get("cloud_sea"):
+    cloud_sea = [o for o in data.get("cloud_sea") or [] if labels is None or o["label"] in labels]
+    transitions = [x for x in data.get("transitions") or [] if labels is None or x["label"] in labels]
+    if cloud_sea:
         panels.append({"title": "雲海・快晴チャンス", "note": "日の出前後に、山頂付近は晴れていて、その下(地表付近など)が雲に覆われる予報の時刻。山頂から雲海を見下ろせるチャンスの目安です。参考値であり、実際に見えるかは大気の状態や視界に左右されます。",
                        "rows": [{"l": f"{md(o['label'])} {o['time']}",
                                  "v": cloud_sea_text(o)}
-                                for o in data["cloud_sea"]]})
-    if data.get("transitions"):
+                                for o in cloud_sea]})
+    if transitions:
         panels.append({"title": "天候の変わり目", "note": "1日の中で降水確率が大きく変化する日。早出/待機の判断材料に。",
-                       "items": [f"**{md(x['label'])}**: {x['note']}" for x in data["transitions"]]})
+                       "items": [f"**{md(x['label'])}**: {x['note']}" for x in transitions]})
     if panels:
         blocks.append({"type": "section", "content": [{"type": "panels", "panels": panels}]})
 
-    if data.get("confidence"):
+    confidence = [c for c in data.get("confidence") or [] if labels is None or c["label"] in labels]
+    # アンサンブルの予報範囲外で確信度を出せない日(最後の日など)は、0ではなく「出していない」と明記する
+    conf_gap_note = ""
+    if confidence:
+        have = {c["label"] for c in confidence}
+        first = min(d["date"] for d in days if d["label"] in have)
+        gap = [md(d["label"]) for d in days if d["date"] > first and d["label"] not in have]
+        early = [md(d["label"]) for d in days if d["date"] < first]
+        if gap:
+            conf_gap_note = f" {joined(gap)}はアンサンブルのデータが無く、確信度を出していません(0ではなく、評価できていない日です)。"
+        if early and cm.get("dates"):
+            conf_gap_note += f" {joined(early)}は、確信度を2日先以降の日だけ出すため、対象外です。"
+    elif cm.get("dates") and data.get("confidence"):
+        blocks.append({"type": "note", "text": f"ECMWFアンサンブル確信度は、2日先以降の日だけ出します。{joined([md(d['label']) for d in days])}は対象外です(気象庁MSMの範囲内、約3日先までの日です)。"})
+    if confidence:
         conf_rows = [{"date": md(c["label"]), "label": c["forecast"],
                       "conf": {"text": f"{c['confidence']:.0f}", "score": c["confidence"]},
-                      "detail": f"{c['cloud']:.0f}/{c['precip']:.0f}/{c['temp']:.0f}"} for c in data["confidence"]]
+                      "detail": f"{c['cloud']:.0f}/{c['precip']:.0f}/{c['temp']:.0f}"} for c in confidence]
         blocks.append({"type": "section", "id": "confidence", "title": "ECMWFアンサンブル確信度(2日先以降)",
-                       "note": "51メンバーのブレの大きさの目安。参考値であり、スコアには含まれません。",
+                       "note": "51メンバーのブレの大きさの目安。参考値であり、スコアには含まれません。" + conf_gap_note,
                        "content": [{"type": "table", "min_width": 520, "columns": [
                            {"key": "date", "label": "日付", "kind": "nowrap"}, {"key": "label", "label": "予報"},
                            {"key": "conf", "label": "確信度", "kind": "confbar"},
@@ -258,7 +352,8 @@ def diagnosis_spec(data, cm, syn):
         "mode": "diagnosis", "eyebrow": "ヤマビヨリ · 診断モード", "title": cm.get("title") or m["name"],
         "sub": cm.get("sub") or [f"**{m['elevation_m']}m**", m.get("region", ""), m.get("access", ""), f"{m['lat']}, {m['lon']}"],
         "blocks": blocks,
-        "footer": footer(data, attributions, has_analysis, cm.get("footer_extra"), "diagnosis"),
+        "footer": footer(data, attributions, has_analysis, cm.get("footer_extra"), "diagnosis",
+                         msm_only=bool(cm.get("dates")) and all(d.get("model") == "MSM" for d in days)),
     }
 
 
@@ -307,14 +402,15 @@ def region_table(days, n_dates):
     return cols, rows, len(use)
 
 
-def day_summary_explore(day, data, shown):
+def day_summary_explore(day, data, shown, show_top=True):
     allr, rows = day["all"], day["rows"]
     n_all = len(allr)
     n_min = len(rows)
     parts = [f"{n_all}座中、**{n_min}座が{data['min_score']:.0f}点以上**です。"] if n_all else []
     if rows:
-        top = "、".join(f"{split_name(r['mountain'])[0]}({r['score']:.1f})" for r in rows[:3])
-        parts.append(f"上位: {top}。")
+        if show_top:
+            top = "、".join(f"{split_name(r['mountain'])[0]}({r['score']:.1f})" for r in rows[:3])
+            parts.append(f"上位: {top}。")
         warn = sum(1 for r in rows if r["hazard_class"] == "warning")
         if warn:
             parts.append(f"うち警戒以上の危険信号がある山は{warn}座(危険信号はスコアとは別枠)。")
@@ -323,6 +419,53 @@ def day_summary_explore(day, data, shown):
     if day.get("timing_note"):
         parts.append(day["timing_note"])
     return "".join(parts)
+
+
+def find_mountain(data, name):
+    """commentary の picks / avoid に書かれた山名を、数値データの山(例: '天上山(カチカチ山)(1140m)')に当てる。"""
+    pool = {r["mountain"] for d in data["days"] for r in d["all"]}
+    hits = [m for m in pool if m == name or split_name(m)[0] == name]
+    if not hits:
+        hits = [m for m in pool if split_name(m)[0].startswith(name)]
+    if len(hits) != 1:
+        raise ValueError(f'山名 "{name}" を数値データの山に一意に当てられません(候補: {sorted(hits) or "なし"})')
+    return hits[0]
+
+
+def pick_table_section(data, sel, names, sec_id, title, note):
+    """名前を指定した山の、日ごとの数値表(探索の数値データから自動で組み立てる。手で写さない)。"""
+    access = {r["mountain"]: r["access"] for d in data["days"] for r in d["rows"]}
+    cols = [
+        {"key": "name", "label": "山", "kind": "strong"}, {"key": "access", "label": "アクセス", "kind": "nowrap"},
+        {"key": "score", "label": "スコア", "kind": "score"}, {"key": "hazard", "label": "危険信号", "kind": "badge"},
+        {"key": "wind", "label": "稜線風速", "kind": "num"}, {"key": "chill", "label": "体感温度", "kind": "num"},
+        {"key": "wet", "label": "雨天割合%", "kind": "num"}, {"key": "mm", "label": "降水量(全日)", "kind": "num"},
+    ]
+    mountains = [find_mountain(data, n) for n in names]
+    groups, partial = [], False
+    for d in sel:
+        by_row = {r["mountain"]: r for r in d["rows"]}
+        by_all = {r["mountain"]: r for r in d["all"]}
+        trows = []
+        for m in mountains:
+            name, elev = split_name(m)
+            r = by_row.get(m)
+            if r:
+                trows.append({"name": {"text": name, "sub": elev}, "access": r["access"], "score": r["score"],
+                              "hazard": hazard_cell(r), "wind": num(r["ridge_wind_ms"], " m/s"),
+                              "chill": num(r["chill"], "℃"), "wet": r["cells"]["wet"],
+                              "mm": num(r["day_total_precip_mm"], " mm")})
+            else:
+                partial = True
+                a = by_all.get(m)
+                trows.append({"name": {"text": name, "sub": elev}, "access": access.get(m, "-"),
+                              "score": a["score"] if a else "-", "hazard": "-",
+                              "wind": "-", "chill": "-", "wet": "-", "mm": "-"})
+        groups.append({"label": md(d["label"]), "rows": trows})
+    if partial:
+        note += " 基準点(" + f"{data['min_score']:.0f}" + "点)未満の日は、スコア以外の値をこの数値データに載せていません(「-」)。"
+    return {"type": "section", "id": sec_id, "title": title, "note": note,
+            "content": [{"type": "table", "min_width": 900, "columns": sized(cols), "groups": groups}]}
 
 
 def explore_spec(data, cm, syn, n_days=7, top=15):
@@ -339,6 +482,12 @@ def explore_spec(data, cm, syn, n_days=7, top=15):
         blocks.append({"type": "analysis", "items": [{"tag": "総評", "text": cm["overview"]}]})
     if cm.get("alert"):
         blocks.append({"type": "alert", **cm["alert"]})
+    if cm.get("picks"):
+        blocks.append(pick_table_section(data, sel, cm["picks"], "picks", cm.get("picks_title") or "おすすめの山",
+                                         "指定した山の日ごとの数値です(探索の結果そのまま)。危険信号はスコアとは別枠なので、あわせて確認してください。"))
+    if cm.get("avoid"):
+        blocks.append(pick_table_section(data, sel, cm["avoid"], "avoid", cm.get("avoid_title") or "避けたほうがよい山(参考)",
+                                         "目的に合わないと判断した山の数値です。スコアが高くても、危険信号や体感温度で外しています。"))
     blocks.append(synoptic_section(cm, now_images, failed_text, syn is not None, "概況",
                                    "気象庁 実況天気図・ひまわり画像(出典:気象庁ホームページ)"))
     fm = forecast_maps_section(cm, fc_images)
@@ -375,7 +524,7 @@ def explore_spec(data, cm, syn, n_days=7, top=15):
                 "vis": num(r["ridge_visibility"], " m", thousands=True), "wet": r["cells"]["wet"],
                 "chill": num(r["chill"], "℃"), "mm": num(r["day_total_precip_mm"], " mm"), "terrain": r["cells"]["terrain"],
             })
-        content = [{"type": "summary", "text": day_summary_explore(d, data, len(shown_rows))}]
+        content = [{"type": "summary", "text": day_summary_explore(d, data, len(shown_rows), show_top=not cm.get("picks"))}]
         if trows:
             content.append({"type": "table", "min_width": 1200, "columns": sized(rank_cols), "rows": trows})
         tabs.append({"label": label, "wk": wk, "heading": md(d["label"]), "content": content})
