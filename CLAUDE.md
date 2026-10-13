@@ -11,6 +11,7 @@
 - AGENTS.md の完了条件6のとおり、HTML を `out/` に保存する(`scripts/render_report.py`。手順は `skills/yamabiyori/references/report_style.md`)。
 - そのうえで、Artifact ツールが使える環境では、同じ HTML(`--embed-images` で作ったもの)を artifact として公開する。
   同じ山・同じモードの再実行は、新しく作らず既存の artifact を更新する。公開前に、位置が特定できる行程(GPXの地点・時刻)を載せていないか確認する。
+- **前回と同じ依頼でも、既存の HTML や過去の回答をそのまま渡さず、`report_style.md` の手順で数値の取得からやり直す**(コード・手順書が更新されていることがあり、前回の出力は古い)。
 - Artifact ツールが使えない環境では HTML ファイルの場所を伝えて終える(これは失敗ではない)。
 - これは AGENTS.md の公開に関する制限(4〜5)の例外ではない: GitHub への push・Pages 公開は引き続き別途の承認が必要。
 
