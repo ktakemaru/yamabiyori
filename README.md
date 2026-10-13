@@ -304,6 +304,10 @@ Windows PowerShell 5.1 で `>` を使うと文字化けするので、出力を�
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --list
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山
 
+# HTMLレポート: 数値をJSONで保存 → 解説を足して変換(手順は skills/yamabiyori/references/report_style.md)
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山 --json-out out/fuji.json
+./venv/Scripts/python.exe -X utf8 scripts/render_report.py --data out/fuji.json --out out/fuji.html
+
 # テスト(オフライン)
 ./venv/Scripts/python.exe -X utf8 -m unittest
 ```
@@ -339,6 +343,8 @@ claude --plugin-dir .
 | `scratch_past_date.py` / `scratch_validate_refs.py` | 検証ツール。過去日付の再計算(実況照合用)と、参照3日の回帰チェック |
 | `skills/yamabiyori/SKILL.md` | 設計ドキュメント本体。スコア式の根拠、各機能の設計判断、既知の落とし穴、検証記録 |
 | `skills/yamabiyori/references/weather_map_reading.md` | 天気図読解の手引き(概況説明用) |
+| `skills/yamabiyori/references/report_style.md` / `recommend_guide.md` | HTMLレポートの作り方(手順・必須要素)と、山・山域をすすめるときの指針 |
+| `scripts/render_report.py` / `report_baseline.py` / `fetch_synoptic.py` | HTMLレポートの生成(数値JSON+解説 → 自己完結HTML)と、気象庁の天気図・ひまわり画像の取得。`--json-out` は診断・探索モード共通 |
 | `.claude-plugin/plugin.json`, `marketplace.json` | Claude Codeプラグインのマニフェストとプライベートマーケットプレイス定義 |
 | `CHANGELOG.md` | 仕様・スコア式の変更履歴(日付・内容・理由) |
 | `cache/`, `screenshots/`, `maps/` | 実行時に自動生成(Open-Meteoレスポンス、天気図・衛星画像、ルート地図PNG)。gitignore済み |
@@ -347,6 +353,7 @@ claude --plugin-dir .
 
 詳細は [CHANGELOG.md](CHANGELOG.md)。
 
+- **未リリース (v1.7.0 以降)** — 診断・探索モードの結果を解説つきHTMLにするレポート出力(`--json-out`・`scripts/render_report.py`)、山をすすめる指針、日付指定・時間別表・おすすめ表などを追加。既定の動作・スコアの計算は変更なし。リリース(版番号)は未定。詳細は CHANGELOG の `[Unreleased]`。
 - **v1.7.0 (2026-09-24)** — Codex などのエージェントや初めての人が迷わず動かせるように、実行まわりを整備(スコアの計算は変更なし)。探索モードに `--limit`/`--region`、診断モードに `--list`/`--mountain`(非対話)、両方に `--out`(UTF-8でファイル保存)を追加。セットアップ確認 `scripts/check_setup.py`、オフラインのテスト、CI、README「Codexで試す」、AGENTS.md の再構成。Windows で文字コードのエラー(cp932)で止まらないようにした。
 - **v1.6.1 (2026-09-24)** — 文書のみ(コードの変更なし)。冒頭のお知らせ・「精度と限界」・スコアの仕組みの表・出力例の注記・SKILL.mdの説明を v1.6.0 の変更に合わせて更新。
 - **v1.6.0 (2026-09-23)** — MSM(直近1〜2日)の山頂雲量の較正を、本体と同じ山頂雲量の作り方(900/800hPaを含む補間)で学び直した(バックテスト R12)。1〜2日目のスコアが平均+1.0点動く(5点以上動くのは11%、3日目以降は変化なし)。既知の制約を「精度と限界」に追記。
