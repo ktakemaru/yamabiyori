@@ -255,22 +255,21 @@ MSM範囲内(今日〜+2日)は上記の物理ルールで時間単位に判定�
 
 ## Codexで試す
 
-プログラミングに慣れていなくても、自分のPCの Codex(OpenAI のコーディングエージェント。CLI・IDE拡張・デスクトップアプリ)に
-頼めばセットアップから実行・小さな改造まで進められるようにしてある(ChatGPT の無料枠でも試せるよう、
-Codex が読む量と試行回数を少なくする構成にしている)。Codex への指示は [AGENTS.md](AGENTS.md) にまとめてある。
+ChatGPTアプリのCodexで、コマンドを自分で打たずに試せます。事前に、Git と Python 3.10以上を入れておいてください(Python は [python.org](https://www.python.org/downloads/) のインストーラーで、最初の画面の「Add python.exe to PATH」にチェックを入れる。入れ忘れると `python` と打ったときに Microsoft Store が開く)。
+ChatGPT の無料枠でも試せるよう、Codex が読む量と試行回数を少なくする構成にしている。
 
-1. **Python を入れる(3.10以上)。** Windows は [python.org](https://www.python.org/downloads/) のインストーラーで、最初の画面の
-   「Add python.exe to PATH」にチェックを入れる(入れ忘れると `python` と打ったときに Microsoft Store が開く)。
-   macOS も python.org のインストーラーでよい。
-2. **このリポジトリを手元に置く。** Git があれば `git clone https://github.com/ktakemaru/yamabiyori.git`。
-   Git が無ければ GitHub のページの「Code」→「Download ZIP」で落として展開する。
-3. **Codex でそのフォルダを開く**(CLI ならフォルダに移動して `codex` を起動)。
-4. **次のように頼む。** そのままコピーして使える:
+1. Windows PCにChatGPTアプリをインストールして、サインインする。
+2. Codexに切り替えて、「ファイル → フォルダを開く → 新しいフォルダ」で、`yamabiyori` フォルダ(プロジェクト)を作る。
+3. チャット欄で、Codexに次のように指示する。
 
 ```text
-このリポジトリを理解して、セットアップして実行してください。
-AGENTS.md の手順に従い、最初は軽量実行(--limit 3)で動作確認してください。
+https://github.com/ktakemaru/yamabiyori.git をこのフォルダに clone して、AGENTS.md の手順どおりにセットアップし、軽量実行(--limit 3)で動作確認してください。
 ```
+
+途中でネットワーク(pip や天気データの取得)の許可を求められたら、許可する。
+天気データの取得に失敗したときは、たいてい Open-Meteo 側の一時的な問題なので、時間をおいてやり直す。
+
+Codex は [AGENTS.md](AGENTS.md)(セットアップ・成功条件・変更してよい範囲)に従います。CLI・IDE拡張や macOS でも使えます(CLI ならフォルダに移動して `codex` を起動)。
 
 うまく動いたら、たとえば次のような改造も頼める:
 
@@ -278,9 +277,6 @@ AGENTS.md の手順に従い、最初は軽量実行(--limit 3)で動作確認�
 探索モードを、東京から近い山だけで実行できるようにしてください。
 スコアの計算には触れず、山の選び方だけを変えてください。
 ```
-
-途中でネットワーク(pip や天気データの取得)の許可を求められたら、許可する。
-天気データの取得に失敗したときは、たいてい Open-Meteo 側の一時的な問題なので、時間をおいてやり直す。
 
 ## セットアップ
 
