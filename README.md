@@ -2,7 +2,7 @@
 
 ![ヤマビヨリ](assets/yamabiyori_banner.png)
 
-[![version](https://img.shields.io/badge/version-1.9.0-2c7fb8)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-1.9.1-2c7fb8)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-3776ab)](requirements.txt)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](#claude-codeとの連携)
@@ -368,6 +368,7 @@ claude --plugin-dir .
 
 詳細は [CHANGELOG.md](CHANGELOG.md)。
 
+- **v1.9.1 (2026-11-11)** — Open-Meteo への通信で、1つの接続を使い回すようにした(GitHub Actions などで新しい接続が途中で止まり、取得に失敗する山が出ていたため)。URL・時間切れ・再試行・キャッシュ、予報の数字は変更なし。
 - **v1.9.0 (2026-10-14)** — 診断モードに、76座に無い山・地点を診断する引数 `--name`・`--lat`・`--lon`・`--elevation` を追加(座標・標高を指定。地形データなし)。README の3モードの節にレポート画像を追加。既定の動作・スコアの計算は変更なし。
 - **v1.8.0 (2026-10-14)** — 診断・探索モードの結果を解説つきHTMLにするレポート出力(`--json-out`・`scripts/render_report.py`)を追加。山をすすめる指針、日付指定・時間別表・おすすめ表も追加。既定の動作・スコアの計算は変更なし。
 - **v1.7.0 (2026-09-24)** — Codex などのエージェントや初めての人が迷わず動かせるように、実行まわりを整備(スコアの計算は変更なし)。探索モードに `--limit`/`--region`、診断モードに `--list`/`--mountain`(非対話)、両方に `--out`(UTF-8でファイル保存)を追加。セットアップ確認 `scripts/check_setup.py`、オフラインのテスト、CI、README「Codexで試す」、AGENTS.md の再構成。Windows で文字コードのエラー(cp932)で止まらないようにした。

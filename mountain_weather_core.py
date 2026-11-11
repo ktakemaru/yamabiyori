@@ -1189,12 +1189,26 @@ OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 REQUEST_TIMEOUT = 20
 MAX_RETRIES = 3
 
+# One requests.Session shared by every get_with_retry call in the process, so
+# successive calls reuse the same keep-alive TCP/TLS connection instead of
+# opening a new one each time. Measured on GitHub Actions runners, new
+# connections to api.open-meteo.com stalled mid-TLS-handshake 11/60 times vs
+# 0/58 on a reused connection (CHANGELOG v1.9.1). Created on first use.
+_HTTP_SESSION = None
+
+
+def _http_session() -> requests.Session:
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None:
+        _HTTP_SESSION = requests.Session()
+    return _HTTP_SESSION
+
 
 def get_with_retry(url: str, params: dict):
     last_error = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+            resp = _http_session().get(url, params=params, timeout=REQUEST_TIMEOUT)
             resp.raise_for_status()
             return resp
         except requests.exceptions.RequestException as e:
