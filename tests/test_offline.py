@@ -266,3 +266,69 @@ class TestEnsembleConfidenceGap(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHttpSessionReuse(unittest.TestCase):
+    """get_with_retry が 1 つの requests.Session を使い回し、再試行の動きは従来どおりであること(通信しない)。"""
+
+    def setUp(self):
+        patcher = mock.patch.object(core, "_HTTP_SESSION", None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        sleep_patcher = mock.patch.object(core.time_module, "sleep")
+        self.sleep = sleep_patcher.start()
+        self.addCleanup(sleep_patcher.stop)
+
+    def _fake_session(self, side_effect):
+        session = mock.MagicMock(spec=requests.Session)
+        session.get.side_effect = side_effect
+        return session
+
+    def test_same_session_reused_across_calls(self):
+        resp = mock.MagicMock()
+        session = self._fake_session([resp, resp, resp])
+        with mock.patch.object(core.requests, "Session", return_value=session) as ctor, \
+                mock.patch.object(core.requests, "get", side_effect=AssertionError("requests.get は使わない")):
+            for _ in range(3):
+                self.assertIs(core.get_with_retry(core.OPEN_METEO_URL, {"latitude": 35.0}), resp)
+        ctor.assert_called_once_with()
+        self.assertEqual(session.get.call_count, 3)
+        self.assertIs(core._http_session(), session)
+        for call in session.get.call_args_list:
+            self.assertEqual(call.args, (core.OPEN_METEO_URL,))
+            self.assertEqual(call.kwargs, {"params": {"latitude": 35.0}, "timeout": 20})
+        self.assertEqual(resp.raise_for_status.call_count, 3)
+        self.sleep.assert_not_called()
+
+    def test_retry_then_success(self):
+        resp = mock.MagicMock()
+        err = requests.exceptions.ConnectTimeout("timeout")
+        session = self._fake_session([err, err, resp])
+        with mock.patch.object(core.requests, "Session", return_value=session):
+            result, out = run_quietly(core.get_with_retry, core.OPEN_METEO_URL, {"a": 1})
+        self.assertIs(result, resp)
+        self.assertEqual(session.get.call_count, 3)
+        self.assertEqual([c.args for c in self.sleep.call_args_list], [(2,), (4,)])
+        self.assertIn("2秒後にリトライ 1/3", out)
+        self.assertIn("4秒後にリトライ 2/3", out)
+
+    def test_all_retries_fail_raises_last_error(self):
+        errs = [requests.exceptions.ConnectionError(f"e{i}") for i in range(3)]
+        session = self._fake_session(errs)
+        with mock.patch.object(core.requests, "Session", return_value=session):
+            with self.assertRaises(requests.exceptions.ConnectionError) as ctx:
+                run_quietly(core.get_with_retry, core.OPEN_METEO_URL, {"a": 1})
+        self.assertIs(ctx.exception, errs[2])
+        self.assertEqual(session.get.call_count, 3)
+        self.assertEqual([c.args for c in self.sleep.call_args_list], [(2,), (4,)])
+
+    def test_http_error_from_raise_for_status_is_retried(self):
+        bad = mock.MagicMock()
+        bad.raise_for_status.side_effect = requests.exceptions.HTTPError("503")
+        good = mock.MagicMock()
+        session = self._fake_session([bad, good])
+        with mock.patch.object(core.requests, "Session", return_value=session):
+            result, _ = run_quietly(core.get_with_retry, core.OPEN_METEO_URL, {"a": 1})
+        self.assertIs(result, good)
+        self.assertEqual(session.get.call_count, 2)
+        self.assertEqual([c.args for c in self.sleep.call_args_list], [(2,)])
