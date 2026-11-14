@@ -332,3 +332,49 @@ class TestHttpSessionReuse(unittest.TestCase):
         self.assertIs(result, good)
         self.assertEqual(session.get.call_count, 2)
         self.assertEqual([c.args for c in self.sleep.call_args_list], [(2,)])
+
+
+class TestCloudSeaLowCloud(unittest.TestCase):
+    """雲海判定は総雲量(cloudcover)ではなく低層雲(cloudcover_low)で「下の雲」を見る(2026-11-14 大菩薩嶺)。"""
+
+    DAY = "2026-11-14"
+
+    def _forecast(self, low, mid, high, total, bands=None, summit_cloud=0.0):
+        times = [f"{self.DAY}T{h:02d}:00" for h in (6, 7)]   # 日の出06:00 → 05:30〜07:30 の窓に2時間とも入る
+        n = len(times)
+        hourly = {"time": times, "cloudcover": [total] * n, "cloudcover_low": [low] * n,
+                  "cloudcover_mid": [mid] * n, "cloudcover_high": [high] * n,
+                  detail.SUMMIT_VARS["cloudcover"]: [summit_cloud] * n}
+        for alt, var in detail.BAND_VARS.items():
+            hourly[var] = [(bands or {}).get(alt, 0.0)] * n
+        for alt, var in detail.HUMIDITY_VARS.items():
+            hourly[var] = [50.0] * n
+        return {"hourly": hourly, "_daily_sunrise": {self.DAY: f"{self.DAY}T06:00"}}
+
+    def test_high_cloud_only_is_not_a_cloud_sea(self):
+        """山頂は晴れ、高層雲だけ80%以上、下層0% → チャンスなし(旧方式では総雲量で出ていた)。"""
+        fc = self._forecast(low=0.0, mid=0.0, high=90.0, total=90.0)
+        self.assertEqual(detail.detect_cloud_sea_opportunity(fc, 2057), [])
+
+    def test_low_cloud_deck_is_a_cloud_sea(self):
+        fc = self._forecast(low=95.0, mid=0.0, high=0.0, total=95.0)
+        got = detail.detect_cloud_sea_opportunity(fc, 2057)
+        self.assertEqual(len(got), 2)
+        self.assertEqual(got[0]["deck_band"], detail.CLOUD_SEA_LOW_CLOUD_LABEL)
+        self.assertEqual(got[0]["deck_cloud_pct"], 95.0)
+
+    def test_low_summit_still_detects(self):
+        """山頂より低い固定帯が無い山(筑波山877m)でも、低層雲で判定できる(surface 候補をやめる案では出なくなる)。"""
+        fc = self._forecast(low=100.0, mid=0.0, high=0.0, total=100.0)
+        self.assertEqual(len(detail.detect_cloud_sea_opportunity(fc, 877)), 2)
+
+    def test_low_cloud_above_summit_is_ignored_below_3000m(self):
+        """3000m未満の山で山頂〜3000mの帯が80%以上なら、低層雲は山頂より上の雲かもしれないので使わない。"""
+        fc = self._forecast(low=90.0, mid=0.0, high=0.0, total=90.0, bands={3000: 85.0})
+        self.assertEqual(detail.detect_cloud_sea_opportunity(fc, 2057), [])
+        # 3000m以上の山では山頂より上の固定帯が無いので、この除外はかからない(3000m帯は山頂より下の雲として数える)
+        got = detail.detect_cloud_sea_opportunity(fc, 3776)
+        self.assertEqual([o["deck_band"] for o in got], ["3000m帯", "3000m帯"])
+        # 山頂より上の帯が80%未満なら、3000m未満の山でも低層雲で判定する
+        fc = self._forecast(low=90.0, mid=0.0, high=0.0, total=90.0, bands={3000: 40.0})
+        self.assertEqual(len(detail.detect_cloud_sea_opportunity(fc, 2057)), 2)

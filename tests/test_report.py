@@ -152,10 +152,11 @@ class TestBaseline(unittest.TestCase):
             self.assertIn(day["cells"]["terrain"], page)
         self.assertNotEqual(code2, 0)                 # 当たる日が無ければ黙って全日を出さずエラー
 
-    def _hourly_page(self, dates, with_hourly=True):
+    def _hourly_page(self, dates, with_hourly=True, cloud_layers=False):
+        """cloud_layers=False は 2026-11-14 より前の JSON(低層雲・中層雲・高層雲の列が無い)を再現する。"""
         data = load(os.path.join(FIX, "diagnosis.json"))
         if with_hourly:
-            labels = {"precip": "降水確率%(地上)", "precip_mm": "降水量mm/h", "cloud": "雲量地上%", "cloud_1000m": "雲量1000m%", "cloud_2000m": "雲量2000m%",
+            labels = {"precip": "降水確率%(地上)", "precip_mm": "降水量mm/h", "cloud": "総雲量%", "cloud_1000m": "雲量1000m%", "cloud_2000m": "雲量2000m%",
                       "cloud_3000m": "雲量3000m%", "cloud_summit": "雲量山頂877m%", "wind10": "風地上", "wind_1000m": "風1000m",
                       "wind_2000m": "風2000m", "wind_3000m": "風3000m", "wind_summit": "風山頂877m", "upslope": "地形風"}
             rows = []
@@ -164,6 +165,10 @@ class TestBaseline(unittest.TestCase):
                              "cloud_1000m": "0.0", "cloud_2000m": "1.0", "cloud_3000m": "2.0", "cloud_summit": "3.0",
                              "wind10": "1.7m/s(北)", "wind_1000m": "2.0m/s(北)", "wind_2000m": "5.6m/s(西)",
                              "wind_3000m": "8.9m/s(西)", "wind_summit": "4.4m/s(北東)", "upslope": "並 w0.1 / 並(北)"})
+                if cloud_layers:
+                    rows[-1].update({"cloud_low": "0.0", "cloud_mid": "12", "cloud_high": "87"})
+            if cloud_layers:
+                labels.update({"cloud_low": "低層雲%", "cloud_mid": "中層雲%", "cloud_high": "高層雲%"})
             data["hourly"] = {"labels": labels, "rows": rows}
         with tempfile.TemporaryDirectory() as d:
             dpath, cpath, o = (os.path.join(d, n) for n in ("d.json", "cm.json", "o.html"))
@@ -188,6 +193,31 @@ class TestBaseline(unittest.TestCase):
         # 3日以上・日付指定なしでは載せない(既定の動作は変えない)
         self.assertNotIn("時間ごとの降水確率・雲量・風", self._hourly_page(["2026-10-16", "2026-10-17", "2026-10-18"]))
         self.assertNotIn("時間ごとの降水確率・雲量・風", self._hourly_page(None))
+
+    def test_diagnosis_hourly_cloud_layers(self):
+        """総雲量に加え、低層雲・中層雲・高層雲の列が載る。古い JSON(列が無い)でもエラーにならず、その列だけ出さない。"""
+        page = self._hourly_page(["2026-10-17"], cloud_layers=True)
+        for label in ("総雲量%", "低層雲%", "中層雲%", "高層雲%"):
+            self.assertIn(label, page)
+        self.assertIn("87", page)
+        self.assertNotIn("雲量地上", page)
+        old = self._hourly_page(["2026-10-17"])
+        self.assertIn("総雲量%", old)
+        self.assertNotIn("高層雲%", old)
+
+    def test_cloud_sea_deck_labels(self):
+        """雲海の層の表示: 低層雲は「低い雲の層」。旧版の 'surface'(総雲量)は「地表付近」と書かない。"""
+        import report_baseline as rb
+        self.assertEqual(rb.deck_label("低層雲"), "低い雲の層(低層雲)")
+        self.assertNotIn("地表付近", rb.deck_label("surface"))
+        self.assertIn("総雲量", rb.deck_label("surface"))
+        self.assertEqual(rb.deck_label("1000m帯"), "標高1000m付近")
+        o = {"summit_cloud_pct": 3, "deck_cloud_pct": 87, "deck_humidity_pct": None}
+        self.assertEqual(rb.cloud_sea_text(dict(o, deck_band="低層雲")),
+                         "山頂付近は雲3%(ほぼ晴れ) / 下の低い雲の層(低層雲)は雲87%")
+        legacy = rb.cloud_sea_text(dict(o, deck_band="surface"))
+        self.assertNotIn("下の", legacy)
+        self.assertIn("総雲量87%", legacy)
 
     def test_diagnosis_hourly_missing_in_data_is_noted(self):
         page = self._hourly_page(["2026-10-17"], with_hourly=False)

@@ -293,8 +293,11 @@ def diagnosis_spec(data, cm, syn):
             blocks.append({"type": "note", "text": "時間ごとの降水確率・雲量・風は、この数値データに含まれていません(診断モードを `--json-out` 付きで実行し直してください)。"})
         else:
             lb = hourly["labels"]
-            keys = ["precip"] + (["precip_mm"] if "precip_mm" in lb else []) + ["cloud", "cloud_summit", "cloud_1000m", "cloud_2000m", "cloud_3000m",
-                    "wind10", "wind_summit", "wind_1000m", "wind_2000m", "wind_3000m", "upslope"]
+            # 低層雲・中層雲・高層雲は 2026-11-14 以降の JSON にだけある(古い JSON では列ごと出さない)
+            keys = (["precip"] + (["precip_mm"] if "precip_mm" in lb else []) + ["cloud"]
+                    + [k for k in ("cloud_low", "cloud_mid", "cloud_high") if k in lb]
+                    + ["cloud_summit", "cloud_1000m", "cloud_2000m", "cloud_3000m",
+                       "wind10", "wind_summit", "wind_1000m", "wind_2000m", "wind_3000m", "upslope"])
             hcols = [{"key": "time", "label": "時刻", "kind": "nowrap"}] + [
                 {"key": k, "label": lb[k], "kind": "num" if k != "upslope" else "text"} for k in keys]
             groups = []
@@ -303,14 +306,15 @@ def diagnosis_spec(data, cm, syn):
                 if grows:
                     groups.append({"label": md(d["label"]), "rows": grows})
             blocks.append({"type": "section", "id": "hourly", "title": "時間ごとの降水確率・雲量・風",
-                           "note": "日の出の少し前から日の入りまで1時間ごと。雲量・風は地上・山頂と、標高1000/2000/3000m付近(気圧面から補間)。地形風は山頂風/稜線帯下端風の風上・風下と上昇流。",
-                           "content": [{"type": "table", "min_width": 1700, "columns": hcols, "groups": groups}]})
+                           "note": "日の出の少し前から日の入りまで1時間ごと。総雲量・低層雲・中層雲・高層雲は、地上から見上げた空全体の雲量(地上付近の雲だけではなく、山頂より高い雲も含む。総雲量が高くても低層雲が低ければ、山の上に高い雲が広がっているだけのことがある)。雲量の山頂・1000/2000/3000mはその標高の値(気圧面から補間)。風は地上(10m)・山頂・標高1000/2000/3000m付近。地形風は山頂風/稜線帯下端風の風上・風下と上昇流。",
+                           "content": [{"type": "table", "min_width": 1700 + 90 * sum(k in lb for k in ("cloud_low", "cloud_mid", "cloud_high")),
+                                        "columns": hcols, "groups": groups}]})
 
     panels = []
     cloud_sea = [o for o in data.get("cloud_sea") or [] if labels is None or o["label"] in labels]
     transitions = [x for x in data.get("transitions") or [] if labels is None or x["label"] in labels]
     if cloud_sea:
-        panels.append({"title": "雲海・快晴チャンス", "note": "日の出前後に、山頂付近は晴れていて、その下(地表付近など)が雲に覆われる予報の時刻。山頂から雲海を見下ろせるチャンスの目安です。参考値であり、実際に見えるかは大気の状態や視界に左右されます。",
+        panels.append({"title": "雲海・快晴チャンス", "note": "日の出前後に、山頂付近は晴れていて、その下(低い雲の層、または山頂より低い標高)が雲に覆われる予報の時刻。中層雲・高層雲は数えません。山頂から雲海を見下ろせるチャンスの目安です。参考値であり、実際に見えるかは大気の状態や視界に左右されます。",
                        "rows": [{"l": f"{md(o['label'])} {o['time']}",
                                  "v": cloud_sea_text(o)}
                                 for o in cloud_sea]})
@@ -359,16 +363,23 @@ def diagnosis_spec(data, cm, syn):
 
 # ----------------------------------------------------------------------------- 探索モード
 def deck_label(band):
-    """雲海の層の表示名。内部名 'surface' は「地表付近」、'1000m帯' は「標高1000m付近」と読み替える。"""
+    """雲海の層の表示名。'低層雲' は「低い雲の層(低層雲)」、'1000m帯' は「標高1000m付近」と読み替える。
+    2026-11-14 より前の JSON の 'surface' は全層の雲量(総雲量)だったので、「地表付近」とは書かない。"""
+    if band == "低層雲":
+        return "低い雲の層(低層雲)"
     if band == "surface":
-        return "地表付近"
+        return "空全体(総雲量。旧版の判定で、中層・高層の雲も含むため雲海とは限らない)"
     m = re.match(r"^(\d+)m帯$", str(band))
     return f"標高{m.group(1)}m付近" if m else str(band)
 
 
 def cloud_sea_text(o):
-    text = (f"山頂付近は雲{num(o['summit_cloud_pct'], '%', digits=0)}(ほぼ晴れ) / "
-            f"下の{deck_label(o['deck_band'])}は雲{num(o['deck_cloud_pct'], '%', digits=0)}")
+    head = f"山頂付近は雲{num(o['summit_cloud_pct'], '%', digits=0)}(ほぼ晴れ) / "
+    if o["deck_band"] == "surface":
+        # 2026-11-14 より前の JSON。総雲量は空全体の雲量なので「下の」とは書かない
+        return head + (f"総雲量{num(o['deck_cloud_pct'], '%', digits=0)}"
+                       "(旧版の判定。中層・高層の雲も含むため、下に雲海があるとは限りません)")
+    text = head + f"下の{deck_label(o['deck_band'])}は雲{num(o['deck_cloud_pct'], '%', digits=0)}"
     if o.get("deck_humidity_pct") is not None:
         text += f"(湿度{num(o['deck_humidity_pct'], '%', digits=0)})"
     return text
