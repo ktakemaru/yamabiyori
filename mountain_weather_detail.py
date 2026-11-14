@@ -1025,12 +1025,14 @@ def print_hourly_table(mtn: dict, rows: list):
     print(f"\n=== {mtn['name']}({mtn['elevation_m']}m) / {mtn['access']} / {mtn['region']} ===")
     summit_label = f"山頂{mtn['elevation_m']}m"
     print(f"(日の出{EARLY_START_OFFSET_HOURS:+.0f}h〜日の入りまで1時間ごと。"
-          f"雲量・風とも地上+1000/2000/3000m+山頂。標高別の値は気圧面(1000〜600hPa)を"
+          f"総雲量・低層雲・中層雲・高層雲は地上から見上げた空全体の雲量(地上付近の雲だけではなく、山頂より高い雲も含む)。"
+          f"雲量1000/2000/3000m・山頂は各標高の値。風は地上(10m)+1000/2000/3000m+山頂。標高別の値は気圧面(1000〜600hPa)を"
           f"その時刻のジオポテンシャル高度で各標高へ補間したもの。今日から{FORECAST_DAYS}日先まで)\n")
 
     header = (
         pad("日付", 18) + pad("時刻", 7) + pad("降水確率%(地上)", 16)
-        + pad("雲量地上%", 10) + pad(f"雲量{band_altitude_label(1000)}%", 13)
+        + pad("総雲量%", 9) + pad("低層雲%", 9) + pad("中層雲%", 9) + pad("高層雲%", 9)
+        + pad(f"雲量{band_altitude_label(1000)}%", 13)
         + pad(f"雲量{band_altitude_label(2000)}%", 13) + pad(f"雲量{band_altitude_label(3000)}%", 13)
         + pad(f"雲量{summit_label}%", 16)
         + pad("風地上", 17) + pad(f"風{band_altitude_label(1000)}", 17)
@@ -1044,7 +1046,8 @@ def print_hourly_table(mtn: dict, rows: list):
         last_date = r["date"]
         row = (
             pad(date_label, 18) + pad(r["time"], 7)
-            + pad(fmt(r["precip"]), 16) + pad(fmt(r["cloud"]), 10)
+            + pad(fmt(r["precip"]), 16) + pad(fmt(r["cloud"]), 9)
+            + pad(fmt(r["cloud_low"]), 9) + pad(fmt(r["cloud_mid"]), 9) + pad(fmt(r["cloud_high"]), 9)
             + pad(fmt(r["cloud_1000m"]), 13) + pad(fmt(r["cloud_2000m"]), 13)
             + pad(fmt(r["cloud_3000m"]), 13)
             + pad(fmt(r["cloud_summit"]), 16)
@@ -1079,7 +1082,7 @@ def upslope_cell(u, ub=None) -> str:
 # all three framings instead of three separate ones.
 #
 # Reuses data the normal fetch_forecast() call already pulls in for every
-# mountain (HOURLY_VARS' surface "cloudcover", BAND_VARS' three fixed-band
+# mountain (HOURLY_VARS' "cloudcover_low" low-cloud cover, BAND_VARS' three fixed-band
 # clouds, HUMIDITY_VARS' three fixed-band humidities, plus summit_hpa's own
 # cloudcover_XXXhPa, which main_single_mountain() already requests via
 # extra_vars) -- no new Open-Meteo variables, no new API calls. HUMIDITY_VARS
@@ -1093,6 +1096,7 @@ CLOUD_SEA_CLEAR_MAX_PCT = 30.0  # summit/own-band cloud% at/below this counts as
 CLOUD_SEA_DECK_MIN_PCT = 80.0  # a lower band at/above this counts as a "solid deck" below
 CLOUD_SEA_DAWN_START_OFFSET_HOURS = -0.5  # dawn window: sunrise-0.5h .. sunrise+CLOUD_SEA_DAWN_WINDOW_HOURS
 CLOUD_SEA_DAWN_WINDOW_HOURS = 2.0
+CLOUD_SEA_LOW_CLOUD_LABEL = "低層雲"  # deck_band of the low-cloud (cloudcover_low) candidate; old JSON has "surface"
 # 雲海 is specifically a dawn phenomenon (nocturnal radiative cooling pools
 # cold, moist air -- and the cloud deck it forms -- in the valleys
 # overnight; daytime mixing usually breaks it up by mid-morning), so this
@@ -1104,32 +1108,48 @@ CLOUD_SEA_DAWN_WINDOW_HOURS = 2.0
 
 def detect_cloud_sea_opportunity(forecast: dict, summit_m: float) -> list:
     """Scan for hours where the mountain's own summit (summit_m) is clear
-    while some band BELOW its real altitude -- surface, or a fixed
-    1000/2000/3000m band, whichever are genuinely lower -- is under a solid
-    cloud deck, restricted to the dawn window (see banner comment). When
-    multiple lower bands qualify at once, the one CLOSEST TO THE SUMMIT is
-    reported (see the candidates-sort comment below for why), falling back
-    to surface only when no fixed band qualifies.
+    while some layer BELOW its real altitude -- the low-cloud cover
+    (cloudcover_low), or a fixed 1000/2000/3000m band, whichever are
+    genuinely lower -- is under a solid cloud deck, restricted to the dawn
+    window (see banner comment). When multiple lower bands qualify at once,
+    the one CLOSEST TO THE SUMMIT is reported (see the candidates-sort
+    comment below for why), falling back to the low-cloud cover only when
+    no fixed band qualifies.
 
     Returns a list of {"date", "time", "summit_cloud_pct", "deck_band",
     "deck_cloud_pct", "deck_humidity_pct"} dicts in chronological order.
-    deck_band is a display label ("surface", "1000m帯", etc.);
-    deck_humidity_pct is that band's relative humidity at the same hour
-    when available (None for the surface candidate, which has no
+    deck_band is a display label (CLOUD_SEA_LOW_CLOUD_LABEL "低層雲",
+    "1000m帯", etc.; JSON written before 2026-11-14 has "surface", which
+    was the TOTAL cloud cover); deck_humidity_pct is that band's relative
+    humidity at the same hour when available (None for the low-cloud
+    candidate, which has no
     HUMIDITY_VARS entry), included as corroboration -- not a hard filter,
     since cloud% and humidity don't always cross their thresholds in
     perfect lockstep and requiring both would under-detect real events."""
     times = forecast["hourly"]["time"]
     daily_sunrise = forecast["_daily_sunrise"]
     summit_cloud_series = forecast["hourly"].get(SUMMIT_VARS["cloudcover"])
-    surface_cloud_series = forecast["hourly"].get("cloudcover")
+    # The "lowest" candidate is MSM/ECMWF's own low-cloud cover (cloudcover_low,
+    # up to ~3km), NOT the total "cloudcover" (2026-11-14 fix). Total cloud cover
+    # counts mid/high cloud too, so a clear summit under a high-cloud sheet with
+    # nothing below it used to be reported as a cloud sea (大菩薩嶺 2026-11-14:
+    # 高い雲が頭上に広がった日。キャッシュ24座の再計算では、旧方式の118時間中
+    # 93時間が低層雲80%未満=下に雲海が無い時刻だった)。
+    low_cloud_series = forecast["hourly"].get("cloudcover_low")
     band_cloud_series = {alt: forecast["hourly"].get(var) for alt, var in BAND_VARS.items()}
+    # cloudcover_low reaches ~3km, so for a summit below 3000m it also counts
+    # cloud ABOVE the summit. Guard: skip the low-cloud candidate in an hour when
+    # a fixed band between the summit and 3000m is itself a deck
+    # (>= CLOUD_SEA_DECK_MIN_PCT) -- then the low cloud may be overhead, not below.
+    # A layer between two bands can still slip through (known limitation).
+    above_summit_band_series = [band_cloud_series.get(alt) for alt in FIXED_ALTITUDE_BANDS_M
+                                if alt > summit_m]
     band_humidity_series = {alt: forecast["hourly"].get(var) for alt, var in HUMIDITY_VARS.items()}
     summit_actual_m = summit_m
 
     # Candidate deck layers below the summit's own altitude, CLOSEST TO THE
     # SUMMIT first, so the reported deck is the one immediately below the
-    # clear air rather than always "surface" (surface cloud, being lowest
+    # clear air rather than always the low-cloud cover (being lowest
     # by definition, would otherwise win the "first qualifying" check on
     # almost every real cloud-sea hour, since if the summit's clear and
     # anything below is overcast, the true valley floor usually is too --
@@ -1140,9 +1160,12 @@ def detect_cloud_sea_opportunity(forecast: dict, summit_m: float) -> list:
     # anyway, vs. deep/turbulent boundary-layer stratus at the surface. A
     # fixed band only counts if it's meaningfully below the summit's real
     # altitude (skip a "1000m帯" candidate for a mountain whose own band
-    # already IS ~1000m); surface is always a candidate and sorts last, as
-    # the fallback when no fixed band qualifies.
-    candidates = [("surface", 0.0, surface_cloud_series, None)]
+    # already IS ~1000m); the low-cloud cover is always a candidate and sorts
+    # last, as the fallback when no fixed band qualifies. (Replaying 24 cached
+    # mountains on 2026-11-14, every hit came from this fallback: dropping it
+    # instead would have silenced the feature, e.g. 筑波山 877m has no fixed
+    # band below its summit at all.)
+    candidates = [(CLOUD_SEA_LOW_CLOUD_LABEL, 0.0, low_cloud_series, None)]
     for alt in FIXED_ALTITUDE_BANDS_M:
         band_actual_m = alt
         if band_actual_m < summit_actual_m - 100:
@@ -1171,6 +1194,10 @@ def detect_cloud_sea_opportunity(forecast: dict, summit_m: float) -> list:
         for label, _, cloud_series, humidity_series in candidates:
             if cloud_series is None:
                 continue
+            if label == CLOUD_SEA_LOW_CLOUD_LABEL and any(
+                    s is not None and s[idx] is not None and s[idx] >= CLOUD_SEA_DECK_MIN_PCT
+                    for s in above_summit_band_series):
+                continue
             deck_cloud = cloud_series[idx]
             if deck_cloud is None or deck_cloud < CLOUD_SEA_DECK_MIN_PCT:
                 continue
@@ -1196,8 +1223,10 @@ def print_cloud_sea_opportunities(mtn: dict, opportunities: list):
         return
     print(f"\n=== {mtn['name']}({mtn['elevation_m']}m) 雲海・快晴チャンス "
           f"(日の出前後、稜線晴れ+下層に雲) ===")
-    print(f"(稜線雲量{CLOUD_SEA_CLEAR_MAX_PCT:.0f}%以下 かつ 下層のいずれかの帯で雲量"
-          f"{CLOUD_SEA_DECK_MIN_PCT:.0f}%以上。参考値であり、実際に見えるかは大気の状態や視界に左右されます)\n")
+    print(f"(稜線雲量{CLOUD_SEA_CLEAR_MAX_PCT:.0f}%以下 かつ 山頂より低い固定帯の雲量、または低層雲量が"
+          f"{CLOUD_SEA_DECK_MIN_PCT:.0f}%以上。中層雲・高層雲は数えない。低層雲は高度約3kmまで(目安)の雲なので、"
+          f"3000m未満の山では山頂〜3000mの帯が{CLOUD_SEA_DECK_MIN_PCT:.0f}%以上の時刻は除く。"
+          f"参考値であり、実際に見えるかは大気の状態や視界に左右されます)\n")
     header = (
         pad("日付", 18) + pad("時刻", 7) + pad("稜線雲量%", 10)
         + pad("雲海の高さ", 12) + pad("その雲量%", 10) + pad("湿度%(参考)", 12)
@@ -2704,7 +2733,8 @@ def hourly_report_rows(mtn: dict, rows: list) -> dict:
     """時間別の降水確率・雲量・風(--json-out 用。print_hourly_table と同じ値・同じ整形。計算はしない)。"""
     summit_label = f"山頂{mtn['elevation_m']}m"
     labels = {
-        "precip": "降水確率%(地上)", "precip_mm": "降水量mm/h", "cloud": "雲量地上%",
+        "precip": "降水確率%(地上)", "precip_mm": "降水量mm/h", "cloud": "総雲量%",
+        "cloud_low": "低層雲%", "cloud_mid": "中層雲%", "cloud_high": "高層雲%",
         "cloud_1000m": f"雲量{band_altitude_label(1000)}%", "cloud_2000m": f"雲量{band_altitude_label(2000)}%",
         "cloud_3000m": f"雲量{band_altitude_label(3000)}%", "cloud_summit": f"雲量{summit_label}%",
         "wind10": "風地上", "wind_1000m": f"風{band_altitude_label(1000)}", "wind_2000m": f"風{band_altitude_label(2000)}",
@@ -2715,7 +2745,9 @@ def hourly_report_rows(mtn: dict, rows: list) -> dict:
     for r in rows:
         out.append({
             "date": r["date"], "label": format_date_with_weekday(r["date"]), "time": r["time"],
-            "precip": fmt(r["precip"]), "precip_mm": fmt(r["precip_mm"]), "cloud": fmt(r["cloud"]), "cloud_1000m": fmt(r["cloud_1000m"]),
+            "precip": fmt(r["precip"]), "precip_mm": fmt(r["precip_mm"]), "cloud": fmt(r["cloud"]),
+            "cloud_low": fmt(r["cloud_low"]), "cloud_mid": fmt(r["cloud_mid"]), "cloud_high": fmt(r["cloud_high"]),
+            "cloud_1000m": fmt(r["cloud_1000m"]),
             "cloud_2000m": fmt(r["cloud_2000m"]), "cloud_3000m": fmt(r["cloud_3000m"]),
             "cloud_summit": fmt(r["cloud_summit"]),
             "wind10": wind_band_cell(r["wind10_speed_kmh"], r["wind10_dir"]),

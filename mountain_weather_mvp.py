@@ -197,7 +197,8 @@ def fetch_single_model(lat: float, lon: float, model, days: int, with_sunrise: b
 
 def fetch_forecast(lat: float, lon: float, days: int = 15, summit_m: float = None,
                    terrain_profile: dict = None) -> dict:
-    """Fetch hourly surface cloud cover/precip/cape plus the pressure-level
+    """Fetch hourly whole-sky cloud cover (total/low/mid/high -- NOT a near-ground
+    value)/precip/cape plus the pressure-level
     stack, then synthesize cloud cover, RH, wind speed and temperature AT
     summit_m (core.add_altitude_columns -> 'cloudcover_at_summit' etc.,
     2026-09-09; before this every mountain was read at one of three fixed

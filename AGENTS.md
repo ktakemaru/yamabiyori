@@ -47,6 +47,7 @@ python -m venv venv                       # python が無ければ py -m venv ve
 ```
 - **76座に無い山**は診断モードに `--name 山名 --lat 緯度 --lon 経度 --elevation 標高m`(4つ一緒。`--mountain` とは併用不可)を渡す。座標・標高はWeb検索(Wikipedia・国土地理院など)で調べ、出典を伝える。地形(風上/風下)の表示は付かず、探索モードの対象にはならない。`MOUNTAINS` への追加は別途ユーザーに確認する。
 - 引数なしの `mountain_weather_detail.py` は対話式(GPXルート診断もこちら)。エージェントからは `--mountain` を使う。山の番号はリスト順なので、使う前に `--list` で確認する。2回目以降は `cache/` が効いて速い。
+- 診断モードの時間ごとの表(画面・`--json-out` とも同じ列)の **「総雲量%」は空全体の雲量で、地上付近の雲量ではない**。内訳の「低層雲%」「中層雲%」「高層雲%」で、山頂より下の雲か、山の上の高い雲かを読み分ける(読み方は `skills/yamabiyori/references/report_style.md`)。
 - **PowerShell では python の出力を `>`・`|`・`$x = ...` で受けない。** Windows PowerShell 5.1 では日本語が化け、`>` の
   ファイルは UTF-16 になる。`| Select-Object -First` は途中でプロセスを止め終了コードも壊す。コマンドはそのまま実行して出力を読む。
   長い出力は `--out out/ファイル名`(UTF-8 BOM付きで保存、画面には1行だけ)で残す。`out/` は gitignore 済み。別の場所に保存したファイルはコミットしない。
