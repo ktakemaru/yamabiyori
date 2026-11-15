@@ -38,7 +38,7 @@ from cli_output import run_with_output_file
 from report_data import row_to_json, write_report_json
 
 from mountain_weather_core import (
-    MOUNTAINS, pad,
+    MOUNTAINS, mountain_by_id, pad,
     nearest_pressure_level,
     FIXED_ALTITUDE_BANDS_M, BAND_VARS, WIND_SPEED_BAND_VARS,
     level_stack_vars, add_altitude_columns, climb_layer_moist_series, altitude_col, band_label,
@@ -2679,12 +2679,16 @@ def fetch_jma_weather_map(out_dir: str = SCREENSHOT_DIR, include_forecast: bool 
 
 
 def resolve_mountain(query: str):
-    """--mountain の値(番号 or 山名)を MOUNTAINS の1件に解決する。
-    戻り値 (山 or None, 候補の(番号, 山)リスト)。山名は完全一致 → 一意な部分一致の順に探す。"""
+    """--mountain の値(番号 or ID or 山名)を MOUNTAINS の1件に解決する。
+    戻り値 (山 or None, 候補の(番号, 山)リスト)。番号 → ID の完全一致("m012" など、2026-11-16)→
+    山名の完全一致 → 一意な部分一致の順に探す。"""
     q = query.strip()
     if q.isdigit():
         n = int(q)
         return (MOUNTAINS[n - 1], []) if 1 <= n <= len(MOUNTAINS) else (None, [])
+    by_id = mountain_by_id(q)
+    if by_id is not None:
+        return by_id, []
     numbered = list(enumerate(MOUNTAINS, start=1))
     exact = [(i, m) for i, m in numbered if m["name"] == q]
     if exact:
@@ -2795,7 +2799,8 @@ def build_report_data(mtn: dict, day_scores: dict, opportunities: list, rows: li
             })
     return {
         "mode": "diagnosis", "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "mountain": {k: mtn.get(k) for k in ("name", "elevation_m", "lat", "lon", "region", "access")},
+        # id: 山の変わらない ID(2026-11-16)。登録外の山(--name)は None(JSON では null)。推測で付けない
+        "mountain": {k: mtn.get(k) for k in ("name", "elevation_m", "lat", "lon", "region", "access", "id")},
         "days": days,
         "precip_timing_note": precip_timing_note(day_scores), "terrain_attribution": terrain.ATTRIBUTION,
         "cloud_sea": [dict(o, label=format_date_with_weekday(o["date"])) for o in opportunities],
@@ -2896,7 +2901,7 @@ def parse_args(argv=None):
         description="ヤマビヨリ 診断モード。引数なしで起動すると対話式(1=山選択 / 2=GPXルート診断)。")
     parser.add_argument("--list", action="store_true", help="山の番号一覧を表示して終了する")
     parser.add_argument("--mountain", metavar="番号|山名",
-                        help="山を指定して非対話で診断する(例: --mountain 12 / --mountain 富士山)")
+                        help="山を指定して非対話で診断する(例: --mountain 12 / --mountain m012 / --mountain 富士山。m012 は山の変わらない ID)")
     parser.add_argument("--name", metavar="山名",
                         help="登録外の山を診断する: 山名(--lat・--lon・--elevation と4つ一緒に指定。--mountain とは併用不可)")
     parser.add_argument("--lat", type=float, metavar="緯度", help="登録外の山の緯度(十進法。例: 38.9609)")
