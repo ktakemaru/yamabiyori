@@ -1204,20 +1204,250 @@ def _http_session() -> requests.Session:
     return _HTTP_SESSION
 
 
+# ---------------------------------------------------------------------------
+# Open-Meteo の利用上限(HTTP 429)と、通信の間隔の調整(2026-11-16、ヤマビヨリ2.0の土台。
+# 保護領域「取得」のうち、この節と get_with_retry の 429 の扱いだけを利用者の承認のもとで変えた)。
+# 考え方はホシビヨリ v1.1.0 を読んで写した(コードは import もコピーもしていない)。
+# Open-Meteo の無料枠の上限は 1分600・1時間5,000・1日10,000(IPアドレス単位)で、変数が多い・日数が長い
+# 通信を1回より多く数える。429 の本文の reason で上限の種類が分かる。
+#   - minutely(1分の上限): 65秒待って同じ通信を取り直す(1回の実行で合計 MINUTELY_RETRY_MAX 回まで)。
+#   - hourly / daily / unknown(または 1分の待ちを使い切った): 2秒・4秒の再試行をせず
+#     OpenMeteoRateLimitError を上げる。探索モードはこれを受けて残りの山を取りに行かない。
+#   - 429 以外(接続エラー・408・5xx など)の再試行(3回、2秒・4秒)は従来どおり。
+# 通信の間隔の調整は探索モードだけで有効にする(configure_open_meteo_pacing(enabled=True)。既定は無効)。
+# 対象は api.open-meteo.com への通信だけ。直近60秒の重さの合計が PACING_LIMIT_PER_MINUTE を超えないよう、
+# 通信の前(再試行も含む)に必要なだけ待つ。キャッシュから読んだ分は通信しないので数えない。
+# ---------------------------------------------------------------------------
+# ホシビヨリ v1.1.0 と同じ値。2026-11-13 の実測にもとづく安全側の設定
+PACING_LIMIT_PER_MINUTE = 300.0   # 直近60秒の重さの合計の上限(1分の上限600の半分)
+PACING_WINDOW_SEC = 60.0
+MINUTELY_RETRY_WAIT_SEC = 65.0    # 1分の上限(minutely)の429のときの待ち
+MINUTELY_RETRY_MAX = 5            # 1回の実行で 65秒待つのは合計この回数まで
+PACED_HOST = "api.open-meteo.com"
+RATE_LIMIT_KINDS = ("minutely", "hourly", "daily", "unknown")
+
+
+class OpenMeteoRateLimitError(requests.exceptions.RequestException):
+    """HTTP 429(利用上限)で取得をやめることを呼び出し元に伝える例外。
+
+    requests.exceptions.RequestException を継ぐので、既存の `except RequestException` は従来どおり
+    「取得失敗」として受ける(診断モードの終了コード2、ひまわりの灰色タイルなど)。探索モードだけが先に
+    この例外を受けて、残りの山の取得をやめる。kind は RATE_LIMIT_KINDS のどれか、reason は 429 の本文の reason。"""
+
+    def __init__(self, kind: str, reason: str, url: str = None, exhausted_minutely: bool = False):
+        self.kind = kind
+        self.reason = reason
+        self.url = url
+        self.exhausted_minutely = exhausted_minutely
+        extra = f"、1分の上限の待ちを{MINUTELY_RETRY_MAX}回使い切りました" if exhausted_minutely else ""
+        super().__init__(f"HTTP 429(利用上限、種類={kind}、reason={reason or '(本文なし)'}){extra}")
+
+
+def classify_rate_limit(reason_text) -> str:
+    """429 の本文の reason から種類を返す(ホシビヨリと同じ分け方: 大文字小文字を区別せず、
+    重い順 daily → hourly → minutely に語を探す。どれも無ければ unknown)。"""
+    text = reason_text.lower() if isinstance(reason_text, str) else ""
+    for kind in ("daily", "hourly", "minutely"):
+        if kind in text:
+            return kind
+    return "unknown"
+
+
+def rate_limit_reason(resp) -> str:
+    """429 の応答から reason を取り出す。JSON の reason が読めなければ本文の先頭200文字(それも無ければ空)。"""
+    try:
+        body = resp.json()
+        if isinstance(body, dict) and isinstance(body.get("reason"), str):
+            return body["reason"]
+    except Exception:
+        pass
+    try:
+        text = resp.text
+        return text[:200] if isinstance(text, str) else ""
+    except Exception:
+        return ""
+
+
+def request_weight(params) -> float:
+    """1回の通信の重さの見積もり: max(1, 変数の数/10) × max(1, 予報日数/14)(ホシビヨリと同じ式)。
+    変数の数は hourly と daily の合計(安全側に数える)。予報日数は forecast_days(無ければ Open-Meteo の既定の7)。"""
+    params = params or {}
+
+    def count(value):
+        if value is None:
+            return 0
+        if isinstance(value, str):
+            return len([v for v in value.split(",") if v.strip()])
+        return len(list(value))
+
+    n_vars = count(params.get("hourly")) + count(params.get("daily"))
+    try:
+        days = float(params.get("forecast_days", 7))
+    except (TypeError, ValueError):
+        days = 7.0
+    return max(1.0, n_vars / 10.0) * max(1.0, days / 14.0)
+
+
+# 時計と待ち(テストで差し替えられるよう、呼ぶたびにモジュールの名前を引く)
+def _clock() -> float:
+    return time_module.monotonic()
+
+
+def _sleep(seconds: float) -> None:
+    time_module.sleep(seconds)
+
+
+class RequestPacer:
+    """直近 window_sec 秒に送った通信の重さの合計が limit を超えないように待つ。"""
+
+    def __init__(self, limit: float = PACING_LIMIT_PER_MINUTE, window_sec: float = PACING_WINDOW_SEC):
+        self.limit = limit
+        self.window_sec = window_sec
+        self.sent = []   # (送った時刻, 重さ)。古い順
+
+    def _drop_old(self, now: float) -> None:
+        cutoff = now - self.window_sec
+        while self.sent and self.sent[0][0] <= cutoff:
+            self.sent.pop(0)
+
+    def window_total(self) -> float:
+        self._drop_old(_clock())
+        return sum(w for _, w in self.sent)
+
+    def acquire(self, weight: float) -> float:
+        """重さ weight の通信を送ってよくなるまで待ち、送ったことを記録する。待った秒数を返す。"""
+        waited = 0.0
+        while True:
+            now = _clock()
+            self._drop_old(now)
+            total = sum(w for _, w in self.sent)
+            if not self.sent or total + weight <= self.limit:
+                self.sent.append((now, weight))
+                return waited
+            # 古いものから窓を抜けていき、送れるようになる時刻まで待つ
+            freed = 0.0
+            wait_until = now
+            for t_sent, w in self.sent:
+                freed += w
+                wait_until = t_sent + self.window_sec
+                if total - freed + weight <= self.limit:
+                    break
+            delay = max(wait_until - now, 0.0)
+            if delay > 0:
+                _sleep(delay)
+                waited += delay
+
+
+class OpenMeteoRunStats:
+    """1回の実行の、Open-Meteo の通信の秒数・間隔の調整・429 の記録(探索モードの最後の内訳の行に使う)。"""
+
+    def __init__(self, pacing_enabled: bool = False):
+        self.pacing_enabled = pacing_enabled
+        self.pacer = RequestPacer()
+        self.fetch_sec = 0.0          # Open-Meteo への通信にかかった秒数(再試行の間の2秒・4秒の待ちを含む)
+        self.pacing_sec = 0.0         # 通信の間隔の調整で待った秒数
+        self.pacing_waits = 0         # 間隔の調整で待った回数
+        self.minutely_waits = 0       # 1分の上限で65秒待った回数
+        self.minutely_wait_sec = 0.0
+        self.requests = 0             # Open-Meteo への通信の回数(再試行・取り直しも1回と数える)
+        self.rate_limit_events = []   # (種類, reason)
+
+    @property
+    def wait_sec(self) -> float:
+        """間隔の調整の合計(通信の間隔の調整 + 1分の上限の待ち)。"""
+        return self.pacing_sec + self.minutely_wait_sec
+
+
+_RUN_STATS = OpenMeteoRunStats()
+
+
+def configure_open_meteo_pacing(enabled: bool) -> OpenMeteoRunStats:
+    """1回の実行の記録を新しくし、通信の間隔の調整の有無を決める(探索モードの main() が呼ぶ)。
+    1分の上限の待ちの回数(合計5回まで)もここで0に戻る。戻り値はその実行の記録。"""
+    global _RUN_STATS
+    _RUN_STATS = OpenMeteoRunStats(pacing_enabled=enabled)
+    return _RUN_STATS
+
+
+def open_meteo_run_stats() -> OpenMeteoRunStats:
+    return _RUN_STATS
+
+
+def _host_of(url) -> str:
+    from urllib.parse import urlsplit
+    try:
+        return (urlsplit(url).hostname or "").lower()
+    except (TypeError, ValueError, AttributeError):
+        return ""
+
+
+def _pace_before_request(url: str, params) -> None:
+    stats = _RUN_STATS
+    if not stats.pacing_enabled or _host_of(url) != PACED_HOST:
+        return
+    waited = stats.pacer.acquire(request_weight(params))
+    if waited > 0:
+        if stats.pacing_waits == 0:
+            print("  (Open-Meteo の利用上限を避けるため、通信の間隔を調整しています。待った秒数は最後に出します)")
+        stats.pacing_waits += 1
+        stats.pacing_sec += waited
+
+
 def get_with_retry(url: str, params: dict):
+    """GET して応答を返す。429 以外の失敗は 3 回まで(2秒・4秒待って)試し、最後の例外を上げる(従来どおり)。
+    429 の扱いと通信の間隔の調整は上の節のとおり(2026-11-16)。"""
+    stats = _RUN_STATS
+    is_open_meteo = _host_of(url).endswith("open-meteo.com")
     last_error = None
-    for attempt in range(1, MAX_RETRIES + 1):
+    attempt = 1
+    while attempt <= MAX_RETRIES:
+        _pace_before_request(url, params)   # 再試行・取り直しの通信も数える
+        t_try = _clock()
+        limited = None
         try:
             resp = _http_session().get(url, params=params, timeout=REQUEST_TIMEOUT)
-            resp.raise_for_status()
-            return resp
+            if resp.status_code == 429:
+                limited = resp
+            else:
+                resp.raise_for_status()
+                return resp
         except requests.exceptions.RequestException as e:
             last_error = e
             if attempt < MAX_RETRIES:
                 wait = 2 * attempt  # 2s, 4s, ...
                 print(f"  (通信エラー、{wait}秒後にリトライ {attempt}/{MAX_RETRIES}: {e})")
                 time_module.sleep(wait)
+        finally:
+            if is_open_meteo:
+                stats.requests += 1
+                stats.fetch_sec += _clock() - t_try
+        if limited is None:
+            attempt += 1
+            continue
+        reason = rate_limit_reason(limited)
+        kind = classify_rate_limit(reason)
+        stats.rate_limit_events.append((kind, reason))
+        print(f"  ({_host_of(url) or url} が429(利用上限、種類={kind})を返しました。reason: {reason or '(本文なし)'})")
+        if kind == "minutely" and stats.minutely_waits < MINUTELY_RETRY_MAX:
+            stats.minutely_waits += 1
+            print(f"  1分の上限のため{MINUTELY_RETRY_WAIT_SEC:.0f}秒待ちます({stats.minutely_waits}/{MINUTELY_RETRY_MAX})")
+            _sleep(MINUTELY_RETRY_WAIT_SEC)
+            stats.minutely_wait_sec += MINUTELY_RETRY_WAIT_SEC
+            continue   # 同じ通信を取り直す(2秒・4秒の再試行の回数は使わない)
+        raise OpenMeteoRateLimitError(kind, reason, url=url, exhausted_minutely=(kind == "minutely"))
     raise last_error
+
+
+def timing_breakdown_line(total_sec: float, stats: OpenMeteoRunStats = None) -> str:
+    """探索モードの最後に出す、実行時間の内訳の1行(全体 / Open-Meteoの通信 / 間隔の調整 / それ以外)。"""
+    stats = stats or _RUN_STATS
+    wait = stats.wait_sec
+    other = total_sec - stats.fetch_sec - wait
+    text = (f"実行時間の内訳: 全体 {total_sec:.1f} 秒 / Open-Meteoの通信 {stats.fetch_sec:.1f} 秒 / "
+            f"間隔の調整 {wait:.1f} 秒")
+    if stats.minutely_waits:
+        text += f"(うち1分の上限の待ち {stats.minutely_waits} 回・{stats.minutely_wait_sec:.1f} 秒)"
+    return text + f" / それ以外 {other:.1f} 秒(全体 − 通信 − 間隔の調整)"
 
 
 # Open-Meteo responses are cached to disk as the exact raw JSON the API
