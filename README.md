@@ -305,7 +305,7 @@ Windows PowerShell 5.1 で `>` を使うと文字化けするので、出力を�
 ## 使い方
 
 ```powershell
-# 探索モード: 全山ランキング(非対話。初回は数分かかる)
+# 探索モード: 全山ランキング(非対話。初回は数分かかる。Open-Meteo の利用上限を避けるため通信の間隔を自動で調整し、最後に「実行時間の内訳」を1行出す)
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --limit 3        # 動作確認用: 先頭3座だけ
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --region 伊豆     # 地域で絞る(複数回指定可)
