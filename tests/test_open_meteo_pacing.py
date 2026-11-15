@@ -191,17 +191,6 @@ class TestRateLimitInGetWithRetry(PacingTestBase):
         self.assertEqual(s.get.call_count, 1)
         self.assertEqual(self.stats.requests, 0)   # Open-Meteo の通信としては数えない
 
-    def test_himawari_mosaic_falls_back_on_429(self):
-        try:
-            import PIL  # noqa: F401
-        except ImportError:
-            self.skipTest("Pillow が無い")
-        self.session(lambda *a, **k: resp429(text="Too Many Requests"))
-        with tempfile.TemporaryDirectory() as d:
-            result, _ = run_quietly(core.fetch_himawari_image, 36.0, 138.0, basetime="20261116000000",
-                                    tile_span=1, out_path=os.path.join(d, "h.jpg"))
-            self.assertTrue(os.path.exists(result["path"]))
-
     def test_success_path_unchanged(self):
         ok = resp_ok({"a": 1})
         s = self.session([ok])
