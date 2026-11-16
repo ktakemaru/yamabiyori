@@ -10,6 +10,7 @@ PeakFinder(山名を写真に重ねるアプリ)のラベルを正解として�
 | `geometry.py` | 計算の部品(通信しない)。方位と距離(Vincenty の逆問題)、見上げ角と「余裕」、稜線の輪郭、横位置の当てはめ |
 | `stage1_daibosatsu.py` | 今回の実行用。材料を読み、計算し、`out/panorama/daibosatsu/` に書く |
 | `../../tests/test_panorama_geometry.py` | 計算の部品のテスト(作った地形で。通信しない) |
+| `../../tests/test_panorama_stage1.py` | 1003山の読み込みのテスト(作った GeoJSON で。データが無いときに止まること) |
 
 ## 動かし方(リポジトリのルートで)
 ```
@@ -18,7 +19,9 @@ PeakFinder(山名を写真に重ねるアプリ)のラベルを正解として�
 ```
 - `--data-dir` に `peakfinder_labels.json`(撮影地点・ラベル)と GPX と写真を置く。**利用者の記録なのでリポジトリに入れない。**
   撮影地点の座標・時刻はコードに書かず、実行時にここから読む。
-- 国土地理院「日本の主な山岳標高」の GeoJSON を `cache/panorama/gsi_1003/` に置いておく(今回は 1 回だけ手で取った。手順と、TLS の設定が要ったことは報告書の 6 章)。
+- 国土地理院「日本の主な山岳標高」の GeoJSON を、**ブラウザで取得して** `cache/panorama/gsi_1003/` に置いておく
+  (<https://www.gsi.go.jp/kihonjohochousa/kihonjohochousa41139.html> の GeoJSON の zip を展開した `.geojson`)。
+  スクリプトは国土地理院のサイトに接続しない。ファイルが無ければ、この手順を案内して止まる。リポジトリには入れない。
 - 標高タイルは `mountain_terrain.DemTileStore` で取り、`terrain_cache/` に保存する。`--max-new-tiles`(既定 400)で
   タイルの総数に上限をかけ、HTTP 429 か同じ失敗 5 回で取得をやめる。`--no-fetch` は手元のタイルだけで計算する。
 - 所要: タイルが手元にあれば 4〜5 分(輪郭の計算が大半)。

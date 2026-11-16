@@ -6,7 +6,8 @@
 
 入力(読むだけ・リポジトリに入れない):
   --data-dir の peakfinder_labels.json(写真ごとの撮影地点・ラベル)と GPX。写真は確認ページから参照するだけ。
-  cache/panorama/gsi_1003/*.geojson(国土地理院「日本の主な山岳標高」)、mountain_weather_core.MOUNTAINS。
+  cache/panorama/gsi_1003/*.geojson(国土地理院「日本の主な山岳標高」。ブラウザで取得して置く。無ければ案内を出して止まる)、
+  mountain_weather_core.MOUNTAINS。
 通信: 地理院の標高タイルだけ(mountain_terrain.DemTileStore 経由。terrain_cache/ に保存)。
 出力: out/panorama/daibosatsu/(git の管理外)。
 
@@ -165,10 +166,21 @@ def name_variants(name: str) -> set:
     return {norm(v) for v in out if v.strip()}
 
 
-def load_gsi():
-    paths = glob.glob(os.path.join(GSI_DIR, "*.geojson"))
+GSI_PAGE_URL = "https://www.gsi.go.jp/kihonjohochousa/kihonjohochousa41139.html"
+
+
+def gsi_missing_message(gsi_dir):
+    return (f"国土地理院「日本の主な山岳標高(1003山)」の GeoJSON が {gsi_dir} にありません。\n"
+            f"  ブラウザで {GSI_PAGE_URL} を開き、GeoJSON の zip を取得して展開し、\n"
+            f"  中の .geojson を cache/panorama/gsi_1003/ に置いてから、もう一度実行してください。\n"
+            f"  (このスクリプトは国土地理院のサイトには接続しません)")
+
+
+def load_gsi(gsi_dir=GSI_DIR):
+    """保存済みの 1003山の GeoJSON を読む。無ければ取得方法を案内して止まる(自分では取りに行かない)。"""
+    paths = sorted(glob.glob(os.path.join(gsi_dir, "*.geojson")))
     if not paths:
-        return [], None
+        raise SystemExit(gsi_missing_message(gsi_dir))
     gj = json.load(open(paths[0], encoding="utf-8-sig"))
     out = []
     for f in gj["features"]:
