@@ -636,12 +636,12 @@ def report_day(day_index: int, date_str: str, all_rows: list, day_rows: list, no
         "index": day_index, "date": date_str, "label": format_date_with_weekday(date_str),
         "rows": [
             {"rank": n, "mountain": r["mountain"], "region": r["region"], "access": r["access"],
-             **row_to_json(r, report_cells(r))}
+             **row_to_json(r, report_cells(r)), "id": r.get("id")}
             for n, r in enumerate(day_rows, start=1)
         ],
         "all": [
             {"mountain": r["mountain"], "region": r["region"], "score": r["score"],
-             "hazard_class": hazard_class(r["hazards"])}
+             "hazard_class": hazard_class(r["hazards"]), "id": r.get("id")}
             for r in all_rows
         ],
         "timing_note": note,
@@ -770,6 +770,7 @@ def run_ranking(args, regions, pool) -> int:
                         "day_total_precip_mm": windows["day_total_precip_mm"],
                         "terrain": activity["terrain"],
                         "terrain_base": activity["terrain_base"],
+                        "id": mtn.get("id"),   # --json-out 用(2026-11-16)。画面には出さない
                     }
                 )
 
