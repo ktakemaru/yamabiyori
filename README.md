@@ -317,6 +317,7 @@ Windows PowerShell 5.1 で `>` を使うと文字化けするので、出力を�
 # 診断モード: 非対話(番号はリスト順なので --list で確認。山名の一部でも可)
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --list
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain m012   # 山の変わらない ID でも選べる(ID は --json-out の JSON にある)
 
 # 診断モード: 76座に無い山(山名・緯度・経度・標高を4つ一緒に指定。地形データなしで診断する)
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --name 栗駒山 --lat 38.9609 --lon 140.7884 --elevation 1626
@@ -324,6 +325,7 @@ Windows PowerShell 5.1 で `>` を使うと文字化けするので、出力を�
 # HTMLレポート: 数値をJSONで保存 → 解説を足して変換(手順は skills/yamabiyori/references/report_style.md)
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山 --json-out out/fuji.json
 ./venv/Scripts/python.exe -X utf8 scripts/render_report.py --data out/fuji.json --out out/fuji.html
+# --json-out の JSON には、各山の変わらない ID(`id`: m001〜。並べ替えても変わらない)が入る。76座に無い山(--name)は null
 
 # テスト(オフライン)
 ./venv/Scripts/python.exe -X utf8 -m unittest
