@@ -34,6 +34,7 @@ import mountain_terrain as terrain
 from cli_output import run_with_output_file
 from report_data import hazard_class, row_to_json, write_report_json
 
+import mountain_weather_core as core
 from mountain_weather_core import (
     MOUNTAINS, pad,
     level_stack_vars, add_altitude_columns, climb_layer_moist_series,
@@ -683,10 +684,15 @@ def main(argv=None) -> int:
     if error:
         print(error)
         return 2
-    if args.out:
-        code = run_with_output_file(args.out, lambda: run_ranking(args, regions, pool))
-    else:
-        code = run_ranking(args, regions, pool)
+    # 通信の間隔の調整は探索モードだけで有効にする(2026-11-16。診断モード・ほかの呼び出し元では無効のまま)
+    core.configure_open_meteo_pacing(enabled=True)
+    try:
+        if args.out:
+            code = run_with_output_file(args.out, lambda: run_ranking(args, regions, pool))
+        else:
+            code = run_ranking(args, regions, pool)
+    finally:
+        core.configure_open_meteo_pacing(enabled=False)
     json_out = getattr(args, "json_out", None)
     if code == 0 and json_out:
         return write_report_json(json_out, args.report_data)
@@ -694,6 +700,7 @@ def main(argv=None) -> int:
 
 
 def run_ranking(args, regions, pool) -> int:
+    started = core._clock()   # 最後の「実行時間の内訳」の行用(2026-11-16)
     today = date.today()
     target_dates = [str(today + timedelta(days=i)) for i in range(15)]  # today .. +14
     fetched = 0
@@ -705,6 +712,12 @@ def run_ranking(args, regions, pool) -> int:
         try:
             forecast = fetch_forecast(mtn["lat"], mtn["lon"], summit_m=mtn["elevation_m"],
                                       terrain_profile=terrain.terrain_for(mtn["name"]))
+        except core.OpenMeteoRateLimitError as e:
+            # 利用上限(429)で回復しない: この山は従来どおり「取得失敗」とし、残りの山は取りに行かない(2026-11-16)
+            print(f"  ({mtn['name']}: 取得失敗のためスキップ - {e})")
+            remaining = len(pool) - pool.index(mtn) - 1
+            print(f"  (利用上限(種類={e.kind}、reason={e.reason or '(本文なし)'})のため、残り {remaining} 座の取得をやめました)")
+            break
         except requests.exceptions.RequestException as e:
             print(f"  ({mtn['name']}: 取得失敗のためスキップ - {e})")
             continue
@@ -818,6 +831,7 @@ def run_ranking(args, regions, pool) -> int:
             if note:
                 print(note)
     args.report_data = report
+    print("\n" + core.timing_breakdown_line(core._clock() - started))   # 2026-11-16: 探索モードの最後に1行
     return 0
 
 
