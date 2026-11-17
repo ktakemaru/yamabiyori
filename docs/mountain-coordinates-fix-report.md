@@ -2,7 +2,7 @@
 
 作成 2026-11-18 / ブランチ `fix/mountain-coordinates`(`main` の `c8e8812` から)/ 指示書 `docs/mountain-coordinates-fix-instructions.md`
 
-点検の報告書 `docs/mountains-coordinate-audit-report.md` は、このブランチにも `main` にも無く、ブランチ `experiment/mountains-coordinate-audit` にあります。
+点検の報告書は `docs/mountains-coordinate-audit-report.md`(指示書は `docs/mountains-coordinate-audit-instructions.md`)です。
 
 **push・PR・マージはしていません。** 時刻は日本時間です(Open-Meteo の記録は UTC から直した)。
 
@@ -239,9 +239,11 @@
    - 取り直すと期待値が変わるので、`tests/test_regression.py` の期待値の変更(保護領域の検証の手順)が必要になります。
    - Open-Meteo の `past_days` の上限は 92 日なので、2026-09-06 を取れるのは 12 月の初めころまでとみています(確かめていない)。
 3. **使い方の例の古い座標**(5.3)を、新しい座標か別の山に直すか。
+   - **片付いた**: commit `8a43d49` で、唐松岳の今の座標(36.68723, 137.75469)とそのキャッシュ名に直しました(文書だけ)。
 4. **`msm_grid_elevation_m` の名前**を中身(問い合わせた地点の高さ)に合わせるか、使われていないので消すか、そのままにするか。
 5. **バックテスト基盤への知らせ**(5.2)。マージ後、14 座の確信度の記録が新しい座標になることを、yamabiyori-backtest 側に書き残すか。
 6. **点検の報告書をどうするか**。`docs/mountains-coordinate-audit-report.md` は `experiment/mountains-coordinate-audit` にしか無く、CHANGELOG とこの報告書はそれを指しています。そのブランチを別に PR にするか、報告書だけをこの PR に足すか、指し先をブランチ名のままにするか。
+   - **片付いた**: commit `8a43d49` で、点検の報告書と指示書をこのブランチに持ってきました。CHANGELOG とこの報告書は、`docs/mountains-coordinate-audit-report.md` を指す形に直しました。
 7. **`summit_coord_suspect` の印**が、今回のずれ(14 座とも False)を拾えていなかったこと。直すか(閾値の話になるので、今回は何もしていない)。
 
 ## 9. 未確認のこと
