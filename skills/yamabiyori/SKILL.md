@@ -423,7 +423,7 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
 `fetch_open_meteo`/`_cache_path`/`_load_cache`/`_save_cache`/`get_with_retry`/`CACHE_DIR`/`CACHE_TTL_SECONDS`/`OPEN_METEO_URL`は`mountain_weather_core.py`に一度だけ定義されており、mvp.py/detail.pyの両方がそこから読み込む(2026-09より前はdetail.py発の設計をmvp.py側に手でコピーしていたが、この移行で統合した)。導入の動機: mvp.pyは76山×3本(jma_msm/ecmwf_ifs025/best_match視程用)のAPIコールをキャッシュ無しで毎回フルに叩いており、実行のたびに数分かかっていた。
 
 - 目的: フォーマット前の生レスポンスをディスクに残し、後から別の変数が必要になったときに全部取り直さず差分だけ取得できるようにする。
-- 保存先: `<スクリプトと同じディレクトリ>/cache/{model}_{lat:.4f}_{lon:.4f}_{days}d.json`(例: `jma_msm_36.7514_137.7622_14d.json`)。`model=None` のときは `best_match` 名で保存。`_cache_path()`は`past_days`引数(非0のときだけファイル名に`_past{N}d`サフィックスが付く)も受けるが、mvp.pyはこれを一切使わないので通常のキー(サフィックスなし)のみを生成する。両スクリプトとも同じ`cache/`ディレクトリを見るが、`days`がmvp.py=15・detail.py=14で異なるためファイル名キーが衝突することはない(同じ山を両方のスクリプトで見ても別ファイルになる)。
+- 保存先: `<スクリプトと同じディレクトリ>/cache/{model}_{lat:.4f}_{lon:.4f}_{days}d.json`(例: `jma_msm_36.6872_137.7547_14d.json`)。`model=None` のときは `best_match` 名で保存。`_cache_path()`は`past_days`引数(非0のときだけファイル名に`_past{N}d`サフィックスが付く)も受けるが、mvp.pyはこれを一切使わないので通常のキー(サフィックスなし)のみを生成する。両スクリプトとも同じ`cache/`ディレクトリを見るが、`days`がmvp.py=15・detail.py=14で異なるためファイル名キーが衝突することはない(同じ山を両方のスクリプトで見ても別ファイルになる)。
 - TTL: `CACHE_TTL_SECONDS`(3時間)。新鮮かつ要求変数が全部揃っていれば通信なしでキャッシュを返す。新鮮だが変数が足りなければ**その差分だけ**取得してキャッシュJSONにマージ。古い/無い場合は要求分をまるごと取得してキャッシュを作り直す。
 - 汎用エントリポイント(core.pyに1つだけ存在。シグネチャ):
   ```python
@@ -432,7 +432,7 @@ detail.py側は、この3区間とは別に「日の出+`EARLY_START_OFFSET_HOUR
   Open-Meteoがサポートする**任意の**変数名をそのまま渡せる(そのスクリプトが現在使っていない変数でもOK)。新しい分析軸(積雪など)を試すときはこれを直接呼ぶ。変数名一覧: https://open-meteo.com/en/docs。`past_days`は一回限りの過去日付取得用(detail.py側のユースケース、`scratch_past_date.py`参照)で、mvp.py/detail.pyとも通常の呼び出しでは指定しない(デフォルト0)。
   ```python
   import mountain_weather_core as core
-  data = core.fetch_open_meteo(36.7514, 137.7622, hourly=["temperature_2m", "snow_depth"], days=3)
+  data = core.fetch_open_meteo(36.68723, 137.75469, hourly=["temperature_2m", "snow_depth"], days=3)
   # または import mountain_weather_detail as m; m.fetch_open_meteo(...) -- detail.pyがcoreから
   # 読み込んだ同じ関数オブジェクトを指す(mvp.py経由でも同様)。
   ```
