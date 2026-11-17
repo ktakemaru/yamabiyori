@@ -8,9 +8,11 @@ clone 直後でも `python -X utf8 scratch_validate_refs.py --cache-dir tests/fi
 
 | ファイル | 山(`MOUNTAINS` の座標) | モデル |
 |---|---|---|
-| `jma_msm_36.7514_137.7622_1d_past5d.json` / `ecmwf_ifs025_…` | 唐松岳 | `jma_msm` / `ecmwf_ifs025` |
+| `jma_msm_36.6872_137.7547_1d_past5d.json` / `ecmwf_ifs025_…` | 唐松岳(※) | `jma_msm` / `ecmwf_ifs025` |
 | `jma_msm_36.5758_137.6197_1d_past5d.json` / `ecmwf_ifs025_…` | 立山(雄山) | 同上 |
 | `jma_msm_36.3419_137.6469_1d_past5d.json` / `ecmwf_ifs025_…` | 槍ヶ岳 | 同上 |
+
+※ 唐松岳の 2 ファイルは、2026-11-18 に `MOUNTAINS` の座標を国土地理院 1003 山の山頂の点に直したとき、ファイル名だけを新しい座標(36.68723, 137.75469 の小数 4 桁)に合わせた(旧名 `…_36.7514_137.7622_…`)。**中身は直す前の座標(唐松岳の北 7.2km、白馬岳の近く)で取ったもの**のまま。
 
 - 取得日時: 2026-09-09 21:37 JST(各ファイルの `_fetched_at`、UNIX 秒)
 - 取得方法: Open-Meteo Forecast API(`/v1/forecast`)、`past_days=5`・`forecast_days=1`、`timezone=Asia/Tokyo`、
