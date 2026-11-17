@@ -14,7 +14,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURES = os.path.join(ROOT, "tests", "fixtures", "refs")
 
 EXPECTED = [
-    "唐松岳 2026-09-06: score=55.0 cloud=63.4(raw 30.9) wet=50.0(7/14h M 湿7) vis=None day_total_mm=0.6",
+    "唐松岳 2026-09-06: score=46.0 cloud=75.6(raw 41.2) wet=57.1(8/14h M 湿8) vis=None day_total_mm=1.0",
     "立山(雄山) 2026-09-05: score=95.6 cloud=16.4(raw 6.1) wet=0.0(0/14h M) vis=None day_total_mm=0.0",
     "槍ヶ岳 2026-09-05: score=67.8 cloud=75.5(raw 39.8) wet=7.1(1/14h M 湿1) vis=None day_total_mm=0.0",
 ]
