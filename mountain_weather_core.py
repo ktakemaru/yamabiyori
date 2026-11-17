@@ -1521,7 +1521,7 @@ def fetch_open_meteo(lat: float, lon: float, hourly: list = None, daily: list = 
     scoring pipeline, e.g.:
 
         import mountain_weather_core as core
-        data = core.fetch_open_meteo(36.7514, 137.7622, hourly=["temperature_2m", "snow_depth"], days=3)
+        data = core.fetch_open_meteo(36.68723, 137.75469, hourly=["temperature_2m", "snow_depth"], days=3)
 
     past_days: Open-Meteo's own `past_days` param (0-92) -- prepends that
     many days of actual/short-range-hindcast data (same models, not a true
