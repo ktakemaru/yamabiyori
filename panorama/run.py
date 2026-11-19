@@ -1,8 +1,10 @@
 """1 座の展望図を作る入口(診断モード mountain_weather_detail.py の --panorama から呼ぶ)。
 
 流れ(指示書 9・10 章):
-1. 山名の材料: 「日本の主な山岳標高」(1003 山)の表が config.gsi_dir() にあれば使う。無ければ MOUNTAINS(76 座)だけ
-   (山頂の点は MOUNTAINS の座標、名前は 76 座だけ。図に「山の名前は一部だけです」と書く)。表は自分では取りに行かない。
+1. 山名の材料: 「日本の主な山岳標高」(1003 山)の表が config.gsi_dir() にあれば使う(そのほかの山の名前も出る)。
+   無ければ、リポジトリの山頂の点 panorama/data/summits.json(日本百名山と 76 座に当たる点だけ)と MOUNTAINS
+   (図に「名前は日本百名山とヤマビヨリの 76 座です」と書く)。表は自分では取りに行かない。
+   表に当たる点の無い 76 座(11 座)は MOUNTAINS の座標を山頂の点にし、その山が視点の図に「山頂の点は目安です」と書く。
 2. 視点: 山頂の点(1003 山の点、無ければ MOUNTAINS の座標)。OSM の展望地(山頂から 300m 以内・山頂より 50m を超えて
    低くない・名前のある点を優先・同じなら近い点)があれば、展望地の図も作る。OSM は Overpass に 1 回だけ問い合わせて保存。
    取れなければ山頂の図だけ。
@@ -32,7 +34,7 @@ import mountain_weather_core as core
 
 from . import config, draw, geometry, names, terrain, viewpoint, weather
 
-PARTS_VERSION = "v1.10-1"         # 図の地形の計算を変えたら上げる(保存した図の地形を作り直す合図)
+PARTS_VERSION = "v1.10-2"         # 図の地形の計算を変えたら上げる(保存した図の地形を作り直す合図)
 FUJI_ID = "m012"
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OVERPASS_UA = "yamabiyori-panorama (github.com/ktakemaru/yamabiyori)"
@@ -63,6 +65,17 @@ def dictionary_version() -> str:
         with open(p, "rb") as fh:
             h.update(fh.read())
     return h.hexdigest()[:12]
+
+
+def summits_version() -> str:
+    p = names.summits_path()
+    if not os.path.exists(p):
+        return "none"
+    with open(p, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()[:12]
+
+
+SUMMIT_ROUGH_TEXT = "山頂の点は目安です(「日本の主な山岳標高」に当たる点が無いので、ヤマビヨリの山の一覧の座標を使っています)"
 
 
 def build_context():
@@ -208,8 +221,8 @@ def ensure_tiles(viewers, stats, log=log_print, extra=False):
 # 4. 図の地形(保存つき)
 # ---------------------------------------------------------------------------
 def parts_conditions(v, gsi_file):
-    return {"version": PARTS_VERSION, "dictionary": dictionary_version(), "lat": round(v["lat"], 7),
-            "lon": round(v["lon"], 7), "gsi": gsi_file, "kind": v["kind"]}
+    return {"version": PARTS_VERSION, "dictionary": dictionary_version(), "summits": summits_version(),
+            "lat": round(v["lat"], 7), "lon": round(v["lon"], 7), "gsi": gsi_file, "kind": v["kind"]}
 
 
 def parts_path(v):
@@ -305,8 +318,10 @@ def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True
     ctx, gsi_file = build_context()
     gsi_partial = gsi_file is None
     if gsi_partial:
-        notes.append("「日本の主な山岳標高」の表が手元に無いので、山頂の点は MOUNTAINS の座標、名前は 76 座だけ")
+        notes.append("「日本の主な山岳標高」の表が手元に無いので、名前は日本百名山とヤマビヨリの 76 座だけ")
     summit = summit_viewer(mtn, ctx)
+    if not summit["summit_point"]:
+        notes.append(SUMMIT_ROUGH_TEXT)
     # 標高タイル(山頂のまわり。展望地は 300m 以内なので同じタイルでほぼ足りる。足りない分は下でもう一度)
     z11, z14 = ensure_tiles([summit], stats, log)
     elements, why = osm_elements(mtn["id"], summit["lat"], summit["lon"], stats)
@@ -352,6 +367,8 @@ def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True
         title = f"{where}からの展望と雲({day})"
         intro = (f"<p>{html.escape(viewpoint.source_text(v))}。{day} の予報(Open-Meteo。気象庁 MSM、無い時間は ECMWF)。"
                  f"予報にもとづく目安です。</p>")
+        if not summit["summit_point"]:
+            intro += f"<p>{html.escape(SUMMIT_ROUGH_TEXT)}。</p>"
         sunrise = weather.sunrise_from_main_cache(v["lat"], v["lon"], day)
         info = figure(parts, scenes_by.get(id(parts)) or {}, states, default, path, title, intro, sunrise,
                       seed_key=f"{mtn['id']}{'v' if kind == 'viewpoint' else ''}",

@@ -1047,9 +1047,9 @@ def render_figure(parts, scenes, states, default, title, start_pct=clouds.START_
 
 CREDIT_TILES = "地理院タイル(標高タイル)を加工して作成"
 
-CREDIT_1003 = "「日本の主な山岳標高」(国土地理院)をもとに作成"
+CREDIT_1003 = "「日本の主な山岳標高」(国土地理院)を加工して作成"
 
-CREDIT_1003_PARTIAL = "山の名前は一部だけです(「日本の主な山岳標高」が手元に無いため)"
+CREDIT_1003_PARTIAL = "名前は日本百名山とヤマビヨリの 76 座です"
 
 CREDIT_WEATHER = "気象データ: Open-Meteo(気象庁 MSM ほか)"
 
@@ -1070,7 +1070,7 @@ TAG_RE = re.compile(r"<[^>]+>")
 ATTR_RE = r'{}="([\d.\-]+)"'
 
 def credit_lines(osm_used: bool, gsi_partial: bool = False):
-    a = [CREDIT_TILES, CREDIT_1003_PARTIAL if gsi_partial else CREDIT_1003, CREDIT_WEATHER]
+    a = [CREDIT_TILES, CREDIT_1003] + ([CREDIT_1003_PARTIAL] if gsi_partial else []) + [CREDIT_WEATHER]
     if osm_used:
         a.append(CREDIT_OSM)
     return [" / ".join(a), CREDIT_NOTE]

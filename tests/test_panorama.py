@@ -111,7 +111,7 @@ class TestFigureFromFakeData(NoNetwork):
         self.assertIsNone(re.search(r'(src|href)="(https?:)?//', s))   # 外の読み込みが無い
         self.assertNotIn("@import", s)
         frame = re.search(r'<div class="credit39">(.*?)</div></div>', s, re.S).group(1)
-        for t in ("地理院タイル(標高タイル)を加工して作成", "「日本の主な山岳標高」(国土地理院)をもとに作成",
+        for t in ("地理院タイル(標高タイル)を加工して作成", "「日本の主な山岳標高」(国土地理院)を加工して作成",   # 2026-11-20 の決定で「加工して作成」に
                   "気象データ: Open-Meteo(気象庁 MSM ほか)", "予報にもとづく目安です"):
             self.assertIn(t, frame)
         self.assertNotIn("OpenStreetMap", frame)                       # 山頂の図(OSM を使っていない)
@@ -180,14 +180,19 @@ class TestWeather(NoNetwork):
 
 
 class TestFallbacks(NoNetwork):
-    def test_without_gsi_table_uses_mountains_only(self):
+    def test_without_gsi_table_uses_summits_file(self):
+        # 2026-11-20 の決定: 表が無いときは、リポジトリの山頂の点(summits.json。百名山と 76 座だけ)と、
+        # 表に点の無い 76 座だけ MOUNTAINS を材料にする(前は MOUNTAINS の 76 座だけだった)
         from panorama import names
         mats, meta = names.load_materials()
         self.assertIsNone(meta["gsi_file"])
-        self.assertEqual(len(mats), len(core.MOUNTAINS))
-        self.assertTrue(all(m["src"] == "MOUNTAINS" for m in mats))
+        self.assertTrue(meta["summits_only"])
+        n_file = len(names.load_summits()[0])
+        self.assertGreater(n_file, 100)
+        self.assertEqual(sum(1 for m in mats if m["src"] == "gsi1003"), n_file)
+        self.assertTrue(all(m["src"] in ("gsi1003", "MOUNTAINS") for m in mats))
         from panorama import draw
-        self.assertIn("山の名前は一部だけです", " ".join(draw.credit_lines(False, gsi_partial=True)))
+        self.assertIn("名前は日本百名山とヤマビヨリの 76 座です", " ".join(draw.credit_lines(False, gsi_partial=True)))
 
     def test_osm_failure_gives_summit_only(self):
         import requests

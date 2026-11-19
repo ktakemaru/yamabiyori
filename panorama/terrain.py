@@ -779,13 +779,19 @@ def figure_peaks_v3(viewer, elev, sky, rows, a0, a1, minor_rows, label_fn):
 # ---- 元: experiments/panorama/stage3_summits.py ----
 
 def build_ctx(vp_all, led):
-    materials, _ = names.load_materials()
+    materials, info = names.load_materials()
     D = names.PeakDictionary()
     marks25, _ = names.apply(D.attach(materials), materials, D)
     marks, changed = names.apply_overrides(marks25)
+    if info.get("summits_only"):
+        # 表が無いとき: 呼び名は表の全部で決めたもの(summits.json に書いたもの)を使う
+        # (呼び名の決め方は表の中の同じ山名の数を見るので、一部の点だけだと変わることがある)
+        for mid, lab in info["summit_display"].items():
+            if mid in marks and marks[mid].get("tier"):
+                marks[mid] = dict(marks[mid], display=lab)
     z11, z14 = Dem(led, 11, allow_fetch=False), Dem(led, 14, allow_fetch=False)
     return {"materials": materials, "marks": marks, "elev": Elev(z11, z14), "z11": z11, "z14": z14,
-            "vp_all": vp_all, "name_changes": changed}
+            "vp_all": vp_all, "name_changes": changed, "summits_only": bool(info.get("summits_only"))}
 
 
 # ---- 元: experiments/panorama/stage3_weather_run.py ----

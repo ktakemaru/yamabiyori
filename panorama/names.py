@@ -79,13 +79,44 @@ def load_gsi(gsi_dir=None):
                     "variants": name_variants(p["山名＜山頂名＞"])})
     return out, os.path.basename(paths[0])
 
+SUMMITS_FILE = "summits.json"
+
+
+def summits_path(dict_dir=None):
+    return os.path.join(dict_dir or config.DATA_DIR, SUMMITS_FILE)
+
+
+def load_summits(dict_dir=None):
+    """リポジトリに入れた山頂の点(日本百名山と 76 座に当たる点だけ。tools/build_panorama_summits.py が作る)を、
+    load_gsi と同じ形の材料で返す。返り値: (材料, {連番の id: 呼び名})。ファイルが無ければ ([], {})。"""
+    path = summits_path(dict_dir)
+    if not os.path.exists(path):
+        return [], {}
+    with open(path, encoding="utf-8") as fh:
+        d = json.load(fh)
+    out, disp = [], {}
+    for p in d["summits"]:
+        mid = f"gsi{p['連番']}"
+        out.append({"src": "gsi1003", "id": mid, "name": p["name"], "yomi": p["yomi"], "ele_m": float(p["ele_m"]),
+                    "lat": float(p["lat"]), "lon": float(p["lon"]), "kind": p["kind"], "pref": p["pref"],
+                    "variants": name_variants(p["name"]), "from_summits_file": True})
+        if p.get("display"):
+            disp[mid] = p["display"]
+    return out, disp
+
+
 def load_materials():
-    """返り値: (材料, {gsi_file, n_gsi, pairs})。"""
-    """1003 山の表が無いときは、MOUNTAINS(76 座)だけを材料にする(名前は 76 座だけ。指示書 10 章)。"""
+    """返り値: (材料, {gsi_file, n_gsi, pairs, summits_only, summit_display})。
+    1003 山の表が手元にあれば表の全部を材料にする(そのほかの山の名前も出る)。
+    無ければ、リポジトリの山頂の点(summits.json。百名山と 76 座だけ)と MOUNTAINS を材料にする。"""
+    summit_display = {}
     try:
         gsi, gsi_file = load_gsi()
+        summits_only = False
     except GsiMissing:
-        gsi, gsi_file = [], None
+        gsi, summit_display = load_summits()
+        gsi_file = None
+        summits_only = True
     mts = []
     for m in MOUNTAINS:
         mts.append({"src": "MOUNTAINS", "id": m["id"], "name": m["name"], "ele_m": float(m["elevation_m"]),
@@ -112,7 +143,8 @@ def load_materials():
         else:
             only_mts.append(m)
     materials = gsi + only_mts   # 両方にある山は 1003山を優先
-    return materials, {"gsi_file": gsi_file, "n_gsi": len(gsi), "pairs": pairs}
+    return materials, {"gsi_file": gsi_file, "n_gsi": len(gsi), "pairs": pairs, "summits_only": summits_only,
+                       "summit_display": summit_display}
 
 def r(v, n=3):
     return None if v is None else round(float(v), n)
