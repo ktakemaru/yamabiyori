@@ -68,7 +68,8 @@ def load_gsi(gsi_dir=None):
     paths = sorted(glob.glob(os.path.join(gsi_dir, "*.geojson")))
     if not paths:
         raise GsiMissing(gsi_missing_message(gsi_dir))
-    gj = json.load(open(paths[0], encoding="utf-8-sig"))
+    with open(paths[0], encoding="utf-8-sig") as fh:
+        gj = json.load(fh)
     out = []
     for f in gj["features"]:
         p = f["properties"]
