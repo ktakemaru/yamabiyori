@@ -177,6 +177,23 @@ class TestSummitCloudMax(unittest.TestCase):
         self.assertAlmostEqual(core.interp_at_altitude(h, "cloudcover", 0, 2300.0), 50.0)
 
 
+class TestClumpUsesSummitCloud(unittest.TestCase):
+    def test_clump_from_upper_bracket_takes_summit_value(self):
+        from panorama import clouds
+        lv = [(1500.0, 90.0, 850), (3100.0, 30.0, 700), (4300.0, 20.0, 600)]
+        # 山頂 2000m: 下の面(1500m)は 300m より下なのでかたまりに入らず、かたまりは 700hPa から
+        groups = clouds.clump_levels(lv, 2000.0, 10.0, None, [850, 700, 600])
+        self.assertEqual(groups[0]["bottom"], 3100.0)
+        g = clouds.with_summit_cloud(groups, lv, 2000.0, 90.0)
+        self.assertEqual(g[0]["c"], 90.0)
+        self.assertEqual(groups[0]["c"], 30.0)                          # 元は変えない
+        # 山頂のすぐ上の面より上から始まるかたまり(山頂から離れた雲)は変えない
+        lv2 = [(1500.0, 90.0, 850), (3100.0, 5.0, 700), (4300.0, 40.0, 600)]
+        g2 = clouds.clump_levels(lv2, 2000.0, 10.0, None, [850, 700, 600])
+        self.assertEqual(clouds.with_summit_cloud(g2, lv2, 2000.0, 90.0)[0]["c"], 40.0)
+        self.assertEqual(clouds.with_summit_cloud(groups, lv, 2000.0, None), groups)
+
+
 class TestBands(unittest.TestCase):
     def geom(self, y, alpha):
         return {"x0": 0.0, "x1": 8700.0, "upper": [(0.0, y), (8700.0, y)],

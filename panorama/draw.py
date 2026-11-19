@@ -985,10 +985,8 @@ def render_figure(parts, scenes, states, default, title, start_pct=clouds.START_
                                   "h": wpx * clouds.CLUMP_MAX_ASPECT, "seed": clouds.seed_of("thin", seed_key, x["key"]),
                                   "key": x["key"], "tt": tt})
                 continue
-            sc_ = x.get("summit_cloud")
-            if sc_ is not None and groups[0]["bottom"] <= x["elev_m"] and sc_ > groups[0]["c"]:
-                # 山頂にかかるかたまりの大きさと濃さは、山頂の雲量(はさむ 2 つの面の大きいほう)より小さくしない
-                groups = [dict(groups[0], c=float(sc_))] + groups[1:]
+            # 山頂にかかるかたまりの大きさと濃さは、山頂の雲量(はさむ 2 つの面の大きいほう)より小さくしない
+            groups = clouds.with_summit_cloud(groups, lv, x["elev_m"], x.get("summit_cloud"))
             wpx = clouds.width_deg(groups[0]["c"], x["dist_km"]) * px
             ab, hpx, gp = clouds.clump_box(groups, angle_fn, d_m, wpx, px * v_ex)
             if ab > amax or Y(ab) - hpx > bottom:
@@ -1213,7 +1211,7 @@ var txt=[].slice.call(svg.querySelectorAll('g.wxn text[data-i]')).map(function(t
 var ticks=[].slice.call(svg.querySelectorAll('text.tickt')).map(function(t){return {t:t,o:{y:t.getAttribute('y'),fs:t.style.fontSize}}});
 var near=[].slice.call(svg.querySelectorAll('text.nearlab')).map(function(t){return {t:t,o:{fs:t.style.fontSize,sw:t.style.strokeWidth}}});
 var ov={w:svg.getAttribute('width'),h:svg.getAttribute('height'),vb:svg.getAttribute('viewBox')};
-var FS=[13,11.5,10.5],ROWH=16,ANC=['middle','start','end'];
+var FS=[13,11.5,10.5],ROWH=16,ANC=['middle','start','end'],TOPPAD=20;   // いちばん上の段の名前の上の余白(◇の付く名前が枠の外に出ないよう 14→20)
 function bucket(W){var b=D.buckets[0];D.buckets.forEach(function(x){if(x<=W)b=x});return b}
 function vw(){return vp.clientWidth||document.documentElement.clientWidth||360}
 function restore(){svg.setAttribute('width',ov.w);svg.setAttribute('height',ov.h);svg.setAttribute('viewBox',ov.vb);
@@ -1235,7 +1233,7 @@ function layout(){
  pick();
  var ctlB=document.querySelector('.ctl').getBoundingClientRect().bottom,crH=document.querySelector('.credit39').getBoundingClientRect().height;
  var tgt=window.innerHeight-crH-28;if(land)tgt=Math.min(tgt,D.landH);
- for(var it=0;it<(free?0:2);it++){var lab=7+(Math.max(nr,1)-1)*ROWH+14,kh=(tgt-ctlB-2-lab)/(BASE-SKY);
+ for(var it=0;it<(free?0:2);it++){var lab=7+(Math.max(nr,1)-1)*ROWH+TOPPAD,kh=(tgt-ctlB-2-lab)/(BASE-SKY);
   if(kh>0&&k>kh){k=kh;span=w/k;var de=span/PX;ldeg=90;[20,45,90].forEach(function(z){if(z>=de&&z<ldeg)ldeg=z});if(de<=20)ldeg=20;pick()}}
  D.kcap=(span!==deg*PX);omit(L);
  var rowH=ROWH/k;
@@ -1250,7 +1248,7 @@ function layout(){
  var step=span/PX>=80?30:10;
  ticks.forEach(function(x){var a=Math.round((+x.t.getAttribute('x')-X0)/PX);x.t.style.display=(a%step===0)?'':'none';x.t.style.fontSize=(10/k)+'px';x.t.setAttribute('y',BASE+13/k)});
  near.forEach(function(x){x.t.style.fontSize=(10/k)+'px';x.t.style.strokeWidth=(3/k)+'px'});
- svg._top=SKY-7/k-(Math.max(nr,1)-1)*rowH-14/k;svg._h=BASE+18/k-svg._top;svg._span=span;svg._ldeg=ldeg;
+ svg._top=SKY-7/k-(Math.max(nr,1)-1)*rowH-TOPPAD/k;svg._h=BASE+18/k-svg._top;svg._span=span;svg._ldeg=ldeg;
  clampAz();pan();
  if(vw()!==w&&!layout.again){layout.again=1;layout();layout.again=0}}
 function omit(L){var om=document.getElementById('omitnote');if(!om)return;var o=false;

@@ -260,6 +260,18 @@ def thin_at_summit(levels: list, summit_m: float, start_pct=START_PCT, all_hpas=
             return {"bottom": a0, "top": a1, "c": float(c0)}
     return None
 
+def with_summit_cloud(groups: list, levels: list, summit_m: float, summit_c):
+    """山頂にかかるかたまり(いちばん低いまとまりが、山頂のすぐ上の面より下から始まるもの)の雲量を、山頂の雲量
+    (はさむ 2 つの面の大きいほう)より小さくしない(2026-11-20 の決定)。levels: [(高さ, 雲量, hPa)]。写しを返す。"""
+    if not groups or summit_c is None:
+        return groups
+    above = [a for a, _, _ in levels if a >= summit_m]
+    upper = min(above) if above else float("inf")
+    g0 = groups[0]
+    if g0["bottom"] <= upper and float(summit_c) > g0["c"]:
+        return [dict(g0, c=float(summit_c))] + list(groups[1:])
+    return groups
+
 def clump_box(groups: list, angle_fn, dist_m: float, width_px: float, px_v: float):
     """山 1 つにかたまりは 1 つ: いちばん低いまとまり(山頂に近い雲)だけを使う。下の端はその雲の下の面の見上げ角、
     高さは面の範囲の画素(+ 幅 × 0.42)を、幅 × CLUMP_MAX_ASPECT までに抑える。返り値: (下の端の見上げ角, 高さ px, まとまり) or None。"""
