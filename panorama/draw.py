@@ -540,6 +540,11 @@ LAND_MAX_ROWS = 5                   # 横向きの画面の段の上限(図の�
 
 LAND_RIDGE_MAX_PX = 246            # 横向きでは、図の山並みの下の端を上からこの px までに収める(実機の枠で使える高さ 約 200〜250px。仮)
 
+FIT_MIN_RATIO = 0.6                 # 高さに収めるための縮小の下限: その縮尺の本来の倍率のこの倍まで(仮)
+
+FIT_MIN_RIDGE_PX = 70               # 同じく下限: 山並みの高さ(空の上の端から地形の下の端まで)がこの px より小さくならない(仮)。
+                                    # 2 つの大きいほうで止め、収まらない分はページを縦に送る
+
 FRAME_GUTTER_PX = 16                # せまい画面の、図の枠の左右の余白の合計
 
 ANCHORS = ("middle", "start", "end")
@@ -564,6 +569,10 @@ OMIT_NOTE = "名前を省いた山があります。『拡大』で出ます"
 
 STRICT_ZOOMS = (90, 45)             # 「広く」「標準」: 置ける分だけ(名前どうし・名前と引き出し線が重ならない所だけ)
 
+WIDE_FS = (16.0, 13.0, 11.0)        # 広い画面(幅 WIDE_MIN_PX 以上)の名前の大きさ(px。前からの図の FONT と同じ)
+
+WIDE_ROW_H = 24.0                   # 広い画面の名前の段の高さ(px。前からの図と同じ)
+
 def name_order(items):
     """名前を置く順番(2026-11-20 の決定): 百名山 → 76 座 → そのほか。同じ格の中では視点に近い山を先に、
     距離が同じなら標高の高い山を先に。富士山は、富士山が見える図では必ず名前を出すので、いちばん先に置く。"""
@@ -573,17 +582,20 @@ def name_order(items):
         return (it["tier"], fuji, it.get("dist_km", 0.0), -it.get("ele_m", 0.0), it["x"])
     return sorted(range(len(items)), key=key)
 
-def layout_names(items, deg: float, width_px: float, px_per_deg: float = 24.0, max_rows: int = None):
+def layout_names(items, deg, width_px: float = 0.0, px_per_deg: float = 24.0, max_rows: int = None, *,
+                 k: float = None, fonts=FS_SCREEN):
     """items: [{"x": 図の x(SVG 単位), "tier": 0/1/2, "texts": [全部の時刻の文字], "dist_km", "ele_m", "label"}]。
     返り値: {"rows": [段(0 が下)or -1(名前を出さない)], "anc": [置き方], "n_rows": 使った段の数, "k": 縮尺}。
     「広く」「標準」(STRICT_ZOOMS): 名前どうしが重ならず、名前と引き出し線が重ならない所にだけ置く。置けない山は点だけ。
     「拡大」: 見えている百名山と 76 座は全部出す(段を増やして重なりを減らす。それでも置けなければ重なりがいちばん短い所)。
-    そのほかの山は、どの縮尺でも置ける分だけ(「広く」では出さない)。"""
-    k = (width_px - FRAME_GUTTER_PX) / (deg * px_per_deg)
+    そのほかの山は、どの縮尺でも置ける分だけ(「広く」では出さない)。
+    deg=None は広い画面(幅 WIDE_MIN_PX 以上。k と fonts を渡す): 「標準」と同じ決まり(置ける分だけ。置けない山は点だけ)。"""
+    if k is None:
+        k = (width_px - FRAME_GUTTER_PX) / (deg * px_per_deg)
     mx = MAX_ROWS if max_rows is None else max_rows
     ex = min(EXTRA_ROWS, mx)
     base = min(BASE_ROWS, mx)
-    strict_only = deg in STRICT_ZOOMS
+    strict_only = deg is None or deg in STRICT_ZOOMS
     n = len(items)
     rows_out, anc_out = [-1] * n, ["middle"] * n
     names = {}                       # 段 → [(a, b)]
@@ -591,9 +603,9 @@ def layout_names(items, deg: float, width_px: float, px_per_deg: float = 24.0, m
     for i in name_order(items):
         it = items[i]
         t = it["tier"]
-        if deg >= 90 and t == 2:
+        if deg is not None and deg >= 90 and t == 2:
             continue
-        fs = FS_SCREEN[t]
+        fs = fonts[t]
         w = max((text_w(s, fs) for s in it["texts"]), default=fs)
         xs = it["x"] * k
 
@@ -651,7 +663,12 @@ def layout_names(items, deg: float, width_px: float, px_per_deg: float = 24.0, m
             corridors.setdefault(u, []).append((xs - LEAD_HALF_SCREEN, xs + LEAD_HALF_SCREEN))
         rows_out[i], anc_out[i] = r, anchor
     used = [r for r in rows_out if r >= 0]
-    return {"rows": rows_out, "anc": anc_out, "n_rows": (max(used) + 1) if used else 0, "k": k}
+    return {"rows": rows_out, "anc": anc_out, "n_rows": (max(used) + 1) if used else 0, "k": k, "fs": tuple(fonts)}
+
+def layout_wide(items):
+    """広い画面の名前の置き方(図は縮めずに 1 単位 = 1px で出す)。返り値は layout_names と同じ形。
+    百名山 → 76 座 → そのほかの順に、名前どうし・名前と引き出し線が重ならない所にだけ置く。置けない山は点だけ。"""
+    return layout_names(items, None, k=1.0, fonts=WIDE_FS)
 
 def layout_reference(items, deg: float, width_px: float, px_per_deg: float = 24.0):
     """参考の見本(phone_reference_build.py の JS)の置き方を、比べるために Python に写したもの。段は 4 まで。
@@ -706,7 +723,7 @@ def count_conflicts(items, lay, ascii_ratio=0.6, cjk_ratio=1.02):
         r = lay["rows"][i]
         if r < 0:
             continue
-        fs = FS_SCREEN[it["tier"]]
+        fs = lay.get("fs", FS_SCREEN)[it["tier"]]
         w = max(sum(fs * (cjk_ratio if ord(c) > 0x2E7F else ascii_ratio) for c in s) for s in it["texts"])
         a, b = name_box(it["x"] * k, w, lay["anc"][i])
         boxes.append((r, a, b, it["x"] * k, i))
@@ -1222,19 +1239,20 @@ function restore(){svg.setAttribute('width',ov.w);svg.setAttribute('height',ov.h
 function layout(){
  var W=window.innerWidth||document.documentElement.clientWidth,m=W>=D.wideMin?'wide':'narrow';
  if(m!==mode){mode=m;body.classList.toggle('wide',m==='wide');body.classList.toggle('narrow',m==='narrow');
-  if(m==='wide'){restore();omit(null);if(az===null)az=D.open.wide.az;go();return}
+  if(m==='wide'){restore();wideNames();omit(null);if(az===null)az=D.open.wide.az;go();return}
   svg.removeAttribute('width');svg.removeAttribute('height');svg.setAttribute('preserveAspectRatio','xMinYMin meet');
   if(deg===null)deg=W>=D.openWideZoom?90:45;}
  if(mode==='wide'){go();return}
  if(az===null)az=D.open[String(deg)].az;
- var w=vw(),span=deg*PX,k=w/span,ldeg=deg,L,nr;
+ var w=vw(),span=deg*PX,k=w/span,ldeg=deg,L,nr,bw=W;
  var land=window.innerWidth>window.innerHeight,free=land&&deg===D.freeZoom,MX=String(land&&!free?D.landRows:D.maxRows);
- function pick(){L=D.layouts[MX][String(ldeg)][String(bucket(W))];nr=0;L.forEach(function(q){if(q[0]+1>nr)nr=q[0]+1})}
+ function pick(){L=D.layouts[MX][String(ldeg)][String(bucket(bw))];nr=0;L.forEach(function(q){if(q[0]+1>nr)nr=q[0]+1})}
  pick();
- var ctlB=document.querySelector('.ctl').getBoundingClientRect().bottom,crH=document.querySelector('.credit39').getBoundingClientRect().height;
+ var ctlE=document.querySelector('.ctl'),ctlB=ctlE.offsetTop+ctlE.offsetHeight,crH=document.querySelector('.credit39').getBoundingClientRect().height;
+ var kmin=Math.max(D.fitMinRatio*w/(deg*PX),D.fitMinRidge/(BASE-SKY));   // 縮小の下限。収まらない分はページを縦に送る
  var tgt=window.innerHeight-crH-28;if(land)tgt=Math.min(tgt,D.landH);
- for(var it=0;it<(free?0:2);it++){var lab=7+(Math.max(nr,1)-1)*ROWH+TOPPAD,kh=(tgt-ctlB-2-lab)/(BASE-SKY);
-  if(kh>0&&k>kh){k=kh;span=w/k;var de=span/PX;ldeg=90;[20,45,90].forEach(function(z){if(z>=de&&z<ldeg)ldeg=z});if(de<=20)ldeg=20;pick()}}
+ for(var it=0;it<(free?0:2);it++){var lab=7+(Math.max(nr,1)-1)*ROWH+TOPPAD,kh=Math.max((tgt-ctlB-2-lab)/(BASE-SKY),kmin);
+  if(k>kh){k=kh;span=w/k;var de=span/PX;ldeg=90;[20,45,90].forEach(function(z){if(z>=de&&z<ldeg)ldeg=z});if(de<=20)ldeg=20;bw=de>ldeg?W*ldeg/de:W;pick()}}   // 「広く」より広くなったら、その分せまい画面の置き方を使う
  D.kcap=(span!==deg*PX);omit(L);
  var rowH=ROWH/k;
  pk.forEach(function(p){var q=L[p.i],r=q[0],x=+D.items[p.i].x,y=+D.items[p.i].y,ty=SKY-7/k-r*rowH,a=ANC[q[1]];
@@ -1251,6 +1269,13 @@ function layout(){
  svg._top=SKY-7/k-(Math.max(nr,1)-1)*rowH-TOPPAD/k;svg._h=BASE+18/k-svg._top;svg._span=span;svg._ldeg=ldeg;
  clampAz();pan();
  if(vw()!==w&&!layout.again){layout.again=1;layout();layout.again=0}}
+function wideNames(){var L=D.wide,nr=0,RH=D.wideRowH,FW=D.wideFs,y0=SKY-14;L.forEach(function(q){if(q[0]+1>nr)nr=q[0]+1});
+ pk.forEach(function(p){var q=L[p.i],r=q[0],x=+D.items[p.i].x,y=+D.items[p.i].y,ty=y0-r*RH;p.ty=ty;p.a=ANC[q[1]];p.r=r;p.x=x;
+  if(r<0){p.l.style.display='none'}else{p.l.style.display='';p.l.setAttribute('x1',x);p.l.setAttribute('x2',x);p.l.setAttribute('y1',ty+3);p.l.setAttribute('y2',y-3)}});
+ txt.forEach(function(x){var p=pk[x.i];if(!p)return;var it=D.items[x.i];if(p.r<0){x.t.style.display='none';return}x.t.style.display='';
+  x.t.setAttribute('x',p.a==='start'?p.x-5:p.a==='end'?p.x+5:p.x);x.t.setAttribute('y',p.ty);x.t.setAttribute('text-anchor',p.a);x.t.style.fontSize=FW[it.t]+'px'});
+ var top=y0-(Math.max(nr,1)-1)*RH-TOPPAD*FW[0]/FS[0],hh=+ov.h-top;   // 図の上の端を、いちばん上の段の名前に合わせる
+ svg.setAttribute('height',hh.toFixed(0));svg.setAttribute('viewBox','0 '+top.toFixed(1)+' '+ov.w+' '+hh.toFixed(1))}
 function omit(L){var om=document.getElementById('omitnote');if(!om)return;var o=false;
  if(L)D.items.forEach(function(it,i){if(it.t<2&&L[i][0]<0)o=true});om.style.display=o?'':'none'}
 function clampAz(){if(mode!=='narrow')return;var h=(svg._span?svg._span/PX:deg)/2,lo=h-X0/PX,hi=(FULL-X0)/PX-h;az=Math.max(lo,Math.min(hi,az))}
@@ -1310,12 +1335,15 @@ def write_page(path, *, svg, ch, peaks, states, default, notes, banners, title_b
     top_sky = 24 * ch["rows"] + 14 + 8
     bottom = H - 44
     layouts = layouts_for(items)
+    WL = layout_wide(items)
     opens = open_dirs(peaks, viewer_is_fuji)
     data = {"px": 24.0, "x0": 20.0, "full": W, "sky": top_sky, "base": bottom, "H": H, "def": default,
             "items": [{"x": round(it["x"], 1), "y": round(it["y"], 1), "t": it["tier"]} for it in items],
             "layouts": layouts, "buckets": list(WIDTH_BUCKETS), "open": opens, "wideMin": WIDE_MIN_PX,
             "openWideZoom": OPEN_WIDE_ZOOM_MIN_PX, "landH": LAND_RIDGE_MAX_PX, "maxRows": MAX_ROWS,
-            "landRows": LAND_MAX_ROWS, "freeZoom": FREE_HEIGHT_ZOOM}
+            "landRows": LAND_MAX_ROWS, "freeZoom": FREE_HEIGHT_ZOOM, "fitMinRatio": FIT_MIN_RATIO,
+            "fitMinRidge": FIT_MIN_RIDGE_PX, "wideFs": list(WIDE_FS), "wideRowH": WIDE_ROW_H,
+            "wide": [[r, ANCHORS.index(a)] for r, a in zip(WL["rows"], WL["anc"])]}
     lines = credit_lines(osm_used, gsi_partial)
     credit = "".join(f"<div>{html.escape(x)}</div>" for x in lines)
     vs = "".join(
@@ -1336,7 +1364,8 @@ def write_page(path, *, svg, ch, peaks, states, default, notes, banners, title_b
            f'「広く」は画面の幅に 90°、「標準」は 45°、「拡大」は 20°(幅 {WIDE_MIN_PX}px 以上の画面では、全周を横に送る形)。'
            f'赤 = 日本百名山、青 = ヤマビヨリの 76 座。「広く」「標準」では、重ならずに置ける名前だけを出します(百名山 → 76 座 → そのほかの順。近い山を先に)。'
            f'置けない山は点だけで、「拡大」で見えている百名山と 76 座は全部出ます。「広く」ではそのほかの山は点だけ。'
-           f'横向きの画面の「拡大」は、図が画面の高さを超えるときはページを縦に送って見ます。</p>'
+           f'幅 {WIDE_MIN_PX}px 以上の画面も「標準」と同じ決まりで、置けない山は点だけ(点にマウスを当てると名前が出ます)。'
+           f'横向きの画面の「拡大」と、画面の高さがとても小さいときは、図が画面の高さを超えるのでページを縦に送って見ます。</p>'
            f'{legend_html}<p>山頂の雲量は、山頂をはさむ 2 つの高さの予報のうち大きいほうです。</p>{extra_how}'
            f'<p style="font-size:12px">出典: 国土地理院の標高タイル(地理院タイル)を加工して作成(視点から見上げた角度に変換)。'
            f'山名と標高は「日本の主な山岳標高」(国土地理院)をもとに作成(百名山・76 座との対応づけと呼び名を加工)。'

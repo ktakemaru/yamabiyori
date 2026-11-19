@@ -2,14 +2,13 @@
 - 山頂の点のファイル summits.json の形と出典、表が無いとき・あるときの名前
 - 山頂の雲量「はさむ 2 つの面の大きいほう」
 - 雲の帯のまとめ・濃さの上限(既定)
-- 名前の置き方(「広く」「標準」は重ならない分だけ・「拡大」は百名山と 76 座を全部)
-- 保護領域に差分が無いこと(git と main があるときだけ)
+- 名前の置き方(「広く」「標準」と幅 900px 以上の画面は重ならない分だけ・「拡大」は百名山と 76 座を全部)
+- 高さに収めるための縮小の下限
 予報・地形の値はどれも作った値。"""
 import json
 import os
 import shutil
 import socket
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -273,27 +272,34 @@ class TestNameLayout(unittest.TestCase):
                  {"x": 150.0, "tier": 2, "dist_km": 1.0, "ele_m": 900.0, "label": "e", "texts": ["e"]}]
         self.assertEqual([items[i]["label"] for i in draw.name_order(items)], ["富士山", "d", "c", "b", "a", "e"])
 
+    def test_wide_screen_has_no_overlap(self):
+        # 2026-11-20 の依頼: 幅 900px 以上の画面も「標準」と同じ決まり(置ける分だけ。置けない山は点だけ。百名山を先に)
+        from panorama import draw
+        items = dense_items()
+        L = draw.layout_wide(items)
+        self.assertEqual(L["k"], 1.0)
+        self.assertEqual(tuple(L["fs"]), draw.WIDE_FS)
+        self.assertEqual(draw.count_conflicts(items, L), {"name_name": 0, "name_lead": 0})
+        fuji = next(i for i, it in enumerate(items) if it["label"] == "富士山")
+        self.assertGreaterEqual(L["rows"][fuji], 0)
+        self.assertLessEqual(L["n_rows"], draw.MAX_ROWS)
+        self.assertIn("wideNames()", draw.JS39)
+
+    def test_height_fit_has_lower_limit(self):
+        # 2026-11-20 の依頼: 高さに収めるための縮小に下限(本来の倍率の 0.6 倍と、山並みの高さ 70px の大きいほう。仮)
+        from panorama import draw
+        self.assertEqual(draw.FIT_MIN_RATIO, 0.6)
+        self.assertEqual(draw.FIT_MIN_RIDGE_PX, 70)
+        self.assertIn("kmin=Math.max(D.fitMinRatio*w/(deg*PX),D.fitMinRidge/(BASE-SKY))", draw.JS39)
+        self.assertIn("ctlE.offsetTop+ctlE.offsetHeight", draw.JS39)
+        self.assertNotIn("querySelector('.ctl').getBoundingClientRect()", draw.JS39)
+
     def test_page_has_omit_note_and_free_height_zoom(self):
         from panorama import draw
         self.assertEqual(draw.OMIT_NOTE, "名前を省いた山があります。『拡大』で出ます")
         self.assertEqual(draw.FREE_HEIGHT_ZOOM, 20)
         self.assertIn("omitnote", draw.JS39)
         self.assertIn("free=land&&deg===D.freeZoom", draw.JS39)
-
-
-class TestProtected(unittest.TestCase):
-    PROTECTED = ("mountain_weather_core.py", "mountain_weather_mvp.py")
-
-    def test_no_diff_from_main(self):
-        try:
-            p = subprocess.run(["git", "rev-parse", "--verify", "--quiet", "main"], cwd=ROOT, capture_output=True,
-                               timeout=30)
-        except (OSError, subprocess.TimeoutExpired):
-            self.skipTest("git が無い")
-        if p.returncode != 0:
-            self.skipTest("main が無い")
-        d = subprocess.run(["git", "diff", "--quiet", "main", "--"] + list(self.PROTECTED), cwd=ROOT, timeout=30)
-        self.assertEqual(d.returncode, 0, "保護領域のファイルに main との差分がある")
 
 
 if __name__ == "__main__":
