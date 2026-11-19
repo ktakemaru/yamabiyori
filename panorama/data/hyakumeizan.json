@@ -1,0 +1,1306 @@
+{
+ "_source": "深田久弥『日本百名山』(新潮社)の 100 座。山名の一覧を ja.wikipedia.org「日本百名山」(2026-11-17 に 1 回読んだ)と照らした(1〜27 番は表の文字のまま、28〜100 番は取得の道具の要約と照らしたもので、表の文字そのままとは確かめていない)。材料は国土地理院「日本の主な山岳標高」(1003zan20260331.geojson)。座標は入れない(実行のときに材料から引く)。",
+ "_rules": "material は材料の山を一意に決める手がかり(山名・標高・都道府県)。representative は、百名山が山のまとまりを指すときに代表にした峰。uncertain は代表の峰に別の考え方がありうるもの。",
+ "mountains": [
+  {
+   "no": 1,
+   "name": "利尻岳",
+   "material": {
+    "name": "利尻山（利尻富士）",
+    "ele_m": 1721,
+    "pref": "北海道"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "百名山の呼び名は利尻岳。材料は利尻山",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 2,
+   "name": "羅臼岳",
+   "material": {
+    "name": "羅臼岳",
+    "ele_m": 1660,
+    "pref": "北海道"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 3,
+   "name": "斜里岳",
+   "material": {
+    "name": "斜里岳",
+    "ele_m": 1547,
+    "pref": "北海道"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 4,
+   "name": "阿寒岳",
+   "material": {
+    "name": "雌阿寒岳",
+    "ele_m": 1499,
+    "pref": "北海道"
+   },
+   "representative": "雌阿寒岳",
+   "uncertain": true,
+   "note": "阿寒岳は雌阿寒岳・雄阿寒岳の総称。最高点の雌阿寒岳を代表に(照合のページの標高 1499m も雌阿寒岳)。雄阿寒岳は材料に無い",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 5,
+   "name": "大雪山",
+   "material": {
+    "name": "大雪山（ヌタプカウシペ）＜旭岳＞",
+    "ele_m": 2291,
+    "pref": "北海道"
+   },
+   "representative": "旭岳",
+   "uncertain": false,
+   "note": "大雪山は山のまとまり。最高点の旭岳",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 6,
+   "name": "トムラウシ",
+   "material": {
+    "name": "トムラウシ山",
+    "ele_m": 2141,
+    "pref": "北海道"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "材料はトムラウシ山",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 7,
+   "name": "十勝岳",
+   "material": {
+    "name": "十勝岳",
+    "ele_m": 2077,
+    "pref": "北海道"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 8,
+   "name": "幌尻岳",
+   "material": {
+    "name": "幌尻岳",
+    "ele_m": 2052,
+    "pref": "北海道"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 9,
+   "name": "後方羊蹄山",
+   "material": {
+    "name": "羊蹄山（蝦夷富士）",
+    "ele_m": 1898,
+    "pref": "北海道"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "百名山の呼び名は後方羊蹄山。材料は羊蹄山",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 10,
+   "name": "岩木山",
+   "material": {
+    "name": "岩木山",
+    "ele_m": 1624,
+    "pref": "青森県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "照合のページは 1625m、材料は 1624m",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 11,
+   "name": "八甲田山",
+   "material": {
+    "name": "八甲田山＜大岳＞",
+    "ele_m": 1584,
+    "pref": "青森県"
+   },
+   "representative": "大岳",
+   "uncertain": false,
+   "note": "八甲田山は山のまとまり。最高点の大岳",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 12,
+   "name": "八幡平",
+   "material": {
+    "name": "八幡平",
+    "ele_m": 1613,
+    "pref": "岩手県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 13,
+   "name": "岩手山",
+   "material": {
+    "name": "岩手山",
+    "ele_m": 2038,
+    "pref": "岩手県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 14,
+   "name": "早池峰",
+   "material": {
+    "name": "早池峰山",
+    "ele_m": 1917,
+    "pref": "岩手県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "百名山の呼び名は早池峰。材料は早池峰山",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 15,
+   "name": "鳥海山",
+   "material": {
+    "name": "鳥海山＜新山＞",
+    "ele_m": 2236,
+    "pref": "山形県"
+   },
+   "representative": "新山",
+   "uncertain": false,
+   "note": "最高点の新山",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 16,
+   "name": "月山",
+   "material": {
+    "name": "月山",
+    "ele_m": 1984,
+    "pref": "山形県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 17,
+   "name": "朝日岳",
+   "material": {
+    "name": "朝日岳＜大朝日岳＞",
+    "ele_m": 1870,
+    "pref": "山形県"
+   },
+   "representative": "大朝日岳",
+   "uncertain": false,
+   "note": "朝日連峰の主峰・最高点の大朝日岳。同じ名前の朝日岳が材料に 4 つある",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 18,
+   "name": "蔵王山",
+   "material": {
+    "name": "蔵王山＜熊野岳＞",
+    "ele_m": 1841,
+    "pref": "山形県"
+   },
+   "representative": "熊野岳",
+   "uncertain": false,
+   "note": "最高点の熊野岳",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 19,
+   "name": "飯豊山",
+   "material": {
+    "name": "飯豊山",
+    "ele_m": 2105,
+    "pref": "福島県"
+   },
+   "representative": "飯豊山(本山)",
+   "uncertain": true,
+   "note": "山名の峰(2105m)を代表に。最高点は大日岳(2128m、材料にあり)で、照合のページの標高 2128m はこちら",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 20,
+   "name": "吾妻山",
+   "material": {
+    "name": "西吾妻山",
+    "ele_m": 2035,
+    "pref": "福島県 山形県"
+   },
+   "representative": "西吾妻山",
+   "uncertain": false,
+   "note": "吾妻連峰の最高点の西吾妻山",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 21,
+   "name": "安達太良山",
+   "material": {
+    "name": "安達太良山",
+    "ele_m": 1700,
+    "pref": "福島県"
+   },
+   "representative": "安達太良山(本峰)",
+   "uncertain": true,
+   "note": "山名の峰(1700m)を代表に。最高点は鉄山(1709m、材料にあり)で、照合のページの標高 1709m はこちら",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 22,
+   "name": "磐梯山",
+   "material": {
+    "name": "磐梯山",
+    "ele_m": 1816,
+    "pref": "福島県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 23,
+   "name": "会津駒ヶ岳",
+   "material": {
+    "name": "駒ヶ岳",
+    "ele_m": 2133,
+    "pref": "福島県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "材料は「駒ヶ岳」。福島県の 2133m",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 24,
+   "name": "那須岳",
+   "material": {
+    "name": "那須岳＜茶臼岳＞",
+    "ele_m": 1915,
+    "pref": "栃木県"
+   },
+   "representative": "茶臼岳",
+   "uncertain": true,
+   "note": "主峰の茶臼岳(材料の山名も那須岳＜茶臼岳＞)を代表に。最高点は三本槍岳(1917m、材料にあり)で、照合のページの標高 1917m はこちら",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 25,
+   "name": "魚沼駒ヶ岳",
+   "material": {
+    "name": "駒ヶ岳",
+    "ele_m": 2003,
+    "pref": "新潟県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "越後駒ヶ岳とも。材料は「駒ヶ岳」。新潟県の 2003m",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 26,
+   "name": "平ヶ岳",
+   "material": {
+    "name": "平ヶ岳",
+    "ele_m": 2141,
+    "pref": "群馬県 新潟県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 27,
+   "name": "巻機山",
+   "material": {
+    "name": "巻機山",
+    "ele_m": 1967,
+    "pref": "群馬県 新潟県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 28,
+   "name": "燧岳",
+   "material": {
+    "name": "燧ヶ岳＜柴安嵓＞",
+    "ele_m": 2356,
+    "pref": "福島県"
+   },
+   "representative": "柴安嵓",
+   "uncertain": false,
+   "note": "百名山の呼び名は燧岳。材料は燧ヶ岳。最高点の柴安嵓。青森県の燧岳(781m)は別の山",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 29,
+   "name": "至仏山",
+   "material": {
+    "name": "至仏山",
+    "ele_m": 2228,
+    "pref": "群馬県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 30,
+   "name": "谷川岳",
+   "material": {
+    "name": "谷川岳＜オキノ耳＞",
+    "ele_m": 1977,
+    "pref": "群馬県 新潟県"
+   },
+   "representative": "オキノ耳",
+   "uncertain": false,
+   "note": "谷川岳の最高点のオキノ耳",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 31,
+   "name": "雨飾山",
+   "material": {
+    "name": "雨飾山",
+    "ele_m": 1963,
+    "pref": "新潟県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 32,
+   "name": "苗場山",
+   "material": {
+    "name": "苗場山",
+    "ele_m": 2145,
+    "pref": "新潟県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 33,
+   "name": "妙高山",
+   "material": {
+    "name": "妙高山",
+    "ele_m": 2454,
+    "pref": "新潟県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 34,
+   "name": "火打山",
+   "material": {
+    "name": "火打山",
+    "ele_m": 2462,
+    "pref": "新潟県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 35,
+   "name": "高妻山",
+   "material": {
+    "name": "高妻山",
+    "ele_m": 2353,
+    "pref": "新潟県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 36,
+   "name": "男体山",
+   "material": {
+    "name": "男体山",
+    "ele_m": 2486,
+    "pref": "栃木県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "茨城県の男体山(654m)は別の山",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 37,
+   "name": "奥白根山",
+   "material": {
+    "name": "白根山",
+    "ele_m": 2578,
+    "pref": "群馬県 栃木県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "日光白根山とも。材料は「白根山」。群馬県・栃木県の 2578m",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 38,
+   "name": "皇海山",
+   "material": {
+    "name": "皇海山",
+    "ele_m": 2144,
+    "pref": "栃木県 群馬県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 39,
+   "name": "武尊山",
+   "material": {
+    "name": "武尊山",
+    "ele_m": 2158,
+    "pref": "群馬県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 40,
+   "name": "赤城山",
+   "material": {
+    "name": "赤城山＜黒檜山＞",
+    "ele_m": 1828,
+    "pref": "群馬県"
+   },
+   "representative": "黒檜山",
+   "uncertain": false,
+   "note": "赤城山は山のまとまり。最高点の黒檜山",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 41,
+   "name": "草津白根山",
+   "material": {
+    "name": "本白根山",
+    "ele_m": 2171,
+    "pref": "群馬県"
+   },
+   "representative": "本白根山",
+   "uncertain": true,
+   "note": "最高点の本白根山を代表に(照合のページの標高 2171m)。山名の白根山(2160m、材料にあり)を代表にする考え方もある",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 42,
+   "name": "四阿山",
+   "material": {
+    "name": "四阿山",
+    "ele_m": 2354,
+    "pref": "長野県 群馬県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 43,
+   "name": "浅間山",
+   "material": {
+    "name": "浅間山",
+    "ele_m": 2568,
+    "pref": "群馬県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 44,
+   "name": "筑波山",
+   "material": {
+    "name": "筑波山",
+    "ele_m": 877,
+    "pref": "茨城県"
+   },
+   "representative": "女体山",
+   "uncertain": false,
+   "note": "材料の筑波山(877m)は最高点の女体山",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 45,
+   "name": "白馬岳",
+   "material": {
+    "name": "白馬岳",
+    "ele_m": 2932,
+    "pref": "富山県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 46,
+   "name": "五竜岳",
+   "material": {
+    "name": "五龍岳",
+    "ele_m": 2814,
+    "pref": "富山県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "材料の表記は五龍岳",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 47,
+   "name": "鹿島槍岳",
+   "material": {
+    "name": "鹿島槍ヶ岳",
+    "ele_m": 2889,
+    "pref": "富山県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "百名山の呼び名は鹿島槍岳。材料は鹿島槍ヶ岳",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 48,
+   "name": "剱岳",
+   "material": {
+    "name": "剱岳",
+    "ele_m": 2999,
+    "pref": "富山県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 49,
+   "name": "立山",
+   "material": {
+    "name": "立山＜大汝山＞",
+    "ele_m": 3015,
+    "pref": "富山県"
+   },
+   "representative": "大汝山",
+   "uncertain": true,
+   "note": "最高点の大汝山を代表に。一般に山頂とされるのは雄山(3003m、材料に無い。ヤマビヨリの m065 立山(雄山))",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 50,
+   "name": "薬師岳",
+   "material": {
+    "name": "薬師岳",
+    "ele_m": 2926,
+    "pref": "富山県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "岩手県の薬師岳(1645m)は別の山",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 51,
+   "name": "黒部五郎岳",
+   "material": {
+    "name": "黒部五郎岳（中ノ俣岳）",
+    "ele_m": 2840,
+    "pref": "富山県 岐阜県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 52,
+   "name": "黒岳",
+   "material": {
+    "name": "水晶岳（黒岳）",
+    "ele_m": 2986,
+    "pref": "富山県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "百名山の黒岳は水晶岳。材料は水晶岳（黒岳）",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 53,
+   "name": "鷲羽岳",
+   "material": {
+    "name": "鷲羽岳",
+    "ele_m": 2924,
+    "pref": "富山県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 54,
+   "name": "槍ヶ岳",
+   "material": {
+    "name": "槍ヶ岳",
+    "ele_m": 3180,
+    "pref": "長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 55,
+   "name": "穂高岳",
+   "material": {
+    "name": "奥穂高岳",
+    "ele_m": 3190,
+    "pref": "長野県 岐阜県"
+   },
+   "representative": "奥穂高岳",
+   "uncertain": false,
+   "note": "穂高岳は山のまとまり。最高点の奥穂高岳",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 56,
+   "name": "常念岳",
+   "material": {
+    "name": "常念岳",
+    "ele_m": 2857,
+    "pref": "長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 57,
+   "name": "笠ヶ岳",
+   "material": {
+    "name": "笠ヶ岳",
+    "ele_m": 2897,
+    "pref": "岐阜県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "長野県の笠ヶ岳(2076m)は別の山",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 58,
+   "name": "焼岳",
+   "material": {
+    "name": "焼岳",
+    "ele_m": 2455,
+    "pref": "長野県 岐阜県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 59,
+   "name": "乗鞍岳",
+   "material": {
+    "name": "乗鞍岳＜剣ヶ峰＞",
+    "ele_m": 3026,
+    "pref": "岐阜県 長野県"
+   },
+   "representative": "剣ヶ峰",
+   "uncertain": false,
+   "note": "最高点の剣ヶ峰",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 60,
+   "name": "御嶽",
+   "material": {
+    "name": "御嶽山＜剣ヶ峰＞",
+    "ele_m": 3067,
+    "pref": "長野県"
+   },
+   "representative": "剣ヶ峰",
+   "uncertain": false,
+   "note": "百名山の呼び名は御嶽。最高点の剣ヶ峰",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 61,
+   "name": "美ヶ原",
+   "material": {
+    "name": "美ヶ原＜王ヶ頭＞",
+    "ele_m": 2034,
+    "pref": "長野県"
+   },
+   "representative": "王ヶ頭",
+   "uncertain": false,
+   "note": "最高点の王ヶ頭",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 62,
+   "name": "霧ヶ峰",
+   "material": {
+    "name": "霧ヶ峰＜車山＞",
+    "ele_m": 1925,
+    "pref": "長野県"
+   },
+   "representative": "車山",
+   "uncertain": false,
+   "note": "最高点の車山",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 63,
+   "name": "蓼科山",
+   "material": {
+    "name": "蓼科山",
+    "ele_m": 2531,
+    "pref": "長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "照合のページは 2530m、材料は 2531m",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 64,
+   "name": "八ヶ岳",
+   "material": {
+    "name": "赤岳",
+    "ele_m": 2899,
+    "pref": "長野県 山梨県"
+   },
+   "representative": "赤岳",
+   "uncertain": false,
+   "note": "八ヶ岳は山のまとまり。最高点の赤岳",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 65,
+   "name": "両神山",
+   "material": {
+    "name": "両神山",
+    "ele_m": 1723,
+    "pref": "埼玉県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 66,
+   "name": "雲取山",
+   "material": {
+    "name": "雲取山",
+    "ele_m": 2017,
+    "pref": "埼玉県 東京都"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 67,
+   "name": "甲武信岳",
+   "material": {
+    "name": "甲武信ヶ岳",
+    "ele_m": 2475,
+    "pref": "埼玉県 山梨県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "百名山の呼び名は甲武信岳。材料は甲武信ヶ岳",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 68,
+   "name": "金峰山",
+   "material": {
+    "name": "金峰山",
+    "ele_m": 2599,
+    "pref": "山梨県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "同じ表記の山が熊本県に、金峯山が山形県・鹿児島県にある",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 69,
+   "name": "瑞牆山",
+   "material": {
+    "name": "瑞牆山",
+    "ele_m": 2230,
+    "pref": "山梨県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 70,
+   "name": "大菩薩岳",
+   "material": {
+    "name": "大菩薩嶺",
+    "ele_m": 2057,
+    "pref": "山梨県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "百名山の呼び名は大菩薩岳。材料は大菩薩嶺",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 71,
+   "name": "丹沢山",
+   "material": {
+    "name": "丹沢山＜蛭ヶ岳＞",
+    "ele_m": 1673,
+    "pref": "神奈川県"
+   },
+   "representative": "蛭ヶ岳",
+   "uncertain": true,
+   "note": "丹沢山は山のまとまり。最高点の蛭ヶ岳を代表に(照合のページの標高 1673m)。山名の峰の丹沢山(1567m、材料にあり)を代表にする考え方もある",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 72,
+   "name": "富士山",
+   "material": {
+    "name": "富士山＜剣ヶ峯＞",
+    "ele_m": 3776,
+    "pref": "山梨県 静岡県"
+   },
+   "representative": "剣ヶ峯",
+   "uncertain": false,
+   "note": "最高点の剣ヶ峯",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 73,
+   "name": "天城山",
+   "material": {
+    "name": "天城山＜万三郎岳＞",
+    "ele_m": 1405,
+    "pref": "静岡県"
+   },
+   "representative": "万三郎岳",
+   "uncertain": false,
+   "note": "最高点の万三郎岳",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 74,
+   "name": "木曽駒ヶ岳",
+   "material": {
+    "name": "駒ヶ岳",
+    "ele_m": 2956,
+    "pref": "長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "材料は「駒ヶ岳」。長野県の 2956m",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 75,
+   "name": "空木岳",
+   "material": {
+    "name": "空木岳",
+    "ele_m": 2864,
+    "pref": "長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 76,
+   "name": "恵那山",
+   "material": {
+    "name": "恵那山",
+    "ele_m": 2191,
+    "pref": "長野県 岐阜県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 77,
+   "name": "甲斐駒ヶ岳",
+   "material": {
+    "name": "駒ヶ岳",
+    "ele_m": 2967,
+    "pref": "山梨県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "材料は「駒ヶ岳」。山梨県・長野県の 2967m",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 78,
+   "name": "仙丈岳",
+   "material": {
+    "name": "仙丈ヶ岳",
+    "ele_m": 3033,
+    "pref": "山梨県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "百名山の呼び名は仙丈岳。材料は仙丈ヶ岳",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 79,
+   "name": "鳳凰山",
+   "material": {
+    "name": "観音ヶ岳",
+    "ele_m": 2841,
+    "pref": "山梨県"
+   },
+   "representative": "観音ヶ岳",
+   "uncertain": false,
+   "note": "鳳凰山は地蔵ヶ岳・観音ヶ岳・薬師ヶ岳の総称。最高点の観音ヶ岳",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 80,
+   "name": "北岳",
+   "material": {
+    "name": "北岳",
+    "ele_m": 3193,
+    "pref": "山梨県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "鹿児島県の御岳（北岳）は別の山",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 81,
+   "name": "間ノ岳",
+   "material": {
+    "name": "間ノ岳",
+    "ele_m": 3190,
+    "pref": "山梨県 静岡県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 82,
+   "name": "塩見岳",
+   "material": {
+    "name": "塩見岳",
+    "ele_m": 3052,
+    "pref": "長野県 静岡県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 83,
+   "name": "悪沢岳",
+   "material": {
+    "name": "東岳（悪沢岳）",
+    "ele_m": 3141,
+    "pref": "静岡県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "材料は東岳（悪沢岳）",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 84,
+   "name": "赤石岳",
+   "material": {
+    "name": "赤石岳",
+    "ele_m": 3121,
+    "pref": "長野県 静岡県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "照合のページは 3120m、材料は 3121m",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 85,
+   "name": "聖岳",
+   "material": {
+    "name": "聖岳＜前聖岳＞",
+    "ele_m": 3013,
+    "pref": "長野県 静岡県"
+   },
+   "representative": "前聖岳",
+   "uncertain": false,
+   "note": "最高点の前聖岳",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 86,
+   "name": "光岳",
+   "material": {
+    "name": "光岳",
+    "ele_m": 2592,
+    "pref": "静岡県 長野県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "照合のページは 2591m、材料は 2592m",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 87,
+   "name": "白山",
+   "material": {
+    "name": "白山＜御前峰＞",
+    "ele_m": 2702,
+    "pref": "石川県 岐阜県"
+   },
+   "representative": "御前峰",
+   "uncertain": false,
+   "note": "最高点の御前峰",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 88,
+   "name": "荒島岳",
+   "material": {
+    "name": "荒島岳",
+    "ele_m": 1523,
+    "pref": "福井県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 89,
+   "name": "伊吹山",
+   "material": {
+    "name": "伊吹山",
+    "ele_m": 1377,
+    "pref": "滋賀県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 90,
+   "name": "大台ヶ原山",
+   "material": {
+    "name": "大台ヶ原山＜日出ヶ岳＞",
+    "ele_m": 1695,
+    "pref": "奈良県 三重県"
+   },
+   "representative": "日出ヶ岳",
+   "uncertain": false,
+   "note": "最高点の日出ヶ岳",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 91,
+   "name": "大峰山",
+   "material": {
+    "name": "八経ヶ岳",
+    "ele_m": 1915,
+    "pref": "奈良県"
+   },
+   "representative": "八経ヶ岳",
+   "uncertain": false,
+   "note": "大峰山は山のまとまり。最高点の八経ヶ岳",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 92,
+   "name": "大山",
+   "material": {
+    "name": "大山＜剣ヶ峰＞",
+    "ele_m": 1729,
+    "pref": "鳥取県"
+   },
+   "representative": "剣ヶ峰",
+   "uncertain": false,
+   "note": "最高点の剣ヶ峰。神奈川県の大山(1252m、ヤマビヨリの m027)は別の山",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 93,
+   "name": "剣山",
+   "material": {
+    "name": "剣山",
+    "ele_m": 1955,
+    "pref": "徳島県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "北海道の剣山(1205m)は別の山",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 94,
+   "name": "石鎚山",
+   "material": {
+    "name": "石鎚山＜天狗岳＞",
+    "ele_m": 1982,
+    "pref": "愛媛県"
+   },
+   "representative": "天狗岳",
+   "uncertain": false,
+   "note": "最高点の天狗岳",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 95,
+   "name": "九重山",
+   "material": {
+    "name": "くじゅう連山＜中岳＞",
+    "ele_m": 1791,
+    "pref": "大分県"
+   },
+   "representative": "中岳",
+   "uncertain": true,
+   "note": "最高点の中岳を代表に(照合のページの標高 1791m)。久住山(1786m、材料にあり)を代表にする考え方もある",
+   "name_differs_from_material": true
+  },
+  {
+   "no": 96,
+   "name": "祖母山",
+   "material": {
+    "name": "祖母山",
+    "ele_m": 1756,
+    "pref": "大分県 宮崎県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 97,
+   "name": "阿蘇山",
+   "material": {
+    "name": "阿蘇山＜高岳＞",
+    "ele_m": 1592,
+    "pref": "熊本県"
+   },
+   "representative": "高岳",
+   "uncertain": false,
+   "note": "阿蘇山は山のまとまり。最高点の高岳",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 98,
+   "name": "霧島山",
+   "material": {
+    "name": "霧島山＜韓国岳＞",
+    "ele_m": 1700,
+    "pref": "宮崎県 鹿児島県"
+   },
+   "representative": "韓国岳",
+   "uncertain": false,
+   "note": "霧島山は山のまとまり。最高点の韓国岳",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 99,
+   "name": "開聞岳",
+   "material": {
+    "name": "開聞岳",
+    "ele_m": 924,
+    "pref": "鹿児島県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  },
+  {
+   "no": 100,
+   "name": "宮之浦岳",
+   "material": {
+    "name": "宮之浦岳",
+    "ele_m": 1936,
+    "pref": "鹿児島県"
+   },
+   "representative": null,
+   "uncertain": false,
+   "note": "",
+   "name_differs_from_material": false
+  }
+ ]
+}
