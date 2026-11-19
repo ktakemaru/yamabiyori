@@ -359,5 +359,88 @@ class TestBaseline(unittest.TestCase):
                 render(["--out", "x.html"])
 
 
+class TestPanorama(unittest.TestCase):
+    """--panorama-html / --panorama-viewpoint-html: 展望図の HTML を iframe の srcdoc でそのまま埋め込む。"""
+
+    SUMMIT = ('<!doctype html><html lang="ja"><head><title>山頂</title></head><body>\n'
+              '<p id="s">山頂 & "引用" <b>雲</b></p>\r\n<script>var a=1&&2;</script></body></html>')
+    VIEW = "<!doctype html><html lang=\"ja\"><head><title>展望地</title></head><body><p id=\"v\">雷岩 &amp; 'x'</p></body></html>"
+
+    def _write(self, d, name, text):
+        path = os.path.join(d, name)
+        with open(path, "wb") as f:
+            f.write(text.encode("utf-8"))
+        return path
+
+    def _render(self, extra, base=None):
+        """extra の {S}・{V} を山頂・展望地の仮の展望図のパスに置き換えて変換する。"""
+        with tempfile.TemporaryDirectory() as d:
+            s = self._write(d, "m.html", self.SUMMIT)
+            v = self._write(d, "mv.html", self.VIEW)
+            args = [a.replace("{S}", s).replace("{V}", v) for a in extra]
+            o = os.path.join(d, "o.html")
+            code, _, err = render((base or ["--data", os.path.join(FIX, "diagnosis.json")]) + ["--out", o] + args)
+            page = ""
+            if code == 0:
+                with open(o, encoding="utf-8", newline="") as f:
+                    page = f.read()
+        return code, page, err
+
+    @staticmethod
+    def srcdocs(page):
+        import html as html_lib
+        return [html_lib.unescape(x) for x in re.findall(r'<iframe[^>]* srcdoc="([^"]*)"', page)]
+
+    def test_without_arguments_no_section(self):
+        code, page, err = self._render([])
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("<iframe", page)
+        self.assertNotIn("山頂からの展望", page)
+
+    def test_without_panoramas_output_is_unchanged(self):
+        spec = load(os.path.join(EXAMPLES, "diagnosis.json"))
+        a = render_report.Renderer(copy.deepcopy(spec), EXAMPLES, False).render()
+        b = render_report.Renderer(copy.deepcopy(spec), EXAMPLES, False, []).render()
+        self.assertEqual(a, b)
+        c = render_report.Renderer(copy.deepcopy(spec), EXAMPLES, False, [("山頂から", "<p>x</p>")]).render()
+        before_footer = a.split("<footer>")[0]
+        self.assertTrue(c.startswith(before_footer))  # 節は本文の最後に足すだけで、ほかの部分は変えない
+
+    def test_summit_only(self):
+        code, page, err = self._render(["--panorama-html", "{S}"])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(page.count("<h2>山頂からの展望</h2>"), 1)
+        self.assertEqual(page.count("<iframe"), 1)
+        self.assertIn("height:460px", page)
+        self.assertIn("<h3>山頂から</h3>", page)
+        self.assertNotIn("展望地から", page)
+
+    def test_viewpoint_first_and_content_unchanged(self):
+        code, page, err = self._render(["--panorama-html", "{S}", "--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(page.count("<h2>山頂からの展望</h2>"), 1)
+        self.assertLess(page.index("<h3>展望地から</h3>"), page.index("<h3>山頂から</h3>"))
+        self.assertLess(page.index("山頂からの展望"), page.index("<footer>"))
+        docs = self.srcdocs(page)
+        self.assertEqual(len(docs), 2)
+        self.assertEqual(docs, [self.VIEW, self.SUMMIT])  # 中身は改行も含めて1文字も変えない
+        self.assertNotIn("\n<p id=", page)  # 改行は文字参照(&#10;)で入る
+
+    def test_works_with_spec_json(self):
+        code, page, err = self._render(["--panorama-html", "{S}"], [os.path.join(EXAMPLES, "diagnosis.json")])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(page.count("<iframe"), 1)
+
+    def test_missing_file_fails(self):
+        code, _, err = self._render(["--panorama-html", "no_such_panorama.html"])
+        self.assertEqual(code, 2)
+        self.assertIn("エラー", err)
+
+    def test_viewpoint_requires_summit(self):
+        with self.assertRaises(SystemExit):
+            with contextlib.redirect_stderr(io.StringIO()):
+                self._render(["--panorama-viewpoint-html", "{V}"])
+
+
 if __name__ == "__main__":
     unittest.main()

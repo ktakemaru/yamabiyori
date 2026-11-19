@@ -7,6 +7,7 @@ Claude Code でも Codex でも、エージェントは HTML を自分で書か�
 使い方:
     python -X utf8 scripts/render_report.py out/report.json --out out/report.html
     python -X utf8 scripts/render_report.py out/report.json --out out/report.html --embed-images
+    python -X utf8 scripts/render_report.py --data out/山.json --out out/山.html --panorama-html out/panorama/m058.html --panorama-viewpoint-html out/panorama/m058v.html
 
 JSON の書き方は skills/yamabiyori/references/report_style.md を参照。
 """
@@ -129,9 +130,16 @@ def score_level(score):
     return "warning"
 
 
+# 展望図(mountain_weather_detail.py --panorama の HTML)を埋め込む iframe の高さ。
+# スマートフォンの縦向きで、図と時刻のボタンが見える大きさ(仮)。
+PANORAMA_IFRAME_HEIGHT = 460
+
+
 class Renderer:
-    def __init__(self, spec, base_dir, embed_images):
+    def __init__(self, spec, base_dir, embed_images, panoramas=None):
         self.spec = spec
+        # [(見出し, 展望図の HTML 文字列), ...] を表示する順に。None・空なら節を作らない(従来と同じ出力)
+        self.panoramas = list(panoramas or [])
         self.base_dir = Path(base_dir)
         self.embed = embed_images
         self.has_tabs = False
@@ -368,6 +376,22 @@ class Renderer:
         cls_attr = f' class="{cls}"' if cls else ""
         return f"<td{cls_attr}>{rich(text)}{sub}{tag}{gold}</td>"
 
+    # ---------- 展望図 ----------
+    def panorama_section(self):
+        """「山頂からの展望」の節。展望図の HTML は描き方に手を入れず、iframe の srcdoc にそのまま入れる。"""
+        out = ['<div class="section"><div class="section-head"><h2>山頂からの展望</h2>'
+               '<div class="note">展望図(予報にもとづく目安)。時刻のボタンで雲が替わり、図を横になぞると方角が動きます。</div></div>']
+        for label, page in self.panoramas:
+            out.append(f"<h3>{esc(label)}</h3>")
+            # 改行も文字参照にする(出力時の改行の変換で CR が増えたり、属性値の改行の正規化で中身が変わったりしないように)
+            doc = esc(page).replace("\r", "&#13;").replace("\n", "&#10;")
+            out.append(
+                f'<iframe class="panorama" title="{esc(label)}の展望図" loading="lazy" srcdoc="{doc}" '
+                f'style="display:block;width:100%;height:{PANORAMA_IFRAME_HEIGHT}px;border:0;margin:0 0 16px"></iframe>'
+            )
+        out.append("</div>")
+        return "".join(out)
+
     # ---------- ページ ----------
     def render(self):
         s = self.spec
@@ -385,6 +409,8 @@ class Renderer:
             f'<div class="sub">{sub}</div></header>'
         )
         body = self.render_blocks(s.get("blocks", []))
+        if self.panoramas:
+            body += self.panorama_section()
         footer = "".join(f"<p>{rich(p)}</p>" for p in (s["footer"] if isinstance(s.get("footer"), list) else [s.get("footer", "")]) if p)
         css = CSS_PATH.read_text(encoding="utf-8")
         script = f"<script>{TAB_JS}</script>" if self.has_tabs else ""
@@ -411,9 +437,15 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="出力する HTML のパス")
     ap.add_argument("--embed-images", action="store_true", help="画像を base64 で埋め込み、HTML 1ファイルで完結させる")
     ap.add_argument("--base-dir", help="画像の相対パスの基準(既定: JSON のあるフォルダ)")
+    ap.add_argument("--panorama-html", metavar="HTML",
+                    help="山頂の展望図(mountain_weather_detail.py --panorama の HTML)。渡したときだけ「山頂からの展望」の節を足す")
+    ap.add_argument("--panorama-viewpoint-html", metavar="HTML",
+                    help="展望地の展望図(--panorama の、名前の後ろに v の付く HTML)。--panorama-html と一緒に使う。山頂の図の上に出す")
     args = ap.parse_args(argv)
     if bool(args.spec) == bool(args.data):
         ap.error("レポート仕様 JSON(位置引数)か --data のどちらか一方を指定してください")
+    if args.panorama_viewpoint_html and not args.panorama_html:
+        ap.error("--panorama-viewpoint-html は --panorama-html と一緒に使ってください")
 
     src_path = Path(args.data or args.spec)
     try:
@@ -425,7 +457,12 @@ def main(argv=None):
                               n_days=args.days or 999, top=args.top or 9999)
         else:
             spec = _load_json(args.spec)
-        r = Renderer(spec, args.base_dir or src_path.parent, args.embed_images)
+        panoramas = []
+        if args.panorama_viewpoint_html:  # 展望地の図を先に、山頂の図をその下に
+            panoramas.append(("展望地から", Path(args.panorama_viewpoint_html).read_bytes().decode("utf-8")))
+        if args.panorama_html:
+            panoramas.append(("山頂から", Path(args.panorama_html).read_bytes().decode("utf-8")))
+        r = Renderer(spec, args.base_dir or src_path.parent, args.embed_images, panoramas)
         page = r.render()
     except (SpecError, KeyError, ValueError, OSError, json.JSONDecodeError) as e:
         print(f"エラー: {type(e).__name__}: {e}", file=sys.stderr)
