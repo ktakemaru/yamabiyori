@@ -198,11 +198,13 @@ class TestFallbacks(NoNetwork):
         import requests
         from panorama import run
         stats = {"overpass_calls": 0}
-        with mock.patch.object(requests, "post", side_effect=requests.ConnectionError("x")):
+        with mock.patch.object(requests, "post", side_effect=requests.ConnectionError("x")),                 mock.patch.object(run.time, "sleep") as sl:
             els, why = run.osm_elements("m999", 35.5, 138.5, stats)
         self.assertIsNone(els)
         self.assertIn("接続できない", why)
-        self.assertEqual(stats["overpass_calls"], 1)
+        # 2026-11-20 の指示書 7 章: 失敗したら 5 秒あけて 1 回だけ取り直す(前は 1 回だけ)
+        self.assertEqual(stats["overpass_calls"], 2)
+        sl.assert_called_once_with(5.0)
 
     def test_osm_non_json_is_handled(self):
         import requests

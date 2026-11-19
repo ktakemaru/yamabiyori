@@ -558,19 +558,37 @@ def name_box(x_scr: float, w: float, anchor: str):
 def _hit(intervals, a, b):
     return any(a < q1 and b > q0 for q0, q1 in intervals)
 
+FREE_HEIGHT_ZOOM = 20              # 横向きの「拡大」は画面の幅に 20° を守り、高さに収めない(ページを縦に送って見る)
+
+OMIT_NOTE = "名前を省いた山があります。『拡大』で出ます"
+
+STRICT_ZOOMS = (90, 45)             # 「広く」「標準」: 置ける分だけ(名前どうし・名前と引き出し線が重ならない所だけ)
+
+def name_order(items):
+    """名前を置く順番(2026-11-20 の決定): 百名山 → 76 座 → そのほか。同じ格の中では視点に近い山を先に、
+    距離が同じなら標高の高い山を先に。富士山は、富士山が見える図では必ず名前を出すので、いちばん先に置く。"""
+    def key(i):
+        it = items[i]
+        fuji = 0 if (it["tier"] == 0 and it.get("label") == FUJI) else 1
+        return (it["tier"], fuji, it.get("dist_km", 0.0), -it.get("ele_m", 0.0), it["x"])
+    return sorted(range(len(items)), key=key)
+
 def layout_names(items, deg: float, width_px: float, px_per_deg: float = 24.0, max_rows: int = None):
-    """items: [{"x": 図の x(SVG 単位), "tier": 0/1/2, "texts": [全部の時刻の文字]}](並びは図の順)。
-    返り値: {"rows": [段(0 が下)or -1(名前を出さない)], "anc": [置き方], "n_rows": 使った段の数, "k": 縮尺}。"""
+    """items: [{"x": 図の x(SVG 単位), "tier": 0/1/2, "texts": [全部の時刻の文字], "dist_km", "ele_m", "label"}]。
+    返り値: {"rows": [段(0 が下)or -1(名前を出さない)], "anc": [置き方], "n_rows": 使った段の数, "k": 縮尺}。
+    「広く」「標準」(STRICT_ZOOMS): 名前どうしが重ならず、名前と引き出し線が重ならない所にだけ置く。置けない山は点だけ。
+    「拡大」: 見えている百名山と 76 座は全部出す(段を増やして重なりを減らす。それでも置けなければ重なりがいちばん短い所)。
+    そのほかの山は、どの縮尺でも置ける分だけ(「広く」では出さない)。"""
     k = (width_px - FRAME_GUTTER_PX) / (deg * px_per_deg)
     mx = MAX_ROWS if max_rows is None else max_rows
     ex = min(EXTRA_ROWS, mx)
     base = min(BASE_ROWS, mx)
+    strict_only = deg in STRICT_ZOOMS
     n = len(items)
     rows_out, anc_out = [-1] * n, ["middle"] * n
     names = {}                       # 段 → [(a, b)]
     corridors = {}                   # 段 → [(a, b)](上の段の名前の引き出し線が通る所)
-    order = sorted(range(n), key=lambda i: (items[i]["tier"], items[i]["x"]))
-    for i in order:
+    for i in name_order(items):
         it = items[i]
         t = it["tier"]
         if deg >= 90 and t == 2:
@@ -603,24 +621,27 @@ def layout_names(items, deg: float, width_px: float, px_per_deg: float = 24.0, m
                         best = (c, r, anchor)
             return None if strict or best is None else best[1:]
 
-        got = search(range(base), True)
-        if got is None and t < 2:
-            got = search(range(base, ex), True)
-            if got is None:
-                got = search(range(ex), False)
-            if got is None:
-                got = search(range(ex, mx), False)
-            if got is None:
-                # 段は MAX_ROWS まで。それでも置けなければ、名前どうしの重なりがいちばん短い所に出す(出さないよりよい)
-                best = None
-                for r in range(mx):
-                    for anchor in ANCHORS:
-                        a, b = name_box(xs, w, anchor)
-                        ov = sum(max(0.0, min(b, q1) - max(a, q0)) for q0, q1 in names.get(r, []))
-                        key = (ov, crossings(r, a, b), r)
-                        if best is None or key < best[0]:
-                            best = (key, r, anchor)
-                got = best[1:]
+        if strict_only:
+            got = search(range(mx if t < 2 else base), True)
+        else:
+            got = search(range(base), True)
+            if got is None and t < 2:
+                got = search(range(base, mx), True)
+                if got is None:
+                    got = search(range(ex), False)
+                if got is None:
+                    got = search(range(ex, mx), False)
+                if got is None:
+                    # 段は MAX_ROWS まで。それでも置けなければ、名前どうしの重なりがいちばん短い所に出す(出さないよりよい)
+                    best = None
+                    for r in range(mx):
+                        for anchor in ANCHORS:
+                            a, b = name_box(xs, w, anchor)
+                            ov = sum(max(0.0, min(b, q1) - max(a, q0)) for q0, q1 in names.get(r, []))
+                            key = (ov, crossings(r, a, b), r)
+                            if best is None or key < best[0]:
+                                best = (key, r, anchor)
+                    got = best[1:]
         if got is None:
             continue
         r, anchor = got
@@ -1073,6 +1094,8 @@ TAG_RE = re.compile(r"<[^>]+>")
 
 ATTR_RE = r'{}="([\d.\-]+)"'
 
+TITLE_RE = re.compile(r" (\d+)m\)方位 [\d.]+° 距離 ([\d.]+)km")
+
 def credit_lines(osm_used: bool, gsi_partial: bool = False):
     a = [CREDIT_TILES, CREDIT_1003] + ([CREDIT_1003_PARTIAL] if gsi_partial else []) + [CREDIT_WEATHER]
     if osm_used:
@@ -1092,7 +1115,10 @@ def annotate_svg(svg: str):
     def pk(mo):
         title, line_attrs, lcls, circ_attrs, ccls = mo.groups()
         i = len(dots)
-        dots.append({"x": _attr(circ_attrs, "cx"), "y": _attr(circ_attrs, "cy"), "cls": ccls})
+        tm = TITLE_RE.search(html.unescape(title))
+        dots.append({"x": _attr(circ_attrs, "cx"), "y": _attr(circ_attrs, "cy"), "cls": ccls,
+                     "label": html.unescape(title).split("(材料")[0],
+                     "ele_m": float(tm.group(1)) if tm else 0.0, "dist_km": float(tm.group(2)) if tm else 0.0})
         return (f'<g class="pk" data-i="{i}"><title>{title}</title><line {line_attrs}class="lead {lcls}"/>'
                 f'<circle {circ_attrs}class="dot {ccls}"/></g>')
     svg = PEAK_RE.sub(pk, svg)
@@ -1113,7 +1139,8 @@ def annotate_svg(svg: str):
     items = []
     for i, d in enumerate(dots):
         tier = 0 if "大" in d["cls"] else 1 if "中" in d["cls"] else 2
-        items.append({"x": d["x"], "y": d["y"], "tier": tier, "texts": texts[i] or [""]})
+        items.append({"x": d["x"], "y": d["y"], "tier": tier, "texts": texts[i] or [""], "label": d["label"],
+                      "ele_m": d["ele_m"], "dist_km": d["dist_km"]})
     return svg, items
 
 def layouts_for(items):
@@ -1159,6 +1186,7 @@ body.wide .ctl{display:flex;flex-wrap:wrap;gap:10px}body.wide .ctl button{flex:0
 .credit39{font-size:10.5px;line-height:1.35;color:var(--mut);padding:1px 6px 3px;border-top:1px solid var(--line);background:var(--card)}
 .credit39 div{overflow-wrap:anywhere}
 .vstate{margin:2px 0;font-size:13px;color:var(--fg);overflow-wrap:anywhere}
+.omitnote{margin:0 0 4px;font-size:12px;color:var(--fg)}
 .opendir{font-size:12px;color:var(--mut);margin:0 0 4px}
 h1.t39{font-size:17px;margin:6px 0 2px}
 details.howto{margin:8px 0}details.howto summary{cursor:pointer;font-size:14px;color:var(--sub);min-height:40px;display:flex;align-items:center}
@@ -1196,20 +1224,20 @@ function restore(){svg.setAttribute('width',ov.w);svg.setAttribute('height',ov.h
 function layout(){
  var W=window.innerWidth||document.documentElement.clientWidth,m=W>=D.wideMin?'wide':'narrow';
  if(m!==mode){mode=m;body.classList.toggle('wide',m==='wide');body.classList.toggle('narrow',m==='narrow');
-  if(m==='wide'){restore();if(az===null)az=D.open.wide.az;go();return}
+  if(m==='wide'){restore();omit(null);if(az===null)az=D.open.wide.az;go();return}
   svg.removeAttribute('width');svg.removeAttribute('height');svg.setAttribute('preserveAspectRatio','xMinYMin meet');
   if(deg===null)deg=W>=D.openWideZoom?90:45;}
  if(mode==='wide'){go();return}
  if(az===null)az=D.open[String(deg)].az;
  var w=vw(),span=deg*PX,k=w/span,ldeg=deg,L,nr;
- var land=window.innerWidth>window.innerHeight,MX=String(land?D.landRows:D.maxRows);
+ var land=window.innerWidth>window.innerHeight,free=land&&deg===D.freeZoom,MX=String(land&&!free?D.landRows:D.maxRows);
  function pick(){L=D.layouts[MX][String(ldeg)][String(bucket(W))];nr=0;L.forEach(function(q){if(q[0]+1>nr)nr=q[0]+1})}
  pick();
  var ctlB=document.querySelector('.ctl').getBoundingClientRect().bottom,crH=document.querySelector('.credit39').getBoundingClientRect().height;
  var tgt=window.innerHeight-crH-28;if(land)tgt=Math.min(tgt,D.landH);
- for(var it=0;it<2;it++){var lab=7+(Math.max(nr,1)-1)*ROWH+14,kh=(tgt-ctlB-2-lab)/(BASE-SKY);
+ for(var it=0;it<(free?0:2);it++){var lab=7+(Math.max(nr,1)-1)*ROWH+14,kh=(tgt-ctlB-2-lab)/(BASE-SKY);
   if(kh>0&&k>kh){k=kh;span=w/k;var de=span/PX;ldeg=90;[20,45,90].forEach(function(z){if(z>=de&&z<ldeg)ldeg=z});if(de<=20)ldeg=20;pick()}}
- D.kcap=(span!==deg*PX);
+ D.kcap=(span!==deg*PX);omit(L);
  var rowH=ROWH/k;
  pk.forEach(function(p){var q=L[p.i],r=q[0],x=+D.items[p.i].x,y=+D.items[p.i].y,ty=SKY-7/k-r*rowH,a=ANC[q[1]];
   p.c.setAttribute('r',r<0?Math.max(1.6,1.6/k):Math.max(2.8,2.6/k));
@@ -1223,7 +1251,10 @@ function layout(){
  ticks.forEach(function(x){var a=Math.round((+x.t.getAttribute('x')-X0)/PX);x.t.style.display=(a%step===0)?'':'none';x.t.style.fontSize=(10/k)+'px';x.t.setAttribute('y',BASE+13/k)});
  near.forEach(function(x){x.t.style.fontSize=(10/k)+'px';x.t.style.strokeWidth=(3/k)+'px'});
  svg._top=SKY-7/k-(Math.max(nr,1)-1)*rowH-14/k;svg._h=BASE+18/k-svg._top;svg._span=span;svg._ldeg=ldeg;
- clampAz();pan();}
+ clampAz();pan();
+ if(vw()!==w&&!layout.again){layout.again=1;layout();layout.again=0}}
+function omit(L){var om=document.getElementById('omitnote');if(!om)return;var o=false;
+ if(L)D.items.forEach(function(it,i){if(it.t<2&&L[i][0]<0)o=true});om.style.display=o?'':'none'}
 function clampAz(){if(mode!=='narrow')return;var h=(svg._span?svg._span/PX:deg)/2,lo=h-X0/PX,hi=(FULL-X0)/PX-h;az=Math.max(lo,Math.min(hi,az))}
 function pan(){var x=X0+az*PX-svg._span/2;svg.setAttribute('viewBox',x.toFixed(1)+' '+svg._top.toFixed(1)+' '+svg._span.toFixed(1)+' '+svg._h.toFixed(1));D.cur={az:az,deg:deg,mode:mode,span_deg:Math.round(svg._span/PX*10)/10,layout_deg:svg._ldeg}}
 function go(){if(mode==='wide'){vp.scrollLeft=Math.max(0,X0+az*PX-vp.clientWidth/2);D.cur={az:az,deg:null,mode:mode}}else{clampAz();pan()}}
@@ -1286,7 +1317,7 @@ def write_page(path, *, svg, ch, peaks, states, default, notes, banners, title_b
             "items": [{"x": round(it["x"], 1), "y": round(it["y"], 1), "t": it["tier"]} for it in items],
             "layouts": layouts, "buckets": list(WIDTH_BUCKETS), "open": opens, "wideMin": WIDE_MIN_PX,
             "openWideZoom": OPEN_WIDE_ZOOM_MIN_PX, "landH": LAND_RIDGE_MAX_PX, "maxRows": MAX_ROWS,
-            "landRows": LAND_MAX_ROWS}
+            "landRows": LAND_MAX_ROWS, "freeZoom": FREE_HEIGHT_ZOOM}
     lines = credit_lines(osm_used, gsi_partial)
     credit = "".join(f"<div>{html.escape(x)}</div>" for x in lines)
     vs = "".join(
@@ -1305,7 +1336,9 @@ def write_page(path, *, svg, ch, peaks, states, default, notes, banners, title_b
     how = (f'<details class="howto"><summary>図の見方(凡例・注記・出典)</summary>'
            f'<p>操作: 時刻のボタンで雲が替わります(山と名前は動きません)。「◀」「▶」は画面の半分ずつ、図を指で横になぞっても動きます。'
            f'「広く」は画面の幅に 90°、「標準」は 45°、「拡大」は 20°(幅 {WIDE_MIN_PX}px 以上の画面では、全周を横に送る形)。'
-           f'赤 = 日本百名山、青 = ヤマビヨリの 76 座。「広く」ではそのほかの山は点だけ。</p>'
+           f'赤 = 日本百名山、青 = ヤマビヨリの 76 座。「広く」「標準」では、重ならずに置ける名前だけを出します(百名山 → 76 座 → そのほかの順。近い山を先に)。'
+           f'置けない山は点だけで、「拡大」で見えている百名山と 76 座は全部出ます。「広く」ではそのほかの山は点だけ。'
+           f'横向きの画面の「拡大」は、図が画面の高さを超えるときはページを縦に送って見ます。</p>'
            f'{legend_html}<p>山頂の雲量は、山頂をはさむ 2 つの高さの予報のうち大きいほうです。</p>{extra_how}'
            f'<p style="font-size:12px">出典: 国土地理院の標高タイル(地理院タイル)を加工して作成(視点から見上げた角度に変換)。'
            f'山名と標高は「日本の主な山岳標高」(国土地理院)をもとに作成(百名山・76 座との対応づけと呼び名を加工)。'
@@ -1318,6 +1351,7 @@ def write_page(path, *, svg, ch, peaks, states, default, notes, banners, title_b
     body = (f'<body class="narrow"><main class="p39">'
             f'<div class="ctl">{time_bar(states, default, notes)}{nav_bar()}</div>'
             f'<div id="frame"><div id="vp">{svg2}</div><div class="credit39">{credit}</div></div>'
+            f'<p class="omitnote" id="omitnote" style="display:none">{OMIT_NOTE}</p>'
             f'{vs}<h1 class="t39">{html.escape(title_base)}{spans}</h1><p class="opendir">{html.escape(od)}</p>{intro}{how}'
             f'<script type="application/json" id="p39data">{json.dumps(data, ensure_ascii=False)}</script>'
             f'<script>{JS39}</script></main></body></html>')

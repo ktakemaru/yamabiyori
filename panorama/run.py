@@ -6,7 +6,7 @@
    (図に「名前は日本百名山とヤマビヨリの 76 座です」と書く)。表は自分では取りに行かない。
    表に当たる点の無い 76 座(11 座)は MOUNTAINS の座標を山頂の点にし、その山が視点の図に「山頂の点は目安です」と書く。
 2. 視点: 山頂の点(1003 山の点、無ければ MOUNTAINS の座標)。OSM の展望地(山頂から 300m 以内・山頂より 50m を超えて
-   低くない・名前のある点を優先・同じなら近い点)があれば、展望地の図も作る。OSM は Overpass に 1 回だけ問い合わせて保存。
+   低くない・名前のある点を優先・同じなら近い点)があれば、展望地の図も作る。OSM は Overpass に問い合わせて保存(失敗したら 5 秒あけて 1 回だけ取り直す)。
    取れなければ山頂の図だけ。
 3. 標高タイル: その山に要る分だけ、1 枚ごとに 1 秒あけて取る(terrain_cache/)。取れないタイルがあれば図を作らない。
 4. 図の地形(輪郭・見える山・名前の出る山の点): 計算して config.parts_dir() に保存。作ったときの条件(コードの版・辞書の版・
@@ -39,6 +39,8 @@ FUJI_ID = "m012"
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OVERPASS_UA = "yamabiyori-panorama (github.com/ktakemaru/yamabiyori)"
 OVERPASS_TIMEOUT_S = 60
+OVERPASS_RETRIES = 1              # 502 など・つながらないとき、5 秒あけて 1 回だけ取り直す(指示書 v1.10 その2 の 7 章)
+OVERPASS_RETRY_WAIT_S = 5.0
 TILE_SEC_PER = 1.2                # 1 枚の見込みの秒数(1 秒の休み + 通信)
 HOURS = (6, 8, 10, 12)
 DEFAULT_HOUR = 8
@@ -140,14 +142,23 @@ def osm_elements(mtn_id, lat, lon, stats):
         except (OSError, ValueError, KeyError):
             pass
     import requests
-    stats["overpass_calls"] += 1
-    try:
-        r = requests.post(OVERPASS_URL, data={"data": osm_query(lat, lon)}, headers={"User-Agent": OVERPASS_UA},
-                          timeout=OVERPASS_TIMEOUT_S)
-    except requests.RequestException as e:
-        return None, f"Overpass に接続できない({type(e).__name__})"
-    if r.status_code != 200:
-        return None, f"Overpass の応答 HTTP {r.status_code}"
+    r, why = None, None
+    for attempt in range(1 + OVERPASS_RETRIES):
+        if attempt:
+            time.sleep(OVERPASS_RETRY_WAIT_S)
+        stats["overpass_calls"] += 1
+        try:
+            r = requests.post(OVERPASS_URL, data={"data": osm_query(lat, lon)}, headers={"User-Agent": OVERPASS_UA},
+                              timeout=OVERPASS_TIMEOUT_S)
+        except requests.RequestException as e:
+            r, why = None, f"Overpass に接続できない({type(e).__name__})"
+            continue
+        if r.status_code != 200:
+            why = f"Overpass の応答 HTTP {r.status_code}"
+            continue
+        break
+    if r is None or r.status_code != 200:
+        return None, why + ("(取り直しても同じ)" if OVERPASS_RETRIES else "")
     try:
         data = r.json()
     except ValueError:
