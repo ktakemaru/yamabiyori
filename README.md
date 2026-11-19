@@ -167,6 +167,12 @@ Open-Meteoの降水確率は山では当たりにくい。そこでMSM範囲内�
 山頂に立ったときに**どの山が見えて、翌日の朝〜昼にどこに雲がかかりそうか**を、1枚の図で見られる。
 診断モードに `--panorama` を付けるだけで、診断のあとに図(HTML)ができ、最後に「展望図: <パス>」と出る。76座だけ。
 
+![展望図(パソコンの画面)](assets/panorama_pc.png)
+
+<img src="assets/panorama_phone.png" width="360" alt="展望図(スマートフォンの画面)">
+
+大菩薩嶺・雷岩から(2026-11-21 8時の予報で作った図)
+
 ```powershell
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 大菩薩嶺 --panorama
 ```
