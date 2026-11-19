@@ -2911,7 +2911,27 @@ def parse_args(argv=None):
                         help="出力を UTF-8(BOM付き)でファイルに保存する。--mountain / --list / --name と一緒にだけ使える")
     parser.add_argument("--json-out", metavar="ファイル",
                         help="画面に出す表と同じ数値を、列も行も省かずに JSON で保存する(レポートHTML用。--mountain / --name と一緒にだけ使える)")
+    parser.add_argument("--panorama", action="store_true",
+                        help="診断のあとに、その山の山頂から見た天気入りの展望図(HTML)を書く(76 座だけ。翌日の 6・8・10・12 時。"
+                             "初回は標高タイルの取得に数分かかる。--mountain と一緒にだけ使える)")
+    parser.add_argument("--panorama-out", metavar="ファイル",
+                        help="展望図の出力先(既定 out/panorama/<山の ID>.html。展望地の図は名前の後ろに v)。--panorama と一緒に使う")
     return parser.parse_args(argv)
+
+
+def run_panorama(mtn: dict, is_custom: bool, out_path: str = None) -> None:
+    """--panorama: 診断の出力のあとに展望図を書き、最後に「展望図: <パス>」を足す。失敗しても診断の結果・終了コードは変えない。"""
+    if is_custom:
+        print("展望図は 76 座だけです")
+        return
+    try:
+        from panorama import run as pano
+        res = pano.make_panorama(mtn, out_path=out_path, main_days=FORECAST_DAYS)
+    except Exception as e:  # noqa: BLE001  展望図のどこで失敗しても、診断は止めない
+        print(f"展望図は作れませんでした({e})")
+        return
+    for line in pano.summary_lines(res):
+        print(line)
 
 
 def main(argv=None) -> int:
@@ -2930,6 +2950,12 @@ def main(argv=None) -> int:
             return 2
     if args.json_out and args.mountain is None and custom_mtn is None:
         print("--json-out は --mountain か --name と一緒に使ってください(対話モード・--list では使えません)。")
+        return 2
+    if args.panorama_out and not args.panorama:
+        print("--panorama-out は --panorama と一緒に使ってください。")
+        return 2
+    if args.panorama and args.mountain is None and custom_mtn is None:
+        print("--panorama は --mountain と一緒に使ってください(対話モード・--list では使えません)。")
         return 2
     if args.out and not (args.list or args.mountain is not None or custom_mtn is not None):
         # 対話モード(引数なし・GPX)では input() のプロンプトがファイル側に行き、止まって見えるため受け付けない
@@ -2959,7 +2985,10 @@ def main(argv=None) -> int:
             if custom_mtn is not None:
                 print(f"※登録外の山として診断します(指定値: 緯度{mtn['lat']} 経度{mtn['lon']} 標高{mtn['elevation_m']}m)。"
                       "地形(風上/風下)のデータはありません。座標・標高が山頂からずれていると標高補間の値もずれます。")
-            return main_single_mountain(mtn, report)
+            code = main_single_mountain(mtn, report)
+            if args.panorama:
+                run_panorama(mtn, custom_mtn is not None, args.panorama_out)
+            return code
         code = run_with_output_file(args.out, run_single) if args.out else run_single()
         if code == 0 and args.json_out:
             return write_report_json(args.json_out, report)
