@@ -1,0 +1,950 @@
+{
+ "_source": "ヤマビヨリ(mountain_weather_core.MOUNTAINS)の id と name。1003 山との対応は段階1 の対応(stage1_daibosatsu.load_materials)を使い、M76_OVERRIDE に書いたものだけ名前で照合し直した。座標は入れない。",
+ "_rules": "display は図と文に使う名前(MOUNTAINS の name から (補足) を外したもの)。百名山にも入る山は、図では百名山の呼び名を使う。",
+ "mountains": [
+  {
+   "id": "m001",
+   "name": "谷川岳",
+   "display": "谷川岳",
+   "material": {
+    "name": "谷川岳＜オキノ耳＞",
+    "ele_m": 1977,
+    "pref": "群馬県 新潟県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 42.7m)",
+   "hyakumeizan_no": 30
+  },
+  {
+   "id": "m002",
+   "name": "八ヶ岳(赤岳)",
+   "display": "八ヶ岳",
+   "material": {
+    "name": "赤岳",
+    "ele_m": 2899,
+    "pref": "長野県 山梨県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.4m)",
+   "hyakumeizan_no": 64
+  },
+  {
+   "id": "m003",
+   "name": "横岳",
+   "display": "横岳",
+   "material": {
+    "name": "横岳",
+    "ele_m": 2830,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 18.6m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m004",
+   "name": "硫黄岳",
+   "display": "硫黄岳",
+   "material": {
+    "name": "硫黄岳",
+    "ele_m": 2760,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 31.0m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m005",
+   "name": "東天狗岳",
+   "display": "東天狗岳",
+   "material": {
+    "name": "天狗岳",
+    "ele_m": 2646,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 371.4m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m006",
+   "name": "権現岳",
+   "display": "権現岳",
+   "material": {
+    "name": "権現岳",
+    "ele_m": 2715,
+    "pref": "山梨県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 17.1m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m007",
+   "name": "編笠山",
+   "display": "編笠山",
+   "material": {
+    "name": "編笠山",
+    "ele_m": 2524,
+    "pref": "山梨県 長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 5.1m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m008",
+   "name": "木曽駒ヶ岳",
+   "display": "木曽駒ヶ岳",
+   "material": {
+    "name": "駒ヶ岳",
+    "ele_m": 2956,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.4m)",
+   "hyakumeizan_no": 74
+  },
+  {
+   "id": "m009",
+   "name": "宝剣岳",
+   "display": "宝剣岳",
+   "material": {
+    "name": "駒ヶ岳＜宝剣岳＞",
+    "ele_m": 2931,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 2.1m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m010",
+   "name": "三ノ沢岳",
+   "display": "三ノ沢岳",
+   "material": {
+    "name": "三沢岳",
+    "ele_m": 2847,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_near",
+   "note": "段階1 の対応(ずれ 12.3m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m011",
+   "name": "空木岳",
+   "display": "空木岳",
+   "material": {
+    "name": "空木岳",
+    "ele_m": 2864,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 13.1m)",
+   "hyakumeizan_no": 75
+  },
+  {
+   "id": "m012",
+   "name": "富士山(剣ヶ峰)",
+   "display": "富士山",
+   "material": {
+    "name": "富士山＜剣ヶ峯＞",
+    "ele_m": 3776,
+    "pref": "山梨県 静岡県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 15.5m)",
+   "hyakumeizan_no": 72
+  },
+  {
+   "id": "m013",
+   "name": "天上山(カチカチ山)",
+   "display": "天上山",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m014",
+   "name": "三ツ峠山(開運山)",
+   "display": "三ツ峠山",
+   "material": {
+    "name": "三ツ峠山",
+    "ele_m": 1785,
+    "pref": "山梨県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 8.0m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m015",
+   "name": "黒岳(御坂山地)",
+   "display": "黒岳",
+   "material": {
+    "name": "黒岳",
+    "ele_m": 1793,
+    "pref": "山梨県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 14.7m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m016",
+   "name": "石割山",
+   "display": "石割山",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m017",
+   "name": "鉄砲木ノ頭(明神山)",
+   "display": "鉄砲木ノ頭",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m018",
+   "name": "杓子山",
+   "display": "杓子山",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m019",
+   "name": "竜ヶ岳(本栖湖)",
+   "display": "竜ヶ岳",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m020",
+   "name": "毛無山(天子山地)",
+   "display": "毛無山",
+   "material": {
+    "name": "毛無山",
+    "ele_m": 1964,
+    "pref": "山梨県 静岡県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 3.8m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m021",
+   "name": "越前岳",
+   "display": "越前岳",
+   "material": {
+    "name": "愛鷹山＜越前岳＞",
+    "ele_m": 1504,
+    "pref": "静岡県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 4.9m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m022",
+   "name": "塔ノ岳",
+   "display": "塔ノ岳",
+   "material": {
+    "name": "丹沢山＜塔ノ岳＞",
+    "ele_m": 1491,
+    "pref": "神奈川県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.3m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m023",
+   "name": "丹沢山",
+   "display": "丹沢山",
+   "material": {
+    "name": "丹沢山",
+    "ele_m": 1567,
+    "pref": "神奈川県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 2.0m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m024",
+   "name": "蛭ヶ岳",
+   "display": "蛭ヶ岳",
+   "material": {
+    "name": "丹沢山＜蛭ヶ岳＞",
+    "ele_m": 1673,
+    "pref": "神奈川県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 4.0m)。百名山の呼び名は「丹沢山」(図ではこちらを使う)",
+   "hyakumeizan_no": 71
+  },
+  {
+   "id": "m025",
+   "name": "檜洞丸",
+   "display": "檜洞丸",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m026",
+   "name": "鍋割山",
+   "display": "鍋割山",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m027",
+   "name": "大山(伊勢原)",
+   "display": "大山",
+   "material": {
+    "name": "大山",
+    "ele_m": 1252,
+    "pref": "神奈川県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 6.5m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m028",
+   "name": "雲取山",
+   "display": "雲取山",
+   "material": {
+    "name": "雲取山",
+    "ele_m": 2017,
+    "pref": "埼玉県 東京都"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.4m)",
+   "hyakumeizan_no": 66
+  },
+  {
+   "id": "m029",
+   "name": "高尾山",
+   "display": "高尾山",
+   "material": {
+    "name": "高尾山",
+    "ele_m": 599,
+    "pref": "東京都"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 14.9m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m030",
+   "name": "陣馬山",
+   "display": "陣馬山",
+   "material": {
+    "name": "陣馬山（陣場山）",
+    "ele_m": 855,
+    "pref": "東京都 神奈川県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 14.2m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m031",
+   "name": "御岳山",
+   "display": "御岳山",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m032",
+   "name": "棒ノ折山(棒ノ嶺)",
+   "display": "棒ノ折山",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m033",
+   "name": "笠取山",
+   "display": "笠取山",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m034",
+   "name": "燧ヶ岳",
+   "display": "燧ヶ岳",
+   "material": {
+    "name": "燧ヶ岳＜柴安嵓＞",
+    "ele_m": 2356,
+    "pref": "福島県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 3.0m)。百名山の呼び名は「燧岳」(図ではこちらを使う)",
+   "hyakumeizan_no": 28
+  },
+  {
+   "id": "m035",
+   "name": "至仏山",
+   "display": "至仏山",
+   "material": {
+    "name": "至仏山",
+    "ele_m": 2228,
+    "pref": "群馬県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 67.1m)",
+   "hyakumeizan_no": 29
+  },
+  {
+   "id": "m036",
+   "name": "燕岳",
+   "display": "燕岳",
+   "material": {
+    "name": "燕岳",
+    "ele_m": 2763,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 40.0m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m037",
+   "name": "槍ヶ岳",
+   "display": "槍ヶ岳",
+   "material": {
+    "name": "槍ヶ岳",
+    "ele_m": 3180,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 68.1m)",
+   "hyakumeizan_no": 54
+  },
+  {
+   "id": "m038",
+   "name": "常念岳",
+   "display": "常念岳",
+   "material": {
+    "name": "常念岳",
+    "ele_m": 2857,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.5m)",
+   "hyakumeizan_no": 56
+  },
+  {
+   "id": "m039",
+   "name": "唐松岳",
+   "display": "唐松岳",
+   "material": {
+    "name": "唐松岳",
+    "ele_m": 2696,
+    "pref": "富山県 長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.6m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m040",
+   "name": "西穂高岳",
+   "display": "西穂高岳",
+   "material": {
+    "name": "西穂高岳",
+    "ele_m": 2909,
+    "pref": "長野県 岐阜県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 25.7m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m041",
+   "name": "乗鞍岳(剣ヶ峰)",
+   "display": "乗鞍岳",
+   "material": {
+    "name": "乗鞍岳＜剣ヶ峰＞",
+    "ele_m": 3026,
+    "pref": "岐阜県 長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 258.7m)",
+   "hyakumeizan_no": 59
+  },
+  {
+   "id": "m042",
+   "name": "美ヶ原(王ヶ頭)",
+   "display": "美ヶ原",
+   "material": {
+    "name": "美ヶ原＜王ヶ頭＞",
+    "ele_m": 2034,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 34.1m)",
+   "hyakumeizan_no": 61
+  },
+  {
+   "id": "m043",
+   "name": "霧ヶ峰(車山)",
+   "display": "霧ヶ峰",
+   "material": {
+    "name": "霧ヶ峰＜車山＞",
+    "ele_m": 1925,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.4m)",
+   "hyakumeizan_no": 62
+  },
+  {
+   "id": "m044",
+   "name": "北横岳",
+   "display": "北横岳",
+   "material": null,
+   "match": "mountains_only",
+   "note": "1003 山に対応が無い。MOUNTAINS の座標と標高を使う",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m045",
+   "name": "甲斐駒ヶ岳",
+   "display": "甲斐駒ヶ岳",
+   "material": {
+    "name": "駒ヶ岳",
+    "ele_m": 2967,
+    "pref": "山梨県 長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 27.9m)",
+   "hyakumeizan_no": 77
+  },
+  {
+   "id": "m046",
+   "name": "北岳",
+   "display": "北岳",
+   "material": {
+    "name": "北岳",
+    "ele_m": 3193,
+    "pref": "山梨県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 36.0m)",
+   "hyakumeizan_no": 80
+  },
+  {
+   "id": "m047",
+   "name": "仙丈ヶ岳",
+   "display": "仙丈ヶ岳",
+   "material": {
+    "name": "仙丈ヶ岳",
+    "ele_m": 3033,
+    "pref": "山梨県 長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 25.7m)。百名山の呼び名は「仙丈岳」(図ではこちらを使う)",
+   "hyakumeizan_no": 78
+  },
+  {
+   "id": "m048",
+   "name": "入笠山",
+   "display": "入笠山",
+   "material": {
+    "name": "入笠山",
+    "ele_m": 1955,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 12.3m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m049",
+   "name": "蓼科山",
+   "display": "蓼科山",
+   "material": {
+    "name": "蓼科山",
+    "ele_m": 2531,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 63.1m)",
+   "hyakumeizan_no": 63
+  },
+  {
+   "id": "m050",
+   "name": "金峰山",
+   "display": "金峰山",
+   "material": {
+    "name": "金峰山",
+    "ele_m": 2599,
+    "pref": "山梨県 長野県"
+   },
+   "match": "name_override",
+   "note": "段階1 の対応は北奥千丈岳(名前が重ならない・38.6m)。MOUNTAINS の m050 の座標は北奥千丈岳の近くにある。百名山の金峰山と同じ山として、材料の金峰山(2599m)に対応させた。MOUNTAINS の座標は変えていない",
+   "hyakumeizan_no": 68
+  },
+  {
+   "id": "m051",
+   "name": "瑞牆山",
+   "display": "瑞牆山",
+   "material": {
+    "name": "瑞牆山",
+    "ele_m": 2230,
+    "pref": "山梨県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.6m)",
+   "hyakumeizan_no": 69
+  },
+  {
+   "id": "m052",
+   "name": "赤城山(黒檜山)",
+   "display": "赤城山",
+   "material": {
+    "name": "赤城山＜黒檜山＞",
+    "ele_m": 1828,
+    "pref": "群馬県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.3m)",
+   "hyakumeizan_no": 40
+  },
+  {
+   "id": "m053",
+   "name": "榛名山(掃部ヶ岳)",
+   "display": "榛名山",
+   "material": {
+    "name": "榛名山＜掃部ヶ岳＞",
+    "ele_m": 1449,
+    "pref": "群馬県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.3m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m054",
+   "name": "妙義山(相馬岳)",
+   "display": "妙義山",
+   "material": {
+    "name": "妙義山＜相馬岳＞",
+    "ele_m": 1104,
+    "pref": "群馬県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 6.6m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m055",
+   "name": "木曽御嶽山",
+   "display": "木曽御嶽山",
+   "material": {
+    "name": "御嶽山＜剣ヶ峰＞",
+    "ele_m": 3067,
+    "pref": "長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 40.3m)。百名山の呼び名は「御嶽」(図ではこちらを使う)",
+   "hyakumeizan_no": 60
+  },
+  {
+   "id": "m056",
+   "name": "日光白根山",
+   "display": "日光白根山",
+   "material": {
+    "name": "白根山",
+    "ele_m": 2578,
+    "pref": "群馬県 栃木県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 157.2m)。百名山の呼び名は「奥白根山」(図ではこちらを使う)",
+   "hyakumeizan_no": 37
+  },
+  {
+   "id": "m057",
+   "name": "筑波山(女体山)",
+   "display": "筑波山",
+   "material": {
+    "name": "筑波山",
+    "ele_m": 877,
+    "pref": "茨城県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 7.6m)",
+   "hyakumeizan_no": 44
+  },
+  {
+   "id": "m058",
+   "name": "大菩薩嶺",
+   "display": "大菩薩嶺",
+   "material": {
+    "name": "大菩薩嶺",
+    "ele_m": 2057,
+    "pref": "山梨県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 25.9m)。百名山の呼び名は「大菩薩岳」(図ではこちらを使う)",
+   "hyakumeizan_no": 70
+  },
+  {
+   "id": "m059",
+   "name": "浅間山(前掛山)",
+   "display": "浅間山",
+   "material": {
+    "name": "浅間山",
+    "ele_m": 2568,
+    "pref": "群馬県 長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 918.1m)",
+   "hyakumeizan_no": 43
+  },
+  {
+   "id": "m060",
+   "name": "男体山",
+   "display": "男体山",
+   "material": {
+    "name": "男体山",
+    "ele_m": 2486,
+    "pref": "栃木県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.4m)",
+   "hyakumeizan_no": 36
+  },
+  {
+   "id": "m061",
+   "name": "両神山",
+   "display": "両神山",
+   "material": {
+    "name": "両神山",
+    "ele_m": 1723,
+    "pref": "埼玉県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 13.4m)",
+   "hyakumeizan_no": 65
+  },
+  {
+   "id": "m062",
+   "name": "甲武信ヶ岳",
+   "display": "甲武信ヶ岳",
+   "material": {
+    "name": "甲武信ヶ岳",
+    "ele_m": 2475,
+    "pref": "埼玉県 山梨県 長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 23.8m)。百名山の呼び名は「甲武信岳」(図ではこちらを使う)",
+   "hyakumeizan_no": 67
+  },
+  {
+   "id": "m063",
+   "name": "乾徳山",
+   "display": "乾徳山",
+   "material": {
+    "name": "乾徳山",
+    "ele_m": 2031,
+    "pref": "山梨県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 8.4m)",
+   "hyakumeizan_no": null
+  },
+  {
+   "id": "m064",
+   "name": "天城山(万三郎岳)",
+   "display": "天城山",
+   "material": {
+    "name": "天城山＜万三郎岳＞",
+    "ele_m": 1405,
+    "pref": "静岡県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 10.6m)",
+   "hyakumeizan_no": 73
+  },
+  {
+   "id": "m065",
+   "name": "立山(雄山)",
+   "display": "立山",
+   "material": {
+    "name": "立山＜大汝山＞",
+    "ele_m": 3015,
+    "pref": "富山県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 20.1m)",
+   "hyakumeizan_no": 49
+  },
+  {
+   "id": "m066",
+   "name": "白馬岳",
+   "display": "白馬岳",
+   "material": {
+    "name": "白馬岳",
+    "ele_m": 2932,
+    "pref": "富山県 長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 104.9m)",
+   "hyakumeizan_no": 45
+  },
+  {
+   "id": "m067",
+   "name": "白山(御前峰)",
+   "display": "白山",
+   "material": {
+    "name": "白山＜御前峰＞",
+    "ele_m": 2702,
+    "pref": "石川県 岐阜県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 46.2m)",
+   "hyakumeizan_no": 87
+  },
+  {
+   "id": "m068",
+   "name": "妙高山",
+   "display": "妙高山",
+   "material": {
+    "name": "妙高山",
+    "ele_m": 2454,
+    "pref": "新潟県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.3m)",
+   "hyakumeizan_no": 33
+  },
+  {
+   "id": "m069",
+   "name": "火打山",
+   "display": "火打山",
+   "material": {
+    "name": "火打山",
+    "ele_m": 2462,
+    "pref": "新潟県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 88.7m)",
+   "hyakumeizan_no": 34
+  },
+  {
+   "id": "m070",
+   "name": "苗場山",
+   "display": "苗場山",
+   "material": {
+    "name": "苗場山",
+    "ele_m": 2145,
+    "pref": "新潟県 長野県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 15.3m)",
+   "hyakumeizan_no": 32
+  },
+  {
+   "id": "m071",
+   "name": "那須岳(茶臼岳)",
+   "display": "那須岳",
+   "material": {
+    "name": "那須岳＜茶臼岳＞",
+    "ele_m": 1915,
+    "pref": "栃木県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 262.0m)",
+   "hyakumeizan_no": 24
+  },
+  {
+   "id": "m072",
+   "name": "磐梯山",
+   "display": "磐梯山",
+   "material": {
+    "name": "磐梯山",
+    "ele_m": 1816,
+    "pref": "福島県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 19.9m)",
+   "hyakumeizan_no": 22
+  },
+  {
+   "id": "m073",
+   "name": "安達太良山",
+   "display": "安達太良山",
+   "material": {
+    "name": "安達太良山",
+    "ele_m": 1700,
+    "pref": "福島県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 0.3m)",
+   "hyakumeizan_no": 21
+  },
+  {
+   "id": "m074",
+   "name": "西吾妻山",
+   "display": "西吾妻山",
+   "material": {
+    "name": "西吾妻山",
+    "ele_m": 2035,
+    "pref": "福島県 山形県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 44.6m)。百名山の呼び名は「吾妻山」(図ではこちらを使う)",
+   "hyakumeizan_no": 20
+  },
+  {
+   "id": "m075",
+   "name": "蔵王山(熊野岳)",
+   "display": "蔵王山",
+   "material": {
+    "name": "蔵王山＜熊野岳＞",
+    "ele_m": 1841,
+    "pref": "山形県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 118.3m)",
+   "hyakumeizan_no": 18
+  },
+  {
+   "id": "m076",
+   "name": "会津駒ヶ岳",
+   "display": "会津駒ヶ岳",
+   "material": {
+    "name": "駒ヶ岳",
+    "ele_m": 2133,
+    "pref": "福島県"
+   },
+   "match": "stage1_pair_named",
+   "note": "段階1 の対応(ずれ 23.1m)",
+   "hyakumeizan_no": 23
+  }
+ ]
+}
