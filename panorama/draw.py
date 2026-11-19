@@ -964,6 +964,10 @@ def render_figure(parts, scenes, states, default, title, start_pct=clouds.START_
                                   "h": wpx * clouds.CLUMP_MAX_ASPECT, "seed": clouds.seed_of("thin", seed_key, x["key"]),
                                   "key": x["key"], "tt": tt})
                 continue
+            sc_ = x.get("summit_cloud")
+            if sc_ is not None and groups[0]["bottom"] <= x["elev_m"] and sc_ > groups[0]["c"]:
+                # 山頂にかかるかたまりの大きさと濃さは、山頂の雲量(はさむ 2 つの面の大きいほう)より小さくしない
+                groups = [dict(groups[0], c=float(sc_))] + groups[1:]
             wpx = clouds.width_deg(groups[0]["c"], x["dist_km"]) * px
             ab, hpx, gp = clouds.clump_box(groups, angle_fn, d_m, wpx, px * v_ex)
             if ab > amax or Y(ab) - hpx > bottom:
@@ -1302,7 +1306,7 @@ def write_page(path, *, svg, ch, peaks, states, default, notes, banners, title_b
            f'<p>操作: 時刻のボタンで雲が替わります(山と名前は動きません)。「◀」「▶」は画面の半分ずつ、図を指で横になぞっても動きます。'
            f'「広く」は画面の幅に 90°、「標準」は 45°、「拡大」は 20°(幅 {WIDE_MIN_PX}px 以上の画面では、全周を横に送る形)。'
            f'赤 = 日本百名山、青 = ヤマビヨリの 76 座。「広く」ではそのほかの山は点だけ。</p>'
-           f'{legend_html}{extra_how}'
+           f'{legend_html}<p>山頂の雲量は、山頂をはさむ 2 つの高さの予報のうち大きいほうです。</p>{extra_how}'
            f'<p style="font-size:12px">出典: 国土地理院の標高タイル(地理院タイル)を加工して作成(視点から見上げた角度に変換)。'
            f'山名と標高は「日本の主な山岳標高」(国土地理院)をもとに作成(百名山・76 座との対応づけと呼び名を加工)。'
            f'気象データは Open-Meteo(気象庁 MSM、無い時間は ECMWF IFS 0.25)。'

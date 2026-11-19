@@ -968,7 +968,7 @@ SAME_SHAPE_NEIGHBOR_DEG = 8.0    # 確かめ: 「となり」とみなす方位�
 
 SAME_SHAPE_TOL = 0.1             # 確かめ: 幅・高さがこの割合以内なら同じ大きさ
 
-OPTS = {"clumps": True, "bands": False}   # 5 章は既定にしない(前と後のどちらが良いか迷うため。samples/ で利用者が選ぶ)
+OPTS = {"clumps": True, "bands": True}    # 帯のまとめ・濃さの上限は既定(2026-11-20 の決定で「後」を既定に)
 
 def clump_shape39(seed: int, width_px: float, height_px: float) -> list:
     """段階3.6 の clump_shape と同じ作り(下の段の丸 + 上の丸)で、丸の数・大きさ・左右の広がり・上下の位置を山ごとに変える。"""

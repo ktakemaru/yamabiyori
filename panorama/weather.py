@@ -124,6 +124,23 @@ def cloud_at_altitude(hourly: dict, idx: int, alt_m: float):
     """本体の interp_at_altitude(線形、範囲の外は端の値)。"""
     return core.interp_at_altitude(hourly, "cloudcover", idx, alt_m)
 
+def summit_cloud(hourly: dict, idx: int, alt_m: float):
+    """展望図の山頂の雲量(2026-11-20 の決定): 山頂の高さをはさむ 2 つの気圧面の雲量のうち、大きいほう。
+    山頂がいちばん下の面より低い・いちばん上の面より高いときは、これまでどおり端の面の値(本体の interp_at_altitude と同じ)。
+    診断モードの文・--json-out の雲量(本体の計算)は変えない。展望図の中(名前の横の「雲 NN%」・名前のうすさ・
+    山にかかる丸い雲の大きさと濃さ)だけで使う。"""
+    pts = core.level_profile(hourly, "cloudcover", idx)
+    if not pts:
+        return None
+    if alt_m <= pts[0][0]:
+        return pts[0][1]
+    if alt_m >= pts[-1][0]:
+        return pts[-1][1]
+    for (z0, v0), (z1, v1) in zip(pts, pts[1:]):
+        if z0 <= alt_m <= z1:
+            return max(v0, v1)
+    return None
+
 def sky_grid(values: dict, az_step: float = 10.0) -> dict:
     """values: {(段, 方位): 雲量 or None}。段は SKY_ROWS の要素(視点は方位に関わらず同じ値)。
     返り値: {"rows": [[雲量 or None]*方位の数]*4, "azs": [...]}(上の段から)。"""
@@ -275,7 +292,7 @@ def _scene_base(viewer_lat, viewer_lon, viewer_m, day, hour, grid_center, mounta
         fc = get_fc(mt["lat"], mt["lon"], day, [hour]) if mt.get("lat") is not None else None
         i = idx_of(fc, hour)
         ps = point_summary(fc, i)
-        summit = None if ps is None else cloud_at_altitude(fc, i, mt["elev_m"])
+        summit = None if ps is None else summit_cloud(fc, i, mt["elev_m"])
         gaz = nearest_grid_az(mt["az"])
         path_pts = [(d, gfc[(d, gaz)][0], gfc[(d, gaz)][1]) for d in GRID_DISTS_KM if (d, gaz) in gfc]
         pc = path_cloud(viewer_m, mt["elev_m"], mt["dist_km"], path_pts)
