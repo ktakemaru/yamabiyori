@@ -154,6 +154,29 @@ Open-Meteoの降水確率は山では当たりにくい。そこでMSM範囲内�
 
 このほか雲海・快晴チャンス(日の出前後に稜線が晴れて下層に雲がある時刻)、MSM範囲内の日は気象庁天気図・ひまわり画像つきの概況説明を出す。
 
+#### 天気入りの展望図(`--panorama`)
+
+`--panorama` を付けると、診断のあとに、その山の山頂から見た**翌日の 6・8・10・12 時の雲を重ねた展望図**(HTML 1 枚。外の読み込みなし)を
+`out/panorama/<山の ID>.html` に書き、最後に「展望図: <パス>」を出す(76 座だけ。山頂から 300m 以内に OpenStreetMap の展望地があれば、
+展望地の図 `<ID>v.html` も)。スマートフォンでは縮尺(広く・標準・拡大)・◀▶・指でなぞる、で見る。予報にもとづく目安で、答え合わせは少数。
+
+```powershell
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 大菩薩嶺 --panorama
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain m008 --panorama --panorama-out out/koma.html
+```
+
+- **初回は時間がかかる**: その山のまわり(半径 200km)の国土地理院の標高タイル約 560 枚を、1 枚ごとに 1 秒あけて取る(**約 12 分**・ディスク
+  **約 300MB**、`terrain_cache/`)。図の地形の計算は 1 座 15〜50 秒(`cache/panorama/parts/` に保存し、2 回目からは使い回す)。
+  予報は 1 座 約 110〜170 回(Open-Meteo。通信の間隔は自動で調整。`cache/panorama/weather/`、3 時間で取り直す)。
+  2 回目以降(保存済み)は 1 座 約 20 秒。
+- **山名**: 国土地理院「日本の主な山岳標高」(1003 山)の表(GeoJSON)を `cache/panorama/gsi_1003/` に置くと、百名山などの名前が出る。
+  表は自動では取らない(ブラウザで [国土地理院のページ](https://www.gsi.go.jp/kihonjohochousa/kihonjohochousa41139.html) から取得して展開する)。
+  無いときは、山頂の点は `MOUNTAINS` の座標、名前は 76 座だけで図を作り、図に「山の名前は一部だけです」と書く。
+- **失敗しても診断は止めない**: 展望図が作れないときは、診断の出力はそのままで、最後に「展望図は作れませんでした(理由)」の 1 行。
+  予報が取れないときは「地形だけ」の図、展望地が調べられないときは山頂の図だけ。
+- 出典(図の枠の中に出す): 地理院タイル(標高タイル)を加工して作成 /「日本の主な山岳標高」(国土地理院)をもとに作成 /
+  気象データ: Open-Meteo(気象庁 MSM ほか)/ © OpenStreetMap contributors(展望地の図だけ)。
+
 ### GPXルート診断 — 「この計画書のルートで、どの地点が危ないか?」
 
 `mountain_weather_detail.py`(GPXモード)。ヤマレコの登山計画書GPXから登山口・山小屋・山頂などの地点を自動抽出し、**地点ごとの標高に補間した値**で天気を評価する。オプションで天気アイコン付きのルート地図PNGも生成できる。
@@ -188,7 +211,8 @@ MSM範囲内(今日〜+2日)は上記の物理ルールで時間単位に判定�
 | 実況・予想天気図 | 気象庁 | 診断モードの概況説明(オプション、Playwright) |
 | ひまわり赤外/雲頂強調画像 | 気象庁 | 「今まさに雲があるか」の裏取り(オプション、Pillow) |
 | 標高タイル(DEM) | 国土地理院 | 地形レイヤー(風上/風下・地形性上昇流) |
-| 日本の主な山岳標高(1003山、2026-03-31版) | 国土地理院 | 14座の山頂の座標(`MOUNTAINS` の lat・lon。2026-11-18 に直した山) |
+| 日本の主な山岳標高(1003山、2026-03-31版) | 国土地理院 | 14座の山頂の座標(`MOUNTAINS` の lat・lon。2026-11-18 に直した山)、展望図の山名(利用者の手元の表) |
+| 展望地(tourism=viewpoint) | © OpenStreetMap contributors(ODbL) | 展望図の視点(山頂から 300m 以内。利用者の手元で Overpass から取る) |
 
 すべて無料・APIキー不要。レスポンスは `cache/` に3時間TTLでキャッシュされ、76座の再計算は数秒で終わる。
 
@@ -319,6 +343,9 @@ Windows PowerShell 5.1 で `>` を使うと文字化けするので、出力を�
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --list
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain m012   # 山の変わらない ID でも選べる(ID は --json-out の JSON にある)
+
+# 診断モード + 天気入りの展望図(76座だけ。初回は標高タイルの取得に約12分。上の「天気入りの展望図」)
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 大菩薩嶺 --panorama
 
 # 診断モード: 76座に無い山(山名・緯度・経度・標高を4つ一緒に指定。地形データなしで診断する)
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --name 栗駒山 --lat 38.9609 --lon 140.7884 --elevation 1626

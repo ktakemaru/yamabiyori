@@ -46,6 +46,7 @@ python -m venv venv                       # python が無ければ py -m venv ve
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山   # 診断モード(番号でも可)
 ```
 - **76座に無い山**は診断モードに `--name 山名 --lat 緯度 --lon 経度 --elevation 標高m`(4つ一緒。`--mountain` とは併用不可)を渡す。座標・標高はWeb検索(Wikipedia・国土地理院など)で調べ、出典を伝える。地形(風上/風下)の表示は付かず、探索モードの対象にはならない。`MOUNTAINS` への追加は別途ユーザーに確認する。
+- **展望図(山頂から見た雲の絵)を頼まれたら** `mountain_weather_detail.py --mountain 山 --panorama`(76 座だけ。HTML を `out/panorama/` に書き、最後に「展望図: パス」)。初回は標高タイルの取得に約 12 分かかるので、先に伝える。展望図が作れなくても診断の出力・終了コードは変わらない。
 - 引数なしの `mountain_weather_detail.py` は対話式(GPXルート診断もこちら)。エージェントからは `--mountain` を使う。山の番号はリスト順なので、使う前に `--list` で確認する。2回目以降は `cache/` が効いて速い。
 - 診断モードの時間ごとの表(画面・`--json-out` とも同じ列)の **「総雲量%」は空全体の雲量で、地上付近の雲量ではない**。内訳の「低層雲%」「中層雲%」「高層雲%」で、山頂より下の雲か、山の上の高い雲かを読み分ける(読み方は `skills/yamabiyori/references/report_style.md`)。
 - **PowerShell では python の出力を `>`・`|`・`$x = ...` で受けない。** Windows PowerShell 5.1 では日本語が化け、`>` の
