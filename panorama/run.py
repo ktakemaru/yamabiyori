@@ -22,6 +22,7 @@ import json
 import math
 import os
 import pickle
+import sys
 import time
 from datetime import date, timedelta
 
@@ -168,8 +169,9 @@ def choose_viewpoint(summit, elements, elev):
 # ---------------------------------------------------------------------------
 # 3. 標高タイル
 # ---------------------------------------------------------------------------
-def ensure_tiles(viewers, stats, log=log_print):
-    """要るタイルを数え、無い分を 1 枚ごとに 1 秒あけて取る。取れないタイルが残れば PanoramaUnavailable。"""
+def ensure_tiles(viewers, stats, log=log_print, extra=False):
+    """要るタイルを数え、無い分を 1 枚ごとに 1 秒あけて取る。取れないタイルが残れば PanoramaUnavailable。
+    extra: 展望地のために足りない分を足して取るとき(知らせの文だけ違う)。数は stats に足していく。"""
     led = terrain.TileLedger(limits={11: 10 ** 6, 14: 10 ** 6})
     z11, z14 = terrain.Dem(led, 11, allow_fetch=True), terrain.Dem(led, 14, allow_fetch=True)
     need11, need14 = set(), set()
@@ -180,16 +182,21 @@ def ensure_tiles(viewers, stats, log=log_print):
     m11 = sorted(t for t in need11 if not z11.have(*t))
     m14 = sorted(t for t in need14 if not z14.have(*t))
     n = len(m11) + len(m14)
-    stats["tiles_needed"] = len(need11) + len(need14)
+    stats["tiles_needed"] = max(stats.get("tiles_needed", 0), len(need11) + len(need14))
     if n:
-        log(f"(展望図: 初回は標高タイル {n} 枚を取ります。約 {max(1, math.ceil(n * TILE_SEC_PER / 60))} 分かかります)")
+        mins = max(1, math.ceil(n * TILE_SEC_PER / 60))
+        msg = (f"(展望図: 展望地のために標高タイルを {n} 枚足して取ります。約 {mins} 分かかります)" if extra else
+               f"(展望図: 初回は標高タイル {n} 枚を取ります。約 {mins} 分かかります)")
+        log(msg)
+        if log is log_print and sys.stdout is not sys.__stdout__ and sys.__stderr__ is not None:
+            print(msg, file=sys.__stderr__, flush=True)    # --out で出力をファイルに送っているときも、画面に知らせる
     t0 = time.time()
     for dem, miss in ((z14, m14), (z11, m11)):
         if miss:
             dem.ensure(miss)
-    stats["tiles_fetched"] = z11.fetched + z14.fetched
-    stats["tiles_failed"] = z11.failed + z14.failed
-    stats["tiles_sec"] = round(time.time() - t0, 1)
+    stats["tiles_fetched"] = stats.get("tiles_fetched", 0) + z11.fetched + z14.fetched
+    stats["tiles_failed"] = stats.get("tiles_failed", 0) + z11.failed + z14.failed
+    stats["tiles_sec"] = round(stats.get("tiles_sec", 0.0) + time.time() - t0, 1)
     left = [t for t in need11 if not z11.have(*t)] + [t for t in need14 if not z14.have(*t)]
     if left:
         why = led.stopped.get(14) or led.stopped.get(11) or "取得に失敗した"
@@ -310,7 +317,7 @@ def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True
         vp, summit = choose_viewpoint(summit, elements, LocalElev(z11, z14))
     viewers = [summit] + ([vp] if vp else [])
     if vp:
-        ensure_tiles(viewers, stats, log)
+        ensure_tiles(viewers, stats, log, extra=True)
     parts_list = [(v, load_or_compute_parts(v, ctx, gsi_file, stats)) for v in viewers]
     # 予報
     states = weather.make_states(day, HOURS)
@@ -359,7 +366,8 @@ def summary_lines(res):
     s = res["stats"]
     out = [f"展望図: {f['path']}" for f in res["files"]]
     out.append(f"(展望図の通信: 標高タイル {s['tiles_fetched']} 枚・Open-Meteo {s['openmeteo_calls']} 回(重さ "
-               f"{s['openmeteo_weight']:g})・Overpass {s['overpass_calls']} 回。かかった時間 {s['sec']:g} 秒)")
+               f"{s['openmeteo_weight']:g})・Overpass {s['overpass_calls']} 回。かかった時間 {s['sec']:g} 秒"
+               f"(うちタイル {s.get('tiles_sec', 0):g} 秒・図の地形の計算 {s.get('parts_sec', 0):g} 秒))")
     for n in res["notes"]:
         out.append(f"(展望図: {n})")
     return out

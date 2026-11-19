@@ -287,7 +287,8 @@ class TestDetailOption(NoNetwork):
 
     def test_success_adds_path_line(self):
         res = {"files": [{"path": "out/panorama/m001.html"}], "notes": [], "day": DAY,
-               "stats": {"tiles_fetched": 0, "openmeteo_calls": 0, "openmeteo_weight": 0.0, "overpass_calls": 0, "sec": 1.0}}
+               "stats": {"tiles_fetched": 0, "openmeteo_calls": 0, "openmeteo_weight": 0.0, "overpass_calls": 0, "sec": 1.0,
+                         "tiles_sec": 0.0, "parts_sec": 0.0}}
         import panorama.run as pr
         out = io.StringIO()
         import mountain_weather_detail as detail
@@ -326,3 +327,55 @@ class TestDetailOption(NoNetwork):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFirstTiles(NoNetwork):
+    """初めての山: 要る標高タイルを数え、知らせ、1 枚ずつ取る(通信は作った応答)。取れないタイルが残れば作らない。"""
+
+    def run_tiles(self, fail=()):
+        import requests
+        from panorama import names, run, terrain
+        txt = "\n".join([",".join(["1000"] * 256)] * 256)
+
+        def fake_get(sess, url, **kw):
+            bad = any(url.endswith(f"/{x}/{y}.txt") for x, y in fail)
+            r = mock.Mock(status_code=500 if bad else 200, text=txt)
+            sess.statuses.append(r.status_code)
+            return r
+        logs = []
+        stats = {}
+        v = {"lat": 35.5, "lon": 138.5}
+        with mock.patch.object(terrain, "tiles_needed", lambda z11, z14, v: ({(10, 20), (10, 21)}, {(500, 600)})), \
+                mock.patch.object(terrain, "STAGE2_EXTRA_DELAY_SEC", 0.0), \
+                mock.patch.object(names.StatusSession, "get", fake_get), \
+                mock.patch.object(requests.Session, "get", side_effect=AssertionError("ほかの通信")):
+            try:
+                run.ensure_tiles([v], stats, log=logs.append)
+                err = None
+            except run.PanoramaUnavailable as e:
+                err = str(e)
+        return logs, stats, err
+
+    def test_notice_and_fetch_then_cached(self):
+        logs, stats, err = self.run_tiles()
+        self.assertIsNone(err)
+        self.assertEqual(logs, ["(展望図: 初回は標高タイル 3 枚を取ります。約 1 分かかります)"])
+        self.assertEqual((stats["tiles_needed"], stats["tiles_fetched"], stats["tiles_failed"]), (3, 3, 0))
+        logs2, stats2, err2 = self.run_tiles()
+        self.assertEqual((logs2, stats2["tiles_fetched"], err2), ([], 0, None))     # 2 回目は保存を読む
+
+    def test_counts_add_up_over_two_calls(self):
+        """山頂のあとに展望地の分を足して取っても、通信の量の行の枚数は合計になる。"""
+        from panorama import run, terrain
+        logs, stats, err = self.run_tiles()
+        with mock.patch.object(terrain, "tiles_needed", lambda z11, z14, v: ({(10, 20), (10, 22)}, {(500, 600)})),                 mock.patch.object(terrain, "STAGE2_EXTRA_DELAY_SEC", 0.0),                 mock.patch.object(terrain.Dem, "tile", lambda self, x, y: (setattr(self, "fetched", self.fetched + 1),
+                                                                           self.store._mem.__setitem__((x, y), 1))[0]):
+            more = []
+            run.ensure_tiles([{"lat": 35.5, "lon": 138.5}], stats, log=more.append, extra=True)
+        self.assertEqual(stats["tiles_fetched"], 4)
+        self.assertEqual(more, ["(展望図: 展望地のために標高タイルを 1 枚足して取ります。約 1 分かかります)"])
+
+    def test_failed_tile_stops_the_figure(self):
+        logs, stats, err = self.run_tiles(fail=((10, 21),))
+        self.assertEqual(stats["tiles_failed"], 1)
+        self.assertIn("標高タイルが 1 枚取れない", err)
