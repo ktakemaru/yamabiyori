@@ -189,7 +189,7 @@ Open-Meteoの降水確率は山では当たりにくい。そこでMSM範囲内�
   展望地の図 `<ID>v.html` も作る。
 - **HTMLレポートに入れる**: `scripts/render_report.py` に `--panorama-html out/panorama/<ID>.html`(展望地の図があれば
   `--panorama-viewpoint-html out/panorama/<ID>v.html` も)を渡すと、総評のすぐあとに図が1枚入る(展望地の図があればそちら。
-  手順は `skills/yamabiyori/references/report_style.md`)。レポートは 1 枚でおよそ 0.9MB 大きくなる。
+  手順は `skills/yamabiyori/references/report_style.md`)。図は iframe を使わずレポートのページに直接入る。レポートは 1 枚でおよそ 0.85MB 大きくなる。
 - **初回は時間がかかる**: その山のまわり(半径 200km)の国土地理院の標高タイル約 560 枚を、1 枚ごとに 1 秒あけて取る(**約 12 分**・ディスク
   **約 300MB**、`terrain_cache/`。2026-11-20 に大菩薩嶺で空のフォルダから測った値: 566 枚・12 分 14 秒・286MB。タイルのあとの予報 155 回と
   図づくりは 109 秒で、全体は約 14 分)。図の地形の計算は 1 座 15〜50 秒(`cache/panorama/parts/` に保存し、2 回目からは使い回す)。
