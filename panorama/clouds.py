@@ -11,6 +11,8 @@ import math
 import numpy as np
 import random
 
+from . import svgfmt
+
 
 # ---- 元: experiments/panorama/stage35_clouds.py ----
 
@@ -635,7 +637,7 @@ def clump_svg37(x, y, c_pct, width_px, height_px, seed, title="", cid="", thin=F
     (グループの不透明度の中なので濃くならない)。cid は図の中で一意。"""
     t = f"<title>{title}</title>" if title else ""
     shape = clump_shape(seed, width_px, height_px)
-    circles = "".join(f'<circle cx="{x + cx:.1f}" cy="{y + cy:.1f}" r="{r:.1f}"/>' for cx, cy, r in shape)
+    circles = "".join(svgfmt.circle(x + cx, y + cy, r) for cx, cy, r in shape)
     ybot = max(y + cy + r for cx, cy, r in shape)
     ytop = min(y + cy - r for cx, cy, r in shape)
     xl = min(x + cx - r for cx, cy, r in shape) - 1
@@ -1035,7 +1037,7 @@ def clump_svg39(x, y, c_pct, width_px, height_px, seed, title="", cid="", thin=F
     """1 つの山のかたまり(形は clump_shape39)。それ以外は段階3.7 の clump_svg37 と同じ作り。"""
     t = f"<title>{title}</title>" if title else ""
     shape = clump_shape39(seed, width_px, height_px)
-    circles = "".join(f'<circle cx="{x + cx:.1f}" cy="{y + cy:.1f}" r="{r_:.1f}"/>' for cx, cy, r_ in shape)
+    circles = "".join(svgfmt.circle(x + cx, y + cy, r_) for cx, cy, r_ in shape)
     ybot = max(y + cy + r_ for cx, cy, r_ in shape)
     ytop = min(y + cy - r_ for cx, cy, r_ in shape)
     xl = min(x + cx - r_ for cx, cy, r_ in shape) - 1
@@ -1079,7 +1081,7 @@ def merged_clump_svg(members, cid, thin=False) -> tuple:
     k = THIN_RATIO if thin else 1.0
     stops = "".join(f'<stop offset="{(m["x"] - xl) / (xr - xl):.4f}" stop-color="#fff" stop-opacity="{opacity(m["c"]) * k:.3f}"/>'
                     for m in members)
-    circ = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r_:.1f}"/>' for x, y, r_ in circles)
+    circ = "".join(svgfmt.circle(x, y, r_) for x, y, r_ in circles)
     t = "<title>" + html.escape(" / ".join(html.unescape(m["tt"]) for m in members)) + "</title>"
     defs = (f'<linearGradient id="mcg{cid}" gradientUnits="userSpaceOnUse" x1="{xl:.1f}" y1="0" x2="{xr:.1f}" y2="0">{stops}'
             f'</linearGradient><mask id="mcm{cid}" maskUnits="userSpaceOnUse" x="{xl - 1:.1f}" y="{ytop - 2:.1f}" '
