@@ -191,11 +191,36 @@ class TestPathSeparators(unittest.TestCase):
             x += round(float(nums[i]) * 10)
             y += round(float(nums[i + 1]) * 10)
             got.append((x, y))
-        want = []
-        for p in [(round(a * 10), round(b * 10)) for a, b in pts]:
-            if not want or want[-1] != p:
-                want.append(p)
-        self.assertEqual(got, want)
+        orig = [(round(a * 10), round(b * 10)) for a, b in pts]
+        self.assertEqual(got[0], orig[0])
+        self.assertTrue(set(got) <= set(orig))          # 残る点は元の点(0.1 画素の値)のまま
+        self.assertLess(len(got), len(orig))
+
+
+class TestSimplify(unittest.TestCase):
+    """雲の輪郭の点の間引き(0.2 画素以内)。"""
+
+    def test_every_dropped_point_is_close(self):
+        import math
+        from panorama import clouds
+        pts = [(round(10 * (100 + i * 1.1)), round(10 * (50 + 0.6 * math.sin(i / 2.0)))) for i in range(400)]
+        pts += [(pts[-1][0], 700), (pts[0][0], 700)]
+        kept = svgfmt.simplify_closed(pts, clouds.PATH_TOL_10)
+        self.assertEqual(kept[0], pts[0])
+        self.assertLess(len(kept), len(pts))
+        ring = kept + [kept[0]]
+
+        def dist(p):
+            best = 1e9
+            for (ax, ay), (bx, by) in zip(ring, ring[1:]):
+                dx, dy = bx - ax, by - ay
+                t = 0.0 if dx == dy == 0 else max(0.0, min(1.0, ((p[0] - ax) * dx + (p[1] - ay) * dy) / (dx * dx + dy * dy)))
+                best = min(best, math.hypot(p[0] - ax - t * dx, p[1] - ay - t * dy))
+            return best
+        self.assertLessEqual(max(dist(p) for p in pts), clouds.PATH_TOL_10 + 1e-9)   # どの点も 0.2 画素以内
+
+    def test_small_shapes_are_kept(self):
+        self.assertEqual(svgfmt.simplify_closed([(0, 0), (10, 0), (10, 10)], 2), [(0, 0), (10, 0), (10, 10)])
 
 
 if __name__ == "__main__":

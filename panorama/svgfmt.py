@@ -85,3 +85,32 @@ def stops(pairs) -> str:
             continue
         out.append(f'<stop offset="{o}" stop-opacity="{a}"/>')
     return "".join(out)
+
+
+def simplify_closed(pts, tol):
+    """閉じた輪郭の点(整数の座標)を、どの点も残した輪郭から tol 以内になるよう間引く(Douglas-Peucker。始めの点は残す)。"""
+    ring = list(pts) + [pts[0]]
+    n = len(ring)
+    if n < 4:
+        return list(pts)
+    keep = [False] * n
+    keep[0] = keep[-1] = True
+    stack = [(0, n - 1)]
+    while stack:
+        a, b = stack.pop()
+        if b - a < 2:
+            continue
+        ax, ay = ring[a]
+        bx, by = ring[b]
+        dx, dy = bx - ax, by - ay
+        L = (dx * dx + dy * dy) ** 0.5
+        best, at = -1.0, -1
+        for i in range(a + 1, b):
+            px, py = ring[i]
+            d = abs(dx * (py - ay) - dy * (px - ax)) / L if L else ((px - ax) ** 2 + (py - ay) ** 2) ** 0.5
+            if d > best:
+                best, at = d, i
+        if best > tol:
+            keep[at] = True
+            stack += [(a, at), (at, b)]
+    return [p for p, k in zip(ring[:-1], keep[:-1]) if k]
