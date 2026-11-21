@@ -437,16 +437,16 @@ def sky_paths(runs, X, px):
     となりの方位で上下の端と色が同じ区画は、1 つの長方形につなぐ(案 D。塗る所は同じ)。
     長方形は、横の真ん中を通る縦の線を区画の幅の太さで引いて描く(線の端は平ら。塗る所は長方形と同じで、書き方が短い)。
     幅が 1 区画の線の太さは CSS(path.skyc)、それより広い線は style で書く(属性の stroke-width は CSS に負けるので使わない)。"""
-    by = {}
+    by = {}       # 色 → 幅 → 区画(描く順番は、これまでと同じく色の出てきた順。となりと重なる所の色が変わらないように)
     for a, n, y0, y1, col in merge_sky_cells(runs):
         w = (n - 1) * px + sky_cell_width(px)
         y0s, hs = f"{y0:.1f}", f"{y1 - y0:.1f}"
-        by.setdefault((col, f"{w:.1f}"), []).append(
+        by.setdefault(col, {}).setdefault(f"{w:.1f}", []).append(
             f"M{svgfmt.num(X(a) + w / 2, 2)} {svgfmt.num(float(y0s))}v{svgfmt.num(float(hs))}")
     one = f"{sky_cell_width(px):.1f}"
     return "".join(f'<path class="skyc" d="{"".join(v)}" stroke="{col}"'
                    + ("" if w == one else f' style="stroke-width:{svgfmt.num(float(w))}"') + "/>"
-                   for (col, w), v in by.items())
+                   for col, ws in by.items() for w, v in ws.items())
 
 def _sky_runs(scene, sky, X, Y, top_sky, bottom, px):
     azs = np.asarray(sky["az"], dtype=float)
