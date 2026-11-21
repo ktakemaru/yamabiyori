@@ -544,6 +544,29 @@ class TestPanorama(unittest.TestCase):
         self.assertIn("if(!b||!OK)return;", js)
         self.assertIn("height:460px", self._render(["--panorama-viewpoint-html", "{V}"])[1])
 
+    @staticmethod
+    def vstate(*texts):
+        return "".join(f'<p class="vstate wxt" data-st="h{h:02d}"{"" if h == 8 else " style=" + chr(34) + "display:none" + chr(34)}>'
+                       f"<b>視点の状態:</b> {t}</p>" for h, t in zip((6, 8, 10, 12), texts))
+
+    def test_viewer_state_text(self):
+        f = render_report.viewer_state_text
+        self.assertEqual(f(self.vstate("とくになし", "とくになし", "とくになし", "とくになし")), "とくになし")
+        self.assertEqual(f(self.vstate("視点が雲の中の見込み", "視点が雲の中の見込み", "とくになし", "とくになし")),
+                         "6・8時 視点が雲の中の見込み/10・12時 とくになし")
+        self.assertEqual(f(self.vstate("a &amp; b", "c", "a &amp; b", "a &amp; b")), "6時 a & b/8時 c/10・12時 a & b")
+        self.assertIsNone(f("<p>なし</p>"))
+
+    def test_viewer_state_in_note(self):
+        # 図の下の説明(視点の状態を含む)は枠の中で隠すので、見出しの下の注記に出す
+        view = self.VIEW.replace("</main>", self.vstate("眼下に雲海の見込み", "とくになし", "とくになし", "とくになし") + "</main>")
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"], view=view)
+        self.assertEqual(code, 0, err)
+        note = page.split('<div class="section" id="panorama">', 1)[1].split("</div></div>", 1)[0]
+        self.assertIn("視点の状態: 6時 眼下に雲海の見込み/8・10・12時 とくになし。", note)
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])     # 読めないときは足さない
+        self.assertNotIn("視点の状態:", page.split("<iframe", 1)[0])
+
     def test_messages_are_not_lost_when_frame_loads_first(self):
         # 枠の中が先に読み終わって高さの知らせを取りこぼしても、親の知らせを受けたら送り直す
         self.assertIn("last=0;post()", render_report.PANORAMA_CHILD_JS)

@@ -243,7 +243,25 @@ def load_panorama(path, kind):
         heading = "山頂からの展望"
     else:
         heading = f"{name}(展望地)からの展望" if name else "展望地からの展望"
-    return {"kind": kind, "page": page, "name": name, "day": day, "heading": heading}
+    return {"kind": kind, "page": page, "name": name, "day": day, "heading": heading, "vstate": viewer_state_text(page)}
+
+
+def viewer_state_text(page):
+    """展望図の「視点の状態」(時刻ごと)を 1 行にまとめる。図の下の説明は枠の中で隠すので、見出しの下の注記に出す。
+    全部の時刻で同じなら「とくになし」のように 1 つ、違えば「6時 …/8・10・12時 …」。読めなければ None。"""
+    rows = re.findall(r'<p class="vstate wxt" data-st="h(\d\d)"[^>]*><b>視点の状態:</b>(.*?)</p>', page, re.S)
+    if not rows:
+        return None
+    groups = []
+    for hh, text in rows:
+        t = html.unescape(re.sub(r"<[^>]+>", "", text)).strip().rstrip("。")
+        if groups and groups[-1][1] == t:
+            groups[-1][0].append(int(hh))
+        else:
+            groups.append(([int(hh)], t))
+    if len(groups) == 1:
+        return groups[0][1]
+    return "/".join("・".join(str(h) for h in hs) + "時 " + t for hs, t in groups)
 
 
 class Renderer:
@@ -492,11 +510,12 @@ class Renderer:
         """展望の節(1枚だけ)。展望図の描き方は写さず、iframe の srcdoc に入れる(写しに埋め込み用の CSS・JS を足す)。"""
         p = self.panorama
         when = f"{p['day']}の予報にもとづく" if p.get("day") else "予報にもとづく"
+        vstate = f"視点の状態: {esc(p['vstate'])}。" if p.get("vstate") else ""
         page = panorama_embed_page(p["page"], report_bg_colors(css_text))
         doc = srcdoc_value(page)
         return (
             f'<div class="section" id="panorama"><div class="section-head"><h2>{esc(p["heading"])}</h2>'
-            f'<div class="note">{when}展望図(目安)。時刻のボタンで雲が替わり、図を横になぞると方角が動きます。</div></div>'
+            f'<div class="note">{when}展望図(目安)。時刻のボタンで雲が替わり、図を横になぞると方角が動きます。{vstate}</div></div>'
             f'<iframe class="panorama" title="{esc(p["heading"])}の展望図" srcdoc=\'{doc}\' '
             f'style="display:block;width:100%;height:{PANORAMA_IFRAME_HEIGHT}px;border:0;margin:0 0 16px"></iframe></div>'
         )
