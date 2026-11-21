@@ -435,7 +435,7 @@ def depth_index(dist_m, bands=terrain.DEFAULT_BANDS):
     ok = [b for b, e in enumerate(bands) if e < dist_m]
     return ok[-1] if ok else -1
 
-POLY_RE = re.compile(r'<polygon points="[^"]*" class="([^"]+)"/>')
+POLY_RE = re.compile(r'<path d="[^"]*" class="(near|B\d+)"/>')   # 地形の帯(draw.render_v2 の path)
 
 
 # ---- 元: experiments/panorama/stage37_run.py ----

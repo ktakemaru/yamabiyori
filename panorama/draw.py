@@ -12,7 +12,7 @@ import numpy as np
 import os
 import re
 
-from . import terrain, names, weather, clouds  # noqa: E402
+from . import terrain, names, weather, clouds, svgfmt  # noqa: E402
 
 
 # ---- 元: experiments/panorama/stage15_draw.py ----
@@ -191,7 +191,7 @@ def layout(items, width, row_ys, *, gap=3.0):
 def style(n_bands, bands=terrain.DEFAULT_BANDS):
     lv = "".join(f"--B{i}:{band_color(i, n_bands, False)};--R{i}:{band_color(max(0, i - 2), n_bands, False)};" for i in range(n_bands))
     dv = "".join(f"--B{i}:{band_color(i, n_bands, True)};--R{i}:{band_color(max(0, i - 2), n_bands, True)};" for i in range(n_bands))
-    rules = "".join(f"polygon.B{i}{{fill:var(--B{i})}}polyline.R{i}{{stroke:var(--R{i})}}" for i in range(n_bands))
+    rules = "".join(f"path.B{i}{{fill:var(--B{i})}}polyline.R{i}{{stroke:var(--R{i})}}" for i in range(n_bands))
     dark_vars = ("--bg:#11161c;--fg:#e6ebf0;--mut:#9aa7b4;--card:#18202a;--line:#2a3542;"
                  "--main:#ff7a7f;--sub:#8cb8ff;--side:#c2ccd6;--nearbg:#7d6a52;--nearln:#5c4d3b;" + dv)
     base = (":root{--bg:#f7f8fa;--fg:#1d2733;--mut:#5b6876;--card:#fff;--line:#d8dee6;--main:#b4232c;--sub:#1f4f8a;"
@@ -208,7 +208,7 @@ table{border-collapse:collapse;font-size:13px;margin:8px 0;width:100%} td,th{bor
 a{color:var(--sub)}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--card);border:1px solid var(--line);border-radius:8px;margin:8px 0}
 .scroll svg{display:block;max-width:none}
-polygon.near{fill:url(#hatch)} rect.nearbg{fill:var(--nearbg)} line.nearln{stroke:var(--nearln);stroke-width:2}
+path.near{fill:url(#hatch)} rect.nearbg{fill:var(--nearbg)} line.nearln{stroke:var(--nearln);stroke-width:2}
 polyline.ridge{fill:none;stroke-width:1.6}
 line.tick{stroke:var(--mut);stroke-width:1} text.tickt{fill:var(--mut);font-size:11px} text.tickt.dir{fill:var(--fg);font-weight:600}
 text.nm{fill:var(--side)} text.nm.大{fill:var(--main)} text.nm.中{fill:var(--sub)} tspan.mk{fill:var(--mut)}
@@ -287,10 +287,9 @@ def render_v2(sky, peaks, *, az0, az1, px_per_deg, v_exag, title, bands=terrain.
              '<rect width="6" height="6" class="nearbg"/><line x1="0" y1="0" x2="0" y2="6" class="nearln"/></pattern></defs>']
     for bi in range(n_b - 1, -1, -1):
         ys = np.where(np.isfinite(ang[:, bi]), np.clip(Y(ang[:, bi]), top_sky, bottom), bottom)
-        pts = " ".join(f"{X(a):.1f},{y:.1f}" for a, y in zip(az, ys))
-        poly = f"{X(az[0]):.1f},{bottom:.1f} {pts} {X(az[-1]):.1f},{bottom:.1f}"
+        poly = [(X(az[0]), bottom)] + [(X(a), y) for a, y in zip(az, ys)] + [(X(az[-1]), bottom)]
         cls = "near" if bands[bi] <= terrain.NEAR_BAND_M else f"B{bi}"
-        parts.append(f'<polygon points="{poly}" class="{cls}"/>')
+        parts.append(f'<path d="{svgfmt.polygon_path(poly)}" class="{cls}"/>')   # 地形の帯(相対座標の path。weather.POLY_RE で探す)
     for p in peaks:
         if p.get("ridge"):
             pts = " ".join(f"{X(a):.1f},{min(max(Y(v), top_sky), bottom):.1f}" for a, v in p["ridge"])
