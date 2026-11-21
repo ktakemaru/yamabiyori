@@ -2,7 +2,7 @@
 
 ![ヤマビヨリ](assets/yamabiyori_banner.png)
 
-[![version](https://img.shields.io/badge/version-1.10.0-2c7fb8)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-1.10.1-2c7fb8)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-3776ab)](requirements.txt)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](#claude-codeとの連携)
