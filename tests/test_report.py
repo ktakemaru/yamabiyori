@@ -527,6 +527,14 @@ class TestPanorama(unittest.TestCase):
         self.assertIn("if(!b||!OK)return;", js)
         self.assertIn("height:460px", self._render(["--panorama-viewpoint-html", "{V}"])[1])
 
+    def test_messages_are_not_lost_when_frame_loads_first(self):
+        # 枠の中が先に読み終わって高さの知らせを取りこぼしても、親の知らせを受けたら送り直す
+        self.assertIn("last=0;post()", render_report.PANORAMA_CHILD_JS)
+        # 親は読み終わりと data-theme の変化でも知らせ直す
+        js = render_report.PANORAMA_PARENT_JS
+        self.assertIn("document.addEventListener('DOMContentLoaded',all)", js)
+        self.assertIn("attributeFilter:['data-theme']", js)
+
     def test_srcdoc_is_single_quoted_and_short(self):
         # srcdoc は ' で囲み、& と ' と改行だけを文字参照にする(< > " はそのまま)
         self.assertEqual(render_report.srcdoc_value("<a href=\"x\">'&amp;'</a>\r\n"),

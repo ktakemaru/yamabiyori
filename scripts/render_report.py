@@ -157,7 +157,7 @@ function post(){var b=document.body;if(!b||!OK)return;var h=Math.ceil(b.getBound
  if(h>0&&h!==last){last=h;try{window.parent.postMessage({type:K+'-height',h:h},'*')}catch(e){}}}
 window.addEventListener('message',function(e){var d=e.data;if(!d||d.type!==K+'-vh'||e.source!==window.parent)return;
  if('theme' in d)theme(d.theme);
- var v=+d.vh;if(v>0&&v!==VH){VH=v;window.dispatchEvent(new Event('resize'))}post()});
+ var v=+d.vh;if(v>0&&v!==VH){VH=v;window.dispatchEvent(new Event('resize'))}last=0;post()});
 window.addEventListener('load',function(){post();if(window.ResizeObserver)new ResizeObserver(post).observe(document.body)});
 })();"""
 PANORAMA_CHILD_CSS = ("main.p39>#frame~*{display:none!important}main.p39{padding:0 0 1px!important}#frame{margin:0!important}"
@@ -168,10 +168,13 @@ PANORAMA_PARENT_JS = r"""(function(){
 var K='%(msg)s',f=[].slice.call(document.querySelectorAll('iframe.panorama')),t;
 function send(x){try{x.contentWindow.postMessage({type:K+'-vh',vh:window.innerHeight,
  theme:document.documentElement.getAttribute('data-theme')},'*')}catch(e){}}
+function all(){f.forEach(send)}
 f.forEach(function(x){x.addEventListener('load',function(){send(x)});send(x)});
 window.addEventListener('message',function(e){var d=e.data;if(!d||d.type!==K+'-height')return;
  f.forEach(function(x){if(x.contentWindow===e.source){var h=Math.round(+d.h);if(h>0&&h<20000)x.style.height=h+'px'}})});
-window.addEventListener('resize',function(){clearTimeout(t);t=setTimeout(function(){f.forEach(send)},120)});
+window.addEventListener('resize',function(){clearTimeout(t);t=setTimeout(all,120)});
+document.addEventListener('DOMContentLoaded',all);window.addEventListener('load',all);
+if(window.MutationObserver)new MutationObserver(all).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 })();""" % {"msg": PANORAMA_MSG}
 
 
