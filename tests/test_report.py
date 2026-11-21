@@ -508,7 +508,30 @@ class TestPanorama(unittest.TestCase):
         self.assertEqual(code, 0, err)
         doc = self.srcdocs(page)[0]
         self.assertIn(f"html,body{{background:{light}!important}}", doc)
-        self.assertIn(f"@media (prefers-color-scheme: dark){{html,body{{background:{dark}!important}}}}", doc)
+        # ダークの地の色は report.css と同じく、html に data-theme="light" があるときは使わない
+        self.assertIn('@media (prefers-color-scheme: dark){html:not([data-theme="light"]),'
+                      f'html:not([data-theme="light"]) body{{background:{dark}!important}}}}', doc)
+
+    def test_theme_attribute_is_passed_to_frame(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        doc = self.srcdocs(page)[0]
+        parent = page.split("</iframe>")[1]
+        self.assertIn("theme:document.documentElement.getAttribute('data-theme')", parent)
+        self.assertIn("if(t==='light')de.setAttribute('data-theme','light')", doc)
+
+    def test_no_height_message_when_override_fails(self):
+        # innerHeight の書き換えが効かないブラウザでは高さを送らない(枠は 460px のまま。循環させない)
+        js = render_report.PANORAMA_CHILD_JS
+        self.assertIn("OK=(window.innerHeight===VH);", js)
+        self.assertIn("if(!b||!OK)return;", js)
+        self.assertIn("height:460px", self._render(["--panorama-viewpoint-html", "{V}"])[1])
+
+    def test_viewpoint_name_is_not_double_escaped(self):
+        view = self.VIEW.replace("雷岩", "雷岩 &amp; 東")
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"], view=view)
+        self.assertEqual(code, 0, err)
+        self.assertIn("<h2>雷岩 &amp; 東(展望地)からの展望</h2>", page)
 
     def test_works_with_spec_json(self):
         code, page, err = self._render(["--panorama-html", "{S}"], [os.path.join(EXAMPLES, "diagnosis.json")])

@@ -141,25 +141,33 @@ PANORAMA_MSG = "yamabiyori-panorama"
 PANORAMA_LANDSCAPE_MEDIA = "@media (orientation:landscape) and (max-height:500px){"
 # 展望図は図の大きさを window.innerHeight で決める。枠の中ではそれが枠の高さになり、枠を中身に合わせると
 # 循環するので、レポートの画面の高さを返すようにする。図の下の説明(視点の状態・題・凡例など)は出さない。
+# 書き換えが効かないブラウザでは高さを送らない(枠は PANORAMA_IFRAME_HEIGHT のまま、中を縦に送る形。循環はしない)。
+# レポートの html に data-theme="light" があれば枠の中にも付ける(report.css と同じく、ダークの地の色を止めるため)。
 PANORAMA_CHILD_JS = r"""(function(){
-var K='%(msg)s',VH=0,de=document.documentElement,last=0;
+var K='%(msg)s',VH=0,de=document.documentElement,last=0,OK=false;
 try{VH=window.parent.innerHeight||0}catch(e){}
 if(!VH)VH=(window.screen&&screen.height)||700;
 try{Object.defineProperty(window,'innerHeight',{configurable:true,get:function(){return VH}})}catch(e){}
-function land(){de.classList.toggle('yb-land',(window.innerWidth||0)>VH&&VH<=500)}
+OK=(window.innerHeight===VH);
+function theme(t){if(t==='light')de.setAttribute('data-theme','light');else de.removeAttribute('data-theme')}
+try{theme(window.parent.document.documentElement.getAttribute('data-theme'))}catch(e){}
+function land(){var h=OK?VH:window.innerHeight;de.classList.toggle('yb-land',(window.innerWidth||0)>h&&h<=500)}
 land();window.addEventListener('resize',land);
-function post(){var b=document.body;if(!b)return;var h=Math.ceil(b.getBoundingClientRect().height);
+function post(){var b=document.body;if(!b||!OK)return;var h=Math.ceil(b.getBoundingClientRect().height);
  if(h>0&&h!==last){last=h;try{window.parent.postMessage({type:K+'-height',h:h},'*')}catch(e){}}}
 window.addEventListener('message',function(e){var d=e.data;if(!d||d.type!==K+'-vh'||e.source!==window.parent)return;
+ if('theme' in d)theme(d.theme);
  var v=+d.vh;if(v>0&&v!==VH){VH=v;window.dispatchEvent(new Event('resize'))}post()});
 window.addEventListener('load',function(){post();if(window.ResizeObserver)new ResizeObserver(post).observe(document.body)});
 })();"""
 PANORAMA_CHILD_CSS = ("main.p39>#frame~*{display:none!important}main.p39{padding:0 0 1px!important}#frame{margin:0!important}"
                       "html,body{background:%(light)s!important}"
-                      "@media (prefers-color-scheme: dark){html,body{background:%(dark)s!important}}")
+                      '@media (prefers-color-scheme: dark){html:not([data-theme="light"]),'
+                      'html:not([data-theme="light"]) body{background:%(dark)s!important}}')
 PANORAMA_PARENT_JS = r"""(function(){
 var K='%(msg)s',f=[].slice.call(document.querySelectorAll('iframe.panorama')),t;
-function send(x){try{x.contentWindow.postMessage({type:K+'-vh',vh:window.innerHeight},'*')}catch(e){}}
+function send(x){try{x.contentWindow.postMessage({type:K+'-vh',vh:window.innerHeight,
+ theme:document.documentElement.getAttribute('data-theme')},'*')}catch(e){}}
 f.forEach(function(x){x.addEventListener('load',function(){send(x)});send(x)});
 window.addEventListener('message',function(e){var d=e.data;if(!d||d.type!==K+'-height')return;
  f.forEach(function(x){if(x.contentWindow===e.source){var h=Math.round(+d.h);if(h>0&&h<20000)x.style.height=h+'px'}})});
@@ -211,7 +219,9 @@ def load_panorama(path, kind):
     if kind == "viewpoint":
         # 展望図を作るときの視点のデータ(viewpoint.source_text)が書く「視点: <名前>(OpenStreetMap の展望地。…)」
         m = re.search(r"視点: ([^<(]+?)\(OpenStreetMap の展望地", page)
-        name = m.group(1).strip() if m and m.group(1).strip() != "名前のない展望地" else None
+        # 展望図の HTML の中では文字参照になっているので戻す(見出しに入れるときに改めて esc する)
+        name = html.unescape(m.group(1)).strip() if m else None
+        name = None if name in (None, "", "名前のない展望地") else name
     m = re.search(r"<title>[^<]*からの展望と雲\((\d{4}-\d{2}-\d{2})\)</title>", page)
     day = None
     if m:
