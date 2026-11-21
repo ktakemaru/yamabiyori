@@ -360,11 +360,18 @@ class TestBaseline(unittest.TestCase):
 
 
 class TestPanorama(unittest.TestCase):
-    """--panorama-html / --panorama-viewpoint-html: 展望図の HTML を iframe の srcdoc でそのまま埋め込む。"""
+    """--panorama-html / --panorama-viewpoint-html: 展望図を1枚だけ、総評のすぐあとに iframe(srcdoc)で埋め込む。"""
 
-    SUMMIT = ('<!doctype html><html lang="ja"><head><title>山頂</title></head><body>\n'
-              '<p id="s">山頂 & "引用" <b>雲</b></p>\r\n<script>var a=1&&2;</script></body></html>')
-    VIEW = "<!doctype html><html lang=\"ja\"><head><title>展望地</title></head><body><p id=\"v\">雷岩 &amp; 'x'</p></body></html>"
+    LAND = ("@media (orientation:landscape) and (max-height:500px){\n body.narrow .ctl{display:flex;gap:6px}\n"
+            " body.narrow .ctl .stbar,body.narrow .ctl .navbar{margin:0 0 3px}\n main.p39{padding:4px 8px 12px}\n}\n")
+    SUMMIT = ('<!doctype html><html lang="ja"><head><title>大菩薩嶺からの展望と雲(2026-11-22)</title><style>' + LAND +
+              '</style></head><body class="narrow"><main class="p39">\n<div id="frame">山頂の図</div>'
+              '<p class="intro">視点: 山頂(国土地理院の山頂の点)。</p>\r\n<script>var a=1&&2;</script></main></body></html>')
+    VIEW = ('<!doctype html><html lang="ja"><head><title>大菩薩嶺・雷岩からの展望と雲(2026-11-22)</title></head>'
+            '<body><main class="p39"><div id="frame">展望地の図</div>'
+            "<p>視点: 雷岩(OpenStreetMap の展望地。山頂の南 276m)。'x' &amp;</p></main></body></html>")
+    NONAME = VIEW.replace("雷岩", "名前のない展望地")
+    COMMENTARY = {"overview": "総評の文。", "alert": {"heading": "注意", "body": "注意の文。"}}
 
     def _write(self, d, name, text):
         path = os.path.join(d, name)
@@ -372,14 +379,17 @@ class TestPanorama(unittest.TestCase):
             f.write(text.encode("utf-8"))
         return path
 
-    def _render(self, extra, base=None):
+    def _render(self, extra, base=None, commentary=True, view=None):
         """extra の {S}・{V} を山頂・展望地の仮の展望図のパスに置き換えて変換する。"""
         with tempfile.TemporaryDirectory() as d:
             s = self._write(d, "m.html", self.SUMMIT)
-            v = self._write(d, "mv.html", self.VIEW)
+            v = self._write(d, "mv.html", view or self.VIEW)
+            c = self._write(d, "c.json", json.dumps(self.COMMENTARY, ensure_ascii=False))
             args = [a.replace("{S}", s).replace("{V}", v) for a in extra]
             o = os.path.join(d, "o.html")
-            code, _, err = render((base or ["--data", os.path.join(FIX, "diagnosis.json")]) + ["--out", o] + args)
+            if base is None:
+                base = ["--data", os.path.join(FIX, "diagnosis.json")] + (["--commentary", c] if commentary else [])
+            code, _, err = render(base + ["--out", o] + args)
             page = ""
             if code == 0:
                 with open(o, encoding="utf-8", newline="") as f:
@@ -395,36 +405,110 @@ class TestPanorama(unittest.TestCase):
         code, page, err = self._render([])
         self.assertEqual(code, 0, err)
         self.assertNotIn("<iframe", page)
-        self.assertNotIn("山頂からの展望", page)
+        self.assertNotIn("からの展望", page)
+        self.assertNotIn("yamabiyori-panorama", page)  # 展望図の枠のスクリプトも足さない
 
-    def test_without_panoramas_output_is_unchanged(self):
+    def test_without_panorama_output_is_unchanged(self):
         spec = load(os.path.join(EXAMPLES, "diagnosis.json"))
         a = render_report.Renderer(copy.deepcopy(spec), EXAMPLES, False).render()
-        b = render_report.Renderer(copy.deepcopy(spec), EXAMPLES, False, []).render()
+        b = render_report.Renderer(copy.deepcopy(spec), EXAMPLES, False, None).render()
         self.assertEqual(a, b)
-        c = render_report.Renderer(copy.deepcopy(spec), EXAMPLES, False, [("山頂から", "<p>x</p>")]).render()
-        before_footer = a.split("<footer>")[0]
-        self.assertTrue(c.startswith(before_footer))  # 節は本文の最後に足すだけで、ほかの部分は変えない
 
     def test_summit_only(self):
         code, page, err = self._render(["--panorama-html", "{S}"])
         self.assertEqual(code, 0, err)
-        self.assertEqual(page.count("<h2>山頂からの展望</h2>"), 1)
         self.assertEqual(page.count("<iframe"), 1)
-        self.assertIn("height:460px", page)
-        self.assertIn("<h3>山頂から</h3>", page)
-        self.assertNotIn("展望地から", page)
+        self.assertIn("<h2>山頂からの展望</h2>", page)
+        self.assertIn("山頂の図", self.srcdocs(page)[0])
 
-    def test_viewpoint_first_and_content_unchanged(self):
+    def test_both_embeds_only_viewpoint(self):
         code, page, err = self._render(["--panorama-html", "{S}", "--panorama-viewpoint-html", "{V}"])
         self.assertEqual(code, 0, err)
-        self.assertEqual(page.count("<h2>山頂からの展望</h2>"), 1)
-        self.assertLess(page.index("<h3>展望地から</h3>"), page.index("<h3>山頂から</h3>"))
-        self.assertLess(page.index("山頂からの展望"), page.index("<footer>"))
+        self.assertEqual(page.count("<iframe"), 1)
         docs = self.srcdocs(page)
-        self.assertEqual(len(docs), 2)
-        self.assertEqual(docs, [self.VIEW, self.SUMMIT])  # 中身は改行も含めて1文字も変えない
-        self.assertNotIn("\n<p id=", page)  # 改行は文字参照(&#10;)で入る
+        self.assertEqual(len(docs), 1)
+        self.assertIn("展望地の図", docs[0])
+        self.assertNotIn("山頂の図", page)
+        self.assertNotIn("山頂からの展望", page)
+
+    def test_viewpoint_only_is_allowed(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(page.count("<iframe"), 1)
+
+    def test_heading_has_viewpoint_name(self):
+        code, page, err = self._render(["--panorama-html", "{S}", "--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("<h2>雷岩(展望地)からの展望</h2>", page)  # 読み仮名は付けない
+        self.assertIn("11/22(日)の予報にもとづく展望図", page)
+
+    def test_heading_without_viewpoint_name(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"], view=self.NONAME)
+        self.assertEqual(code, 0, err)
+        self.assertIn("<h2>展望地からの展望</h2>", page)
+
+    def test_section_right_after_overview(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        i_over, i_pano = page.index("総評の文。"), page.index('<div class="section" id="panorama">')
+        self.assertLess(i_over, i_pano)
+        between = page[i_over:i_pano]
+        self.assertNotIn('class="section', between)  # 総評と展望の節のあいだに、ほかの節が無い
+        self.assertNotIn("注意の文。", between)
+        self.assertLess(i_pano, page.index("注意の文。"))
+        self.assertLess(i_pano, page.index("気圧配置と実況"))
+
+    def test_section_without_overview_follows_summary(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"], commentary=False)
+        self.assertEqual(code, 0, err)
+        i_sum, i_pano = page.index('<p class="summary">'), page.index('<div class="section" id="panorama">')
+        self.assertLess(i_sum, i_pano)
+        self.assertNotIn('class="section', page[i_sum:i_pano])
+
+    def test_captions_hidden_and_body_unchanged(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        doc = self.srcdocs(page)[0]
+        head, body = doc.split("</head>", 1)
+        self.assertEqual(body, self.VIEW.split("</head>", 1)[1])  # 本文(図・ボタン・説明)は1文字も変えない
+        self.assertIn("main.p39>#frame~*{display:none!important}", head)  # 図の下の説明は出さない
+        self.assertNotIn("\n<p", page)  # 改行は文字参照で入る
+
+    def test_frame_height_follows_content(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        doc = self.srcdocs(page)[0]
+        self.assertIn("Object.defineProperty(window,'innerHeight'", doc)  # 図の高さは枠ではなくレポートの画面の高さで決める
+        self.assertIn("yamabiyori-panorama", doc)
+        self.assertIn("-height", doc)
+        self.assertIn("yamabiyori-panorama", page.split("</iframe>")[1])  # 親が受けて枠の高さを合わせる
+
+    def test_landscape_rules_follow_report_screen(self):
+        code, page, err = self._render(["--panorama-html", "{S}"])
+        self.assertEqual(code, 0, err)
+        doc = self.srcdocs(page)[0]
+        self.assertNotIn("@media (orientation:landscape)", doc)
+        self.assertIn("html.yb-land body.narrow .ctl{display:flex;gap:6px}", doc)
+        self.assertIn("html.yb-land body.narrow .ctl .stbar,html.yb-land body.narrow .ctl .navbar{margin:0 0 3px}", doc)
+        self.assertIn("html.yb-land main.p39{padding:4px 8px 12px}", doc)
+
+    def test_landscape_block_of_real_panorama_is_found(self):
+        from panorama import draw
+        self.assertIn(render_report.PANORAMA_LANDSCAPE_MEDIA, draw.CSS39)
+        out = render_report._landscape_to_class("<style>" + draw.CSS39 + "</style>")
+        self.assertNotIn("orientation:landscape", out)
+        self.assertIn("html.yb-land body.narrow .ctl button small{display:none}", out)
+        self.assertEqual(out.count("{"), out.count("}"))
+
+    def test_background_matches_report(self):
+        css = render_report.CSS_PATH.read_text(encoding="utf-8")
+        light, dark = render_report.report_bg_colors(css)
+        self.assertEqual((light, dark), ("#eef1ee", "#121815"))
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        doc = self.srcdocs(page)[0]
+        self.assertIn(f"html,body{{background:{light}!important}}", doc)
+        self.assertIn(f"@media (prefers-color-scheme: dark){{html,body{{background:{dark}!important}}}}", doc)
 
     def test_works_with_spec_json(self):
         code, page, err = self._render(["--panorama-html", "{S}"], [os.path.join(EXAMPLES, "diagnosis.json")])
@@ -435,11 +519,6 @@ class TestPanorama(unittest.TestCase):
         code, _, err = self._render(["--panorama-html", "no_such_panorama.html"])
         self.assertEqual(code, 2)
         self.assertIn("エラー", err)
-
-    def test_viewpoint_requires_summit(self):
-        with self.assertRaises(SystemExit):
-            with contextlib.redirect_stderr(io.StringIO()):
-                self._render(["--panorama-viewpoint-html", "{V}"])
 
 
 if __name__ == "__main__":
