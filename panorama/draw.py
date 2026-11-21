@@ -209,7 +209,7 @@ a{color:var(--sub)}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--card);border:1px solid var(--line);border-radius:8px;margin:8px 0}
 .scroll svg{display:block;max-width:none}
 path.near{fill:url(#hatch)} rect.nearbg{fill:var(--nearbg)} line.nearln{stroke:var(--nearln);stroke-width:2}
-polyline.ridge{fill:none;stroke-width:1.6}
+polyline.ridge{fill:none;stroke-width:1.6} stop{stop-color:#fff}
 line.tick{stroke:var(--mut);stroke-width:1} text.tickt{fill:var(--mut);font-size:11px} text.tickt.dir{fill:var(--fg);font-weight:600}
 text.nm{fill:var(--side)} text.nm.大{fill:var(--main)} text.nm.中{fill:var(--sub)} tspan.mk{fill:var(--mut)}
 line.lead{stroke:var(--mut);stroke-width:.7;opacity:.8} line.lead.大{stroke:var(--main);opacity:.9}

@@ -71,3 +71,17 @@ def polygon_path(points, nd: int = 1, sync: int = SYNC_EVERY) -> str:
     if rel:
         d.append("l" + join_nums(rel))
     return "".join(d) + "Z"
+
+
+def stops(pairs) -> str:
+    """雲のぼかしのグラデーションの <stop>。pairs: [(offset, 不透明度)](offset の順)。
+    値は今までと同じ桁(offset 小数 4 桁・不透明度 3 桁)で、書き方だけ短くする(案 E):
+    先頭と末尾の 0 を省く、色(白)は CSS の stop{stop-color:#fff} に任せる、
+    前後と同じ不透明度が続く途中の stop は省く(線形の補間なので、塗りは同じ)。"""
+    q = [(num(o, 4), num(a, 3)) for o, a in pairs]
+    out = []
+    for i, (o, a) in enumerate(q):
+        if 0 < i < len(q) - 1 and q[i - 1][1] == a == q[i + 1][1]:
+            continue
+        out.append(f'<stop offset="{o}" stop-opacity="{a}"/>')
+    return "".join(out)

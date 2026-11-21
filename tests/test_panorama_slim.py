@@ -116,5 +116,44 @@ class TestSkyMerge(unittest.TestCase):
         self.assertIn("M20.0 94.0h72.6v26.0h-72.6z", s)      # 3 マス: 幅 3×24 + 重なり 0.6
 
 
+class TestStops(unittest.TestCase):
+    """案 E: グラデーションの書き方を短くする(値の桁と塗りは同じ)。"""
+
+    def test_short_and_same_values(self):
+        s = svgfmt.stops([(0.0, 0.0), (0.0064, 0.0), (0.0179, 0.0), (0.03, 0.25), (0.5, 0.4), (1.0, 1.0)])
+        self.assertEqual(s, '<stop offset="0" stop-opacity="0"/><stop offset=".0179" stop-opacity="0"/>'
+                            '<stop offset=".03" stop-opacity=".25"/><stop offset=".5" stop-opacity=".4"/>'
+                            '<stop offset="1" stop-opacity="1"/>')
+        self.assertNotIn("stop-color", s)
+
+    def test_only_inner_equal_stops_are_dropped(self):
+        import random
+        rnd = random.Random(3)
+        pairs = sorted((rnd.random(), rnd.choice([0.0, 0.2, 0.2, 0.5])) for _ in range(200))
+        got = [(float(o), float(a)) for o, a in re.findall(r'offset="([\d.]+)" stop-opacity="([\d.]+)"', svgfmt.stops(pairs))]
+        want = [(float(f"{o:.4f}"), float(f"{a:.3f}")) for o, a in pairs]
+
+        def value(stops, x):
+            for (o0, a0), (o1, a1) in zip(stops, stops[1:]):
+                if o0 <= x <= o1:
+                    return a0 if o1 == o0 else a0 + (a1 - a0) * (x - o0) / (o1 - o0)
+            return stops[-1][1]
+        self.assertEqual(got[0], want[0])
+        self.assertEqual(got[-1], want[-1])
+        self.assertLess(len(got), len(want))
+        for o, _ in want:
+            self.assertAlmostEqual(value(got, o), value(want, o), places=9)
+
+    def test_band_gradient_and_css(self):
+        from panorama import clouds, draw
+        geom = {"kind": "sea", "x0": 10.0, "x1": 110.0, "y_bottom": 60.0, "upper": [(10.0, 40.0), (60.0, 38.0), (110.0, 40.0)],
+                "shadow_upper": [(10.0, 50.0), (110.0, 50.0)], "thin_upper": None,
+                "stops": [(0.0, 0.0, 0.0, 0.0), (0.5, 0.6, 0.0, 0.6), (1.0, 0.0, 0.0, 0.0)]}
+        s = clouds.band_svg37(geom, "b1")
+        self.assertIn('<linearGradient id="mgb1" gradientUnits="userSpaceOnUse" x1="10.0" x2="110.0">', s)
+        self.assertIn('<stop offset=".5" stop-opacity=".6"/>', s)
+        self.assertIn("stop{stop-color:#fff}", draw.style(3))
+
+
 if __name__ == "__main__":
     unittest.main()

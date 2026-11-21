@@ -555,8 +555,8 @@ def band_svg37(geom, bid, wrap_px=None, title="", clip_id=None) -> str:
     y0, y1 = min(ys) - 2, max(ys) + 2
 
     def grad(gid, idx):
-        st = "".join(f'<stop offset="{s[0]:.4f}" stop-color="#fff" stop-opacity="{s[idx]:.3f}"/>' for s in geom["stops"])
-        return (f'<linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="{x0:.1f}" y1="0" x2="{x1:.1f}" y2="0">'
+        st = svgfmt.stops((s[0], s[idx]) for s in geom["stops"])
+        return (f'<linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="{x0:.1f}" x2="{x1:.1f}">'
                 f'{st}</linearGradient>')
     has_thin = bool(geom["thin_upper"])
     defs = grad(f"mg{bid}", 1)
@@ -1079,11 +1079,10 @@ def merged_clump_svg(members, cid, thin=False) -> tuple:
         ysh.append(b_ - (b_ - t_) * SHADOW_FRAC)
     sh = _shadow_path(xl, xr, lambda x: float(np.interp(x, xs, ysh)), ybot, random.Random(seed_of("mshadow", members[0]["key"])))
     k = THIN_RATIO if thin else 1.0
-    stops = "".join(f'<stop offset="{(m["x"] - xl) / (xr - xl):.4f}" stop-color="#fff" stop-opacity="{opacity(m["c"]) * k:.3f}"/>'
-                    for m in members)
+    stops = svgfmt.stops(((m["x"] - xl) / (xr - xl), opacity(m["c"]) * k) for m in members)
     circ = "".join(svgfmt.circle(x, y, r_) for x, y, r_ in circles)
     t = "<title>" + html.escape(" / ".join(html.unescape(m["tt"]) for m in members)) + "</title>"
-    defs = (f'<linearGradient id="mcg{cid}" gradientUnits="userSpaceOnUse" x1="{xl:.1f}" y1="0" x2="{xr:.1f}" y2="0">{stops}'
+    defs = (f'<linearGradient id="mcg{cid}" gradientUnits="userSpaceOnUse" x1="{xl:.1f}" x2="{xr:.1f}">{stops}'
             f'</linearGradient><mask id="mcm{cid}" maskUnits="userSpaceOnUse" x="{xl - 1:.1f}" y="{ytop - 2:.1f}" '
             f'width="{xr - xl + 2:.1f}" height="{ybot - ytop + 4:.1f}"><rect x="{xl - 1:.1f}" y="{ytop - 2:.1f}" '
             f'width="{xr - xl + 2:.1f}" height="{ybot - ytop + 4:.1f}" fill="url(#mcg{cid})"/></mask>'
