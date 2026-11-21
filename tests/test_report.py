@@ -360,16 +360,33 @@ class TestBaseline(unittest.TestCase):
 
 
 class TestPanorama(unittest.TestCase):
-    """--panorama-html / --panorama-viewpoint-html: 展望図を1枚だけ、総評のすぐあとに iframe(srcdoc)で埋め込む。"""
+    """--panorama-html / --panorama-viewpoint-html: 展望図を1枚だけ、総評(と注意)のあとに、iframe を使わず直接入れる。"""
 
-    LAND = ("@media (orientation:landscape) and (max-height:500px){\n body.narrow .ctl{display:flex;gap:6px}\n"
-            " body.narrow .ctl .stbar,body.narrow .ctl .navbar{margin:0 0 3px}\n main.p39{padding:4px 8px 12px}\n}\n")
-    SUMMIT = ('<!doctype html><html lang="ja"><head><title>大菩薩嶺からの展望と雲(2026-11-22)</title><style>' + LAND +
-              '</style></head><body class="narrow"><main class="p39">\n<div id="frame">山頂の図</div>'
-              '<p class="intro">視点: 山頂(国土地理院の山頂の点)。</p>\r\n<script>var a=1&&2;</script></main></body></html>')
-    VIEW = ('<!doctype html><html lang="ja"><head><title>大菩薩嶺・雷岩からの展望と雲(2026-11-22)</title></head>'
-            '<body><main class="p39"><div id="frame">展望地の図</div>'
-            "<p>視点: 雷岩(OpenStreetMap の展望地。山頂の南 276m)。'x' &amp;</p></main></body></html>")
+    CSS = (':root{--bg:#f7f8fa;--fg:#1d2733;--B1:hsl(208 29% 38%)}\n'
+           '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#11161c}}\n'
+           ':root[data-theme="dark"]{--bg:#11161c}\n'
+           "*{box-sizing:border-box}\nbody{margin:0;background:var(--bg);color:var(--fg)}\n"
+           "main{max-width:1100px;margin:0 auto;padding:16px}\n"
+           "path.near{fill:url(#hatch)} path.B1{fill:var(--B1)}\n#frame{position:relative}\n"
+           "body.narrow #vp svg{width:100%}\nbody.wide .ctl{display:flex}\n"
+           "@media (orientation:landscape) and (max-height:500px){\n body.narrow .ctl{display:flex;gap:6px}\n"
+           " main.p39{padding:4px 8px 12px}\n}\n")
+    JS = ("(function(){\nvar D=JSON.parse(document.getElementById('p39data').textContent);\n"
+          "var svg=document.querySelector('#vp svg'),vp=document.getElementById('vp'),body=document.body;\n"
+          "var W=window.innerWidth||document.documentElement.clientWidth;var h=location.hash;\n"
+          "document.querySelectorAll('.stbar button[data-st]');document.addEventListener('click',function(){});\n"
+          "window.__p39=D;\n})();\n")
+    SUMMIT = ('<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>大菩薩嶺からの展望と雲(2026-11-22)</title>'
+              '<style>' + CSS + '</style></head><body class="narrow"><main class="p39">\n<div class="ctl"><div class="stbar">'
+              '<button data-st="h08">8時</button></div></div><div id="frame"><div id="vp"><svg><defs>'
+              '<pattern id="hatch"></pattern><clipPath id="cc1"><circle/></clipPath></defs><g id="bw1">山頂の図</g>'
+              '<path d="M0 0" class="near"/><path d="M0 0" class="B1" clip-path="url(#cc1)"/><use href="#bw1"/></svg></div>'
+              '<div class="credit39">出典</div></div>'
+              '<p class="intro">視点: 山頂(国土地理院の山頂の点)。</p>\r\n<script type="application/json" id="p39data">{"a":1}</script>'
+              '<script>' + JS + '</script></main></body></html>')
+    VIEW = (SUMMIT.replace("大菩薩嶺からの", "大菩薩嶺・雷岩からの").replace("山頂の図", "展望地の図")
+            .replace("視点: 山頂(国土地理院の山頂の点)。",
+                     "視点: 雷岩(OpenStreetMap の展望地。山頂の南 276m)。'x' &amp;"))
     NONAME = VIEW.replace("雷岩", "名前のない展望地")
     COMMENTARY = {"overview": "総評の文。", "alert": {"heading": "注意", "body": "注意の文。"}}
 
@@ -397,16 +414,41 @@ class TestPanorama(unittest.TestCase):
         return code, page, err
 
     @staticmethod
-    def srcdocs(page):
-        import html as html_lib
-        return [html_lib.unescape(x) for x in re.findall(r"<iframe[^>]* srcdoc='([^']*)'", page)]
+    def section(page):
+        """展望の節(直接入れた CSS・本文・スクリプトを含む)。無ければ ""。"""
+        i = page.find('<div class="section" id="panorama">')
+        if i < 0:
+            return ""
+        j = page.find('<div class="section"', i + 10)
+        return page[i:j if j > 0 else len(page)]
 
+    @staticmethod
+    def styles(sec):
+        return "".join(re.findall(r"<style>(.*?)</style>", sec, re.S))
+
+    @staticmethod
+    def selectors(css):
+        """CSS の指定(@media の中も)を全部取り出す。"""
+        out = []
+        for head in re.findall(r"([^{}]+)\{", css):
+            head = head.strip()
+            if not head.startswith("@"):
+                out += [x.strip() for x in head.split(",")]
+        return out
+
+    def assert_ids_ok(self, page):
+        ids = re.findall(r'\bid="([^"]+)"', page)
+        dup = sorted({i for i in ids if ids.count(i) > 1})
+        self.assertEqual(dup, [], "同じ id が 2 つ以上ある")
+        refs = set(re.findall(r"url\(#([^)]+)\)", page)) | set(re.findall(r'href="#([^"]+)"', page))
+        self.assertEqual(sorted(refs - set(ids)), [], "指す先の無い url(#…)・href=\"#…\" がある")
+
+    # ---- 出す・出さない、位置、見出し ----
     def test_without_arguments_no_section(self):
         code, page, err = self._render([])
         self.assertEqual(code, 0, err)
-        self.assertNotIn("<iframe", page)
         self.assertNotIn("からの展望", page)
-        self.assertNotIn("yamabiyori-panorama", page)  # 展望図の枠のスクリプトも足さない
+        self.assertNotIn("ybp", page)  # 展望図の CSS・スクリプトも足さない
 
     def test_without_panorama_output_is_unchanged(self):
         spec = load(os.path.join(EXAMPLES, "diagnosis.json"))
@@ -417,24 +459,22 @@ class TestPanorama(unittest.TestCase):
     def test_summit_only(self):
         code, page, err = self._render(["--panorama-html", "{S}"])
         self.assertEqual(code, 0, err)
-        self.assertEqual(page.count("<iframe"), 1)
         self.assertIn("<h2>山頂からの展望</h2>", page)
-        self.assertIn("山頂の図", self.srcdocs(page)[0])
+        self.assertIn("山頂の図", self.section(page))
+        self.assertEqual(page.count('id="ybp-root"'), 1)
 
     def test_both_embeds_only_viewpoint(self):
         code, page, err = self._render(["--panorama-html", "{S}", "--panorama-viewpoint-html", "{V}"])
         self.assertEqual(code, 0, err)
-        self.assertEqual(page.count("<iframe"), 1)
-        docs = self.srcdocs(page)
-        self.assertEqual(len(docs), 1)
-        self.assertIn("展望地の図", docs[0])
+        self.assertEqual(page.count('id="ybp-root"'), 1)
+        self.assertIn("展望地の図", page)
         self.assertNotIn("山頂の図", page)
         self.assertNotIn("山頂からの展望", page)
 
     def test_viewpoint_only_is_allowed(self):
         code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
         self.assertEqual(code, 0, err)
-        self.assertEqual(page.count("<iframe"), 1)
+        self.assertEqual(page.count('id="ybp-root"'), 1)
 
     def test_heading_has_viewpoint_name(self):
         code, page, err = self._render(["--panorama-html", "{S}", "--panorama-viewpoint-html", "{V}"])
@@ -482,68 +522,108 @@ class TestPanorama(unittest.TestCase):
         self.assertLess(i_sum, i_pano)
         self.assertNotIn('class="section', page[i_sum:i_pano])
 
-    def test_captions_hidden_and_body_unchanged(self):
+    # ---- 直接入れる形 ----
+    def test_no_iframe_srcdoc_template(self):
+        # 共有の審査を通らなかった形(別のページを srcdoc に入れる)と、それに近い仕組みを使わない
         code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
         self.assertEqual(code, 0, err)
-        doc = self.srcdocs(page)[0]
-        head, body = doc.split("</head>", 1)
-        self.assertEqual(body, self.VIEW.split("</head>", 1)[1])  # 本文(図・ボタン・説明)は1文字も変えない
-        self.assertIn("main.p39>#frame~*{display:none!important}", head)  # 図の下の説明は出さない
-        self.assertNotIn("\n<p", page)  # 改行は文字参照で入る
+        low = page.lower()
+        for w in ("<iframe", "srcdoc", "<template", "<object", "<embed", "document.write", "new function", "eval(",
+                  "postmessage", "defineproperty", "blob:", "data:text/html"):
+            self.assertNotIn(w, low)
+        self.assertNotIn("<!doctype", low[low.index('<div class="section" id="panorama">'):])
+        self.assertEqual(page.lower().count("<body"), 1)
 
-    def test_frame_height_follows_content(self):
+    def test_content_kept_and_captions_hidden(self):
         code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
         self.assertEqual(code, 0, err)
-        doc = self.srcdocs(page)[0]
-        self.assertIn("Object.defineProperty(window,'innerHeight'", doc)  # 図の高さは枠ではなくレポートの画面の高さで決める
-        self.assertIn("yamabiyori-panorama", doc)
-        self.assertIn("-height", doc)
-        self.assertIn("yamabiyori-panorama", page.split("</iframe>")[1])  # 親が受けて枠の高さを合わせる
+        sec = self.section(page)
+        self.assertIn('<div class="ybp narrow" id="ybp-root"', sec)   # body の class は包む要素に
+        self.assertIn('<div id="ybp-frame">', sec)
+        self.assertIn("展望地の図", sec)
+        self.assertIn("出典", sec)                                    # 出典は図の枠の中に残る
+        self.assertIn(".ybp main.p39>#ybp-frame~*{display:none!important}", self.styles(sec))   # 図の下の説明は出さない
+        self.assertIn('<script type="application/json" id="ybp-p39data">{"a":1}</script>', sec)
 
-    def test_landscape_rules_follow_report_screen(self):
-        code, page, err = self._render(["--panorama-html", "{S}"])
+    def test_ids_are_prefixed_unique_and_resolve(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
         self.assertEqual(code, 0, err)
-        doc = self.srcdocs(page)[0]
-        self.assertNotIn("@media (orientation:landscape)", doc)
-        self.assertIn("html.yb-land body.narrow .ctl{display:flex;gap:6px}", doc)
-        self.assertIn("html.yb-land body.narrow .ctl .stbar,html.yb-land body.narrow .ctl .navbar{margin:0 0 3px}", doc)
-        self.assertIn("html.yb-land main.p39{padding:4px 8px 12px}", doc)
+        sec = self.section(page)
+        for i in re.findall(r'\bid="([^"]+)"', sec)[1:]:      # 最初は節の id(panorama)
+            self.assertTrue(i.startswith("ybp-"), i)
+        self.assertIn('fill:url(#ybp-hatch)', self.styles(sec))
+        self.assertIn('clip-path="url(#ybp-cc1)"', sec)
+        self.assertIn('href="#ybp-bw1"', sec)
+        self.assert_ids_ok(page)
 
-    def test_landscape_block_of_real_panorama_is_found(self):
+    def test_css_is_scoped(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        css = self.styles(self.section(page))
+        for sel in self.selectors(css):
+            self.assertRegex(sel, r'^(html(\[data-theme="dark"\]|:not\(\[data-theme="light"\]\)) )?\.ybp([.\s,#\[:>]|$)', sel)
+        self.assertNotIn(":root", css)
+        self.assertNotRegex(css, r"(^|[}\s,])(body|html)\s*[{.,]")
+        # 図の CSS の変数は --ybp- で始まる(レポートの変数を読むのは、地の色をレポートに合わせる 1 か所だけ)
+        self.assertEqual(css.count("var(--bg)"), 1)
+        self.assertNotRegex(css.replace("var(--bg)", ""), r"(?<![\w-])--(?!ybp-)[A-Za-z]")
+        self.assertIn(".ybp{--ybp-bg:#f7f8fa;", css)
+        self.assertIn('@media (prefers-color-scheme: dark){html:not([data-theme="light"]) .ybp{--ybp-bg:#11161c}}', css)
+        self.assertIn('html[data-theme="dark"] .ybp{--ybp-bg:#11161c}', css)
+        self.assertIn(".ybp.narrow #ybp-vp svg{width:100%}", css)       # body.narrow → 包む要素の class
+        self.assertIn("@media (orientation:landscape) and (max-height:500px){.ybp.narrow .ctl{display:flex;gap:6px}", css)
+        self.assertTrue(css.startswith(".ybp{all:initial;display:block;position:relative}"))   # レポートから受け継がない
+
+    def test_background_follows_report(self):
+        # 地の色はレポートの --bg(ライト・ダーク・data-theme は report.css の決まりのまま)
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        self.assertIn(".ybp{background:var(--bg)!important}", self.styles(self.section(page)))
+        self.assertIn("--bg:", render_report.CSS_PATH.read_text(encoding="utf-8"))
+
+    def test_script_only_looks_inside_root(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        js = re.findall(r"<script>(.*?)</script>", self.section(page), re.S)
+        self.assertEqual(len(js), 1)
+        js = js[0]
+        self.assertTrue(js.startswith("(function(){var R=document.getElementById('ybp-root');if(!R)return;"))
+        rest = js.split("if(!R)return;", 1)[1]
+        for w in ("document.", "location", "window.innerWidth"):
+            self.assertNotIn(w, rest)
+        self.assertIn("R.querySelector('#ybp-p39data')", rest)
+        self.assertIn("R.querySelector('#ybp-vp svg')", rest)
+        self.assertIn("R.addEventListener('click'", rest)
+
+    def test_real_panorama_css_and_script_are_scoped(self):
+        # 展望図を作る側(panorama.draw)の本物の CSS とスクリプトでも、外を見る所・漏れる指定が残らない
         from panorama import draw
-        self.assertIn(render_report.PANORAMA_LANDSCAPE_MEDIA, draw.CSS39)
-        out = render_report._landscape_to_class("<style>" + draw.CSS39 + "</style>")
-        self.assertNotIn("orientation:landscape", out)
-        self.assertIn("html.yb-land body.narrow .ctl button small{display:none}", out)
-        self.assertEqual(out.count("{"), out.count("}"))
+        css = render_report.scope_panorama_css(draw.style(8) + draw.CSS39, {"frame", "vp", "hatch", "omitnote", "p39data"})
+        for sel in self.selectors(css):
+            self.assertRegex(sel, r'^(html(\[data-theme="dark"\]|:not\(\[data-theme="light"\]\)) )?\.ybp([.\s,#\[:>]|$)', sel)
+        self.assertNotRegex(css, r"(?<![\w-])--(?!ybp-)[A-Za-z]")
+        self.assertIn("@media (orientation:landscape) and (max-height:500px){", css)
+        self.assertEqual(css.count("{"), css.count("}"))
+        js = render_report.scope_panorama_js(draw.JS39, {"frame", "vp", "hatch", "omitnote", "p39data"})
+        rest = js.split("if(!R)return;", 1)[1]
+        for w in ("document.", "location", "window.innerWidth"):
+            self.assertNotIn(w, rest)
 
-    def test_background_matches_report(self):
-        css = render_report.CSS_PATH.read_text(encoding="utf-8")
-        light, dark = render_report.report_bg_colors(css)
-        self.assertEqual((light, dark), ("#eef1ee", "#121815"))
-        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
-        self.assertEqual(code, 0, err)
-        doc = self.srcdocs(page)[0]
-        self.assertIn(f"html,body{{background:{light}!important}}", doc)
-        # ダークの地の色は report.css と同じく、html に data-theme="light" があるときは使わない
-        self.assertIn('@media (prefers-color-scheme: dark){html:not([data-theme="light"]),'
-                      f'html:not([data-theme="light"]) body{{background:{dark}!important}}}}', doc)
+    def test_class_names_do_not_collide_with_report(self):
+        # 図の class(CSS の指定に出てくるもの)と包む要素の class は、レポートの CSS の class と重ならない
+        from panorama import draw
+        def classes(css):
+            return set(re.findall(r"\.([A-Za-z_　-鿿][\w　-鿿-]*)", re.sub(r"\{[^{}]*\}", "{}", css)))
+        report = classes(render_report.CSS_PATH.read_text(encoding="utf-8"))
+        pano = classes(draw.style(8) + draw.CSS39) | {"ybp", "narrow", "wide"}
+        self.assertEqual(sorted(report & pano), [])
 
-    def test_theme_attribute_is_passed_to_frame(self):
-        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
-        self.assertEqual(code, 0, err)
-        doc = self.srcdocs(page)[0]
-        parent = page.split("</iframe>")[1]
-        self.assertIn("theme:document.documentElement.getAttribute('data-theme')", parent)
-        self.assertIn("if(t==='light')de.setAttribute('data-theme','light')", doc)
+    def test_unexpected_page_fails(self):
+        code, _, err = self._render(["--panorama-viewpoint-html", "{V}"], view="<html><body>図</body></html>")
+        self.assertEqual(code, 2)
+        self.assertIn("展望図の HTML の形が想定と違います", err)
 
-    def test_no_height_message_when_override_fails(self):
-        # innerHeight の書き換えが効かないブラウザでは高さを送らない(枠は 460px のまま。循環させない)
-        js = render_report.PANORAMA_CHILD_JS
-        self.assertIn("OK=(window.innerHeight===VH);", js)
-        self.assertIn("if(!b||!OK)return;", js)
-        self.assertIn("height:460px", self._render(["--panorama-viewpoint-html", "{V}"])[1])
-
+    # ---- 注記・名前 ----
     @staticmethod
     def vstate(*texts):
         return "".join(f'<p class="vstate wxt" data-st="h{h:02d}"{"" if h == 8 else " style=" + chr(34) + "display:none" + chr(34)}>'
@@ -558,32 +638,14 @@ class TestPanorama(unittest.TestCase):
         self.assertIsNone(f("<p>なし</p>"))
 
     def test_viewer_state_in_note(self):
-        # 図の下の説明(視点の状態を含む)は枠の中で隠すので、見出しの下の注記に出す
+        # 図の下の説明(視点の状態を含む)は出さないので、見出しの下の注記に出す
         view = self.VIEW.replace("</main>", self.vstate("眼下に雲海の見込み", "とくになし", "とくになし", "とくになし") + "</main>")
         code, page, err = self._render(["--panorama-viewpoint-html", "{V}"], view=view)
         self.assertEqual(code, 0, err)
         note = page.split('<div class="section" id="panorama">', 1)[1].split("</div></div>", 1)[0]
         self.assertIn("視点の状態: 6時 眼下に雲海の見込み/8・10・12時 とくになし。", note)
         code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])     # 読めないときは足さない
-        self.assertNotIn("視点の状態:", page.split("<iframe", 1)[0])
-
-    def test_messages_are_not_lost_when_frame_loads_first(self):
-        # 枠の中が先に読み終わって高さの知らせを取りこぼしても、親の知らせを受けたら送り直す
-        self.assertIn("last=0;post()", render_report.PANORAMA_CHILD_JS)
-        # 親は読み終わりと data-theme の変化でも知らせ直す
-        js = render_report.PANORAMA_PARENT_JS
-        self.assertIn("document.addEventListener('DOMContentLoaded',all)", js)
-        self.assertIn("attributeFilter:['data-theme']", js)
-
-    def test_srcdoc_is_single_quoted_and_short(self):
-        # srcdoc は ' で囲み、& と ' と改行だけを文字参照にする(< > " はそのまま)
-        self.assertEqual(render_report.srcdoc_value("<a href=\"x\">'&amp;'</a>\r\n"),
-                         "<a href=\"x\">&#39;&amp;amp;&#39;</a>&#13;&#10;")
-        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
-        self.assertEqual(code, 0, err)
-        self.assertIn("srcdoc='<!doctype html>", page)
-        self.assertNotIn("srcdoc=\"", page)
-        self.assertNotIn("&lt;", page.split("srcdoc='", 1)[1].split("'", 1)[0])
+        self.assertNotIn("視点の状態:", page.split('id="ybp-root"', 1)[0])
 
     def test_viewpoint_name_is_not_double_escaped(self):
         view = self.VIEW.replace("雷岩", "雷岩 &amp; 東")
@@ -594,7 +656,8 @@ class TestPanorama(unittest.TestCase):
     def test_works_with_spec_json(self):
         code, page, err = self._render(["--panorama-html", "{S}"], [os.path.join(EXAMPLES, "diagnosis.json")])
         self.assertEqual(code, 0, err)
-        self.assertEqual(page.count("<iframe"), 1)
+        self.assertEqual(page.count('id="ybp-root"'), 1)
+        self.assert_ids_ok(page)
 
     def test_missing_file_fails(self):
         code, _, err = self._render(["--panorama-html", "no_such_panorama.html"])

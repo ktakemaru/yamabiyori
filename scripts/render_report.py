@@ -131,93 +131,123 @@ def score_level(score):
 
 
 # ---------- 展望図の埋め込み ----------
-# 展望図(mountain_weather_detail.py --panorama の HTML)は描き方に手を入れず、iframe の srcdoc に入れる。
-# 埋め込み用の写しにだけ、head の終わりに下の CSS・JS を足す(展望図のファイルと panorama/ の出力は変えない)。
-# 枠の高さは、中身(図と時刻・方角のボタン)の高さを postMessage で受けて合わせる。スクリプトが動かないときの高さ:
-PANORAMA_IFRAME_HEIGHT = 460
-PANORAMA_MSG = "yamabiyori-panorama"
-# 展望図の、横向きの画面向けの CSS の塊。枠の中では枠の縦横で決まってしまうので、レポートの画面の縦横で決まるよう
-# class(html.yb-land)の条件に書き換える(枠の高さを中身に合わせると、縦向きの画面でも枠が横長になるため)。
-PANORAMA_LANDSCAPE_MEDIA = "@media (orientation:landscape) and (max-height:500px){"
-# 展望図は図の大きさを window.innerHeight で決める。枠の中ではそれが枠の高さになり、枠を中身に合わせると
-# 循環するので、レポートの画面の高さを返すようにする。図の下の説明(視点の状態・題・凡例など)は出さない。
-# 書き換えが効かないブラウザでは高さを送らない(枠は PANORAMA_IFRAME_HEIGHT のまま、中を縦に送る形。循環はしない)。
-# レポートの html に data-theme="light" があれば枠の中にも付ける(report.css と同じく、ダークの地の色を止めるため)。
-PANORAMA_CHILD_JS = r"""(function(){
-var K='%(msg)s',VH=0,de=document.documentElement,last=0,OK=false;
-try{VH=window.parent.innerHeight||0}catch(e){}
-if(!VH)VH=(window.screen&&screen.height)||700;
-try{Object.defineProperty(window,'innerHeight',{configurable:true,get:function(){return VH}})}catch(e){}
-OK=(window.innerHeight===VH);
-function theme(t){if(t==='light')de.setAttribute('data-theme','light');else de.removeAttribute('data-theme')}
-try{theme(window.parent.document.documentElement.getAttribute('data-theme'))}catch(e){}
-function land(){var h=OK?VH:window.innerHeight;de.classList.toggle('yb-land',(window.innerWidth||0)>h&&h<=500)}
-land();window.addEventListener('resize',land);
-function post(){var b=document.body;if(!b||!OK)return;var h=Math.ceil(b.getBoundingClientRect().height);
- if(h>0&&h!==last){last=h;try{window.parent.postMessage({type:K+'-height',h:h},'*')}catch(e){}}}
-window.addEventListener('message',function(e){var d=e.data;if(!d||d.type!==K+'-vh'||e.source!==window.parent)return;
- if('theme' in d)theme(d.theme);
- var v=+d.vh;if(v>0&&v!==VH){VH=v;window.dispatchEvent(new Event('resize'))}last=0;post()});
-window.addEventListener('load',function(){post();if(window.ResizeObserver)new ResizeObserver(post).observe(document.body)});
-})();"""
-PANORAMA_CHILD_CSS = ("main.p39>#frame~*{display:none!important}main.p39{padding:0 0 1px!important}#frame{margin:0!important}"
-                      "html,body{background:%(light)s!important}"
-                      '@media (prefers-color-scheme: dark){html:not([data-theme="light"]),'
-                      'html:not([data-theme="light"]) body{background:%(dark)s!important}}')
-PANORAMA_PARENT_JS = r"""(function(){
-var K='%(msg)s',f=[].slice.call(document.querySelectorAll('iframe.panorama')),t;
-function send(x){try{x.contentWindow.postMessage({type:K+'-vh',vh:window.innerHeight,
- theme:document.documentElement.getAttribute('data-theme')},'*')}catch(e){}}
-function all(){f.forEach(send)}
-f.forEach(function(x){x.addEventListener('load',function(){send(x)});send(x)});
-window.addEventListener('message',function(e){var d=e.data;if(!d||d.type!==K+'-height')return;
- f.forEach(function(x){if(x.contentWindow===e.source){var h=Math.round(+d.h);if(h>0&&h<20000)x.style.height=h+'px'}})});
-window.addEventListener('resize',function(){clearTimeout(t);t=setTimeout(all,120)});
-document.addEventListener('DOMContentLoaded',all);window.addEventListener('load',all);
-if(window.MutationObserver)new MutationObserver(all).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
-})();""" % {"msg": PANORAMA_MSG}
+# 展望図(mountain_weather_detail.py --panorama の HTML)は描き方に手を入れず、レポートのページに直接入れる
+# (iframe・srcdoc は使わない。artifact の共有の審査は、別のページを srcdoc に入れた形を通さなかったため)。
+# 展望図の CSS・id・CSS の変数・スクリプトは、混ざらないようにレポート側で機械的に書き換える(展望図のファイルは変えない):
+# - 包む要素 <div class="ybp" id="ybp-root"> の中だけに効くよう、CSS の指定の頭に .ybp を付ける
+#   (:root・html・body は包む要素に置き換える。body の class(narrow / wide)も包む要素に付ける)。
+#   包む要素は all:initial にして、レポートから受け継ぐ文字の大きさなどを切る(iframe の中と同じ始まり)。
+# - id は頭に ybp- を付ける(url(#…)・href="#…"・CSS の #…・スクリプトの中も)。CSS の変数は --ybp- にする。
+# - スクリプトは包む要素だけを相手にする(document.querySelector → 包む要素の querySelector など。図の幅は包む要素の幅)。
+PANORAMA_ROOT_ID = "ybp-root"
+PANORAMA_SCOPE = ".ybp"
+PANORAMA_ID_PREFIX = "ybp-"
+PANORAMA_VAR_PREFIX = "--ybp-"
+# 包む要素の始まり(レポートから受け継ぐものを切る)と、図の下の説明を出さない・地の色をレポートに合わせる指定
+PANORAMA_BASE_CSS = ".ybp{all:initial;display:block;position:relative}"   # position: 図のスクリプトが測る offsetTop の基準を包む要素にする(iframe の中と同じ)
+PANORAMA_EXTRA_CSS = (".ybp main.p39>#ybp-frame~*{display:none!important}.ybp main.p39{padding:0 0 1px!important}"
+                      ".ybp #ybp-frame{margin:0!important}.ybp{background:var(--bg)!important}")
 
 
-def report_bg_colors(css_text):
-    """report.css の地の色(--bg)。返り値: (ライト, ダーク)。"""
-    found = re.findall(r"--bg:\s*(#[0-9A-Fa-f]{3,8})", css_text)
-    if len(found) < 2:
-        raise SpecError("report.css から地の色(--bg のライトとダーク)を読めません")
-    return found[0], found[1]
+def _split_css(css):
+    """CSS を [(指定, 中身)] に分ける。@media は (条件, [(指定, 中身)])。"""
+    out, i, n = [], 0, len(css)
+    while i < n:
+        j = css.find("{", i)
+        if j < 0:
+            break
+        head = css[i:j].strip()
+        depth, k = 1, j + 1
+        while k < n and depth:
+            depth += {"{": 1, "}": -1}.get(css[k], 0)
+            k += 1
+        body = css[j + 1:k - 1]
+        out.append((head, _split_css(body) if head.startswith("@") else body))
+        i = k
+    return out
 
 
-def _landscape_to_class(page):
-    """展望図の、横向きの画面向けの @media の塊を html.yb-land の条件に書き換える。塊が無ければそのまま。"""
-    at = page.find(PANORAMA_LANDSCAPE_MEDIA)
-    if at < 0:
-        return page
-    i, depth = at + len(PANORAMA_LANDSCAPE_MEDIA), 1
-    j = i
-    while j < len(page) and depth:
-        depth += {"{": 1, "}": -1}.get(page[j], 0)
-        j += 1
-    inner = page[i:j - 1]
-    rules = re.findall(r"([^{}]+)\{([^{}]*)\}", inner)
-    out = "".join(",".join("html.yb-land " + sel.strip() for sel in sels.split(",")) + "{" + decl + "}"
-                  for sels, decl in rules)
-    return page[:at] + out + page[j:]
+def _scope_selector(sel):
+    """展望図の CSS の指定 1 つを、包む要素の中だけに効く形にする。"""
+    sel = sel.strip()
+    s = PANORAMA_SCOPE
+    m = re.match(r':root(\[data-theme="[a-z]+"\]|:not\(\[data-theme="[a-z]+"\]\))?(.*)$', sel)
+    if m:
+        theme = (m.group(1) or "")
+        return (f"html{theme} {s}" if theme else s) + m.group(2)
+    m = re.match(r"(?:html|body)((?:[.#\[][^\s>+~]*)?)(.*)$", sel)
+    if m and re.match(r"(html|body)(?![\w-])", sel):
+        return s + m.group(1) + m.group(2)
+    if sel == "*":
+        return f"{s},{s} *"
+    return f"{s} {sel}"
 
 
-def panorama_embed_page(page, bg):
-    """iframe に入れる展望図の写し(元の HTML の head の終わりに CSS・JS を足し、横向きの CSS を書き換えたもの)。"""
-    add = (f"<style>{PANORAMA_CHILD_CSS % {'light': bg[0], 'dark': bg[1]}}</style>"
-           f"<script>{PANORAMA_CHILD_JS % {'msg': PANORAMA_MSG}}</script>")
-    page = _landscape_to_class(page)
-    at = page.find("</head>")
-    return page[:at] + add + page[at:] if at >= 0 else add + page
+def scope_panorama_css(css, ids):
+    """展望図の CSS を、包む要素の中だけに効く形に書き換える(指定の頭に .ybp、id と変数に前置き)。"""
+    def rules(items):
+        out = []
+        for head, body in items:
+            if isinstance(body, list):
+                out.append(head + "{" + rules(body) + "}")
+            else:
+                out.append(",".join(_scope_selector(x) for x in head.split(",")) + "{" + body.strip() + "}")
+        return "".join(out)
+    text = rules(_split_css(re.sub(r"/\*.*?\*/", "", css, flags=re.S)))
+    return _prefix_ids_css(_prefix_vars(text), ids)
 
 
-def srcdoc_value(page):
-    """srcdoc 属性の値(' で囲む前提)。& と ' だけを文字参照にする(" < > はそのまま。" で囲んで全部を文字参照に
-    すると、展望図では約 15% 大きくなる)。改行も文字参照にする(出力時の改行の変換で CR が増えたり、属性値の
-    改行の扱いで中身が変わったりしないように)。"""
-    return (page.replace("&", "&amp;").replace("'", "&#39;")
-            .replace("\r", "&#13;").replace("\n", "&#10;"))
+def _prefix_vars(text):
+    return re.sub(r"(?<![\w-])--(?=[A-Za-z])", PANORAMA_VAR_PREFIX, text)
+
+
+def _prefix_ids_css(text, ids):
+    text = text.replace("url(#", "url(#" + PANORAMA_ID_PREFIX)
+    for i in sorted(ids, key=len, reverse=True):
+        text = re.sub(rf"#{re.escape(i)}(?![\w-])", "#" + PANORAMA_ID_PREFIX + i, text)
+    return text
+
+
+def scope_panorama_js(js, ids):
+    """展望図のスクリプトを、包む要素(R)だけを相手にする形に書き換える。"""
+    js = re.sub(r"document\.getElementById\('([\w-]+)'\)", lambda m: f"R.querySelector('#{PANORAMA_ID_PREFIX}{m.group(1)}')", js)
+    for a, b in (("document.querySelectorAll(", "R.querySelectorAll("), ("document.querySelector(", "R.querySelector("),
+                 ("document.addEventListener(", "R.addEventListener("), ("document.documentElement.clientWidth", "R.clientWidth"),
+                 ("document.body", "R"), ("window.innerWidth", "R.clientWidth"), ("location.hash", "''")):
+        js = js.replace(a, b)
+    for i in sorted(ids, key=len, reverse=True):
+        js = re.sub(rf"(['\" ])#{re.escape(i)}(?![\w-])", rf"\1#{PANORAMA_ID_PREFIX}{i}", js)
+    if "document." in js or "location" in js:
+        raise SpecError("展望図のスクリプトに、包む要素の外を見る所が残っています")
+    head = "(function(){"
+    if not js.lstrip().startswith(head):
+        raise SpecError("展望図のスクリプトの形が想定と違います")
+    js = js.lstrip()
+    return (f"(function(){{var R=document.getElementById('{PANORAMA_ROOT_ID}');if(!R)return;\n"
+            f"{js}\n}})();")
+
+
+def panorama_inline(page):
+    """展望図の HTML を、レポートに直接入れる形(CSS・本文・スクリプト)にする。返り値: HTML の文字列。"""
+    styles = re.findall(r"<style>(.*?)</style>", page, re.S)
+    body_m = re.search(r"<body([^>]*)>(.*)</body>", page, re.S)
+    if not styles or not body_m:
+        raise SpecError("展望図の HTML の形が想定と違います(style・body が見つかりません)")
+    cls = re.search(r'class="([^"]*)"', body_m.group(1))
+    body = body_m.group(2)
+    scripts = re.findall(r"<script>(.*?)</script>", body, re.S)
+    if len(scripts) != 1:
+        raise SpecError("展望図の HTML の形が想定と違います(スクリプトが 1 つではありません)")
+    body = re.sub(r"<script>.*?</script>", "", body, flags=re.S)
+    ids = set(re.findall(r'\bid="([^"]+)"', body))
+    body = re.sub(r'\bid="([^"]+)"', lambda m: f'id="{PANORAMA_ID_PREFIX}{m.group(1)}"', body)
+    body = body.replace("url(#", "url(#" + PANORAMA_ID_PREFIX).replace('href="#', 'href="#' + PANORAMA_ID_PREFIX)
+    body = re.sub(r'style="([^"]*)"', lambda m: 'style="' + _prefix_vars(m.group(1)) + '"', body)
+    css = PANORAMA_BASE_CSS + "".join(scope_panorama_css(x, ids) for x in styles) + PANORAMA_EXTRA_CSS
+    js = scope_panorama_js(scripts[0], ids)
+    root_cls = "ybp" + (" " + cls.group(1) if cls and cls.group(1) else "")
+    return (f"<style>{css}</style><div class=\"{root_cls}\" id=\"{PANORAMA_ROOT_ID}\" style=\"margin:0 0 16px\">{body}</div>"
+            f"<script>{js}</script>")
 
 
 WEEKDAYS = "月火水木金土日"
@@ -506,18 +536,15 @@ class Renderer:
         return f"<td{cls_attr}>{rich(text)}{sub}{tag}{gold}</td>"
 
     # ---------- 展望図 ----------
-    def panorama_section(self, css_text):
-        """展望の節(1枚だけ)。展望図の描き方は写さず、iframe の srcdoc に入れる(写しに埋め込み用の CSS・JS を足す)。"""
+    def panorama_section(self):
+        """展望の節(1枚だけ)。展望図の描き方は写さず、CSS・本文・スクリプトをレポートに直接入れる(panorama_inline)。"""
         p = self.panorama
         when = f"{p['day']}の予報にもとづく" if p.get("day") else "予報にもとづく"
         vstate = f"視点の状態: {esc(p['vstate'])}。" if p.get("vstate") else ""
-        page = panorama_embed_page(p["page"], report_bg_colors(css_text))
-        doc = srcdoc_value(page)
         return (
             f'<div class="section" id="panorama"><div class="section-head"><h2>{esc(p["heading"])}</h2>'
             f'<div class="note">{when}展望図(目安)。時刻のボタンで雲が替わり、図を横になぞると方角が動きます。{vstate}</div></div>'
-            f'<iframe class="panorama" title="{esc(p["heading"])}の展望図" srcdoc=\'{doc}\' '
-            f'style="display:block;width:100%;height:{PANORAMA_IFRAME_HEIGHT}px;border:0;margin:0 0 16px"></iframe></div>'
+            f'{panorama_inline(p["page"])}</div>'
         )
 
     @staticmethod
@@ -556,13 +583,11 @@ class Renderer:
         blocks = s.get("blocks", [])
         if self.panorama:
             at = self.panorama_position(blocks)
-            body = self.render_blocks(blocks[:at]) + self.panorama_section(css) + self.render_blocks(blocks[at:])
+            body = self.render_blocks(blocks[:at]) + self.panorama_section() + self.render_blocks(blocks[at:])
         else:
             body = self.render_blocks(blocks)
         footer = "".join(f"<p>{rich(p)}</p>" for p in (s["footer"] if isinstance(s.get("footer"), list) else [s.get("footer", "")]) if p)
         script = f"<script>{TAB_JS}</script>" if self.has_tabs else ""
-        if self.panorama:
-            script += f"<script>{PANORAMA_PARENT_JS}</script>"
         return (
             f'<!doctype html><html lang="ja" data-mode="{mode}"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
