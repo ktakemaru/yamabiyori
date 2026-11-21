@@ -155,5 +155,31 @@ class TestStops(unittest.TestCase):
         self.assertIn("stop{stop-color:#fff}", draw.style(3))
 
 
+class TestPathSeparators(unittest.TestCase):
+    """雲の輪郭(clouds.path_d)の数の区切りを省く。点は同じ。"""
+
+    def test_separators(self):
+        self.assertEqual(svgfmt.join_nums(["1.1", "-.2", ".3", ".4", "5", ".6", "7"]), "1.1-.2.3.4 5 .6 7")
+
+    def test_same_points(self):
+        import math
+        from panorama import clouds
+        pts = [(100 + i * 1.13, 50 + 0.4 * math.sin(i)) for i in range(300)] + [(440, 60), (100, 60)]
+        d = clouds.path_d(pts)
+        m = re.match(r"M([-\d.]+),([-\d.]+)l(.*)Z$", d)
+        nums = re.findall(r"-?\d*\.\d+|-?\d+", m.group(3))
+        x, y = round(float(m.group(1)) * 10), round(float(m.group(2)) * 10)
+        got = [(x, y)]
+        for i in range(0, len(nums), 2):
+            x += round(float(nums[i]) * 10)
+            y += round(float(nums[i + 1]) * 10)
+            got.append((x, y))
+        want = []
+        for p in [(round(a * 10), round(b * 10)) for a, b in pts]:
+            if not want or want[-1] != p:
+                want.append(p)
+        self.assertEqual(got, want)
+
+
 if __name__ == "__main__":
     unittest.main()

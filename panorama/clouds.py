@@ -503,20 +503,21 @@ def _stops(cols, full, a0, a1, step):
     return stops
 
 def path_d(pts) -> str:
-    """閉じた輪郭(段階3.6 の path_d と同じ形)を、相対座標(l)で短く書く。点は 0.1 画素に丸めてから差を取る(ずれがたまらない)。"""
+    """閉じた輪郭(段階3.6 の path_d と同じ形)を、相対座標(l)で短く書く。点は 0.1 画素に丸めてから差を取る(ずれがたまらない)。
+    数の区切りは、要らない所(次の数が - で始まる、前の数に . があって次が . で始まる)では省く。"""
     if not pts:
         return ""
     q = [(round(x * 10), round(y * 10)) for x, y in pts]
     out = [f"M{q[0][0] / 10:.1f},{q[0][1] / 10:.1f}l"]
     prev = q[0]
-    segs = []
+    nums = []
     for x, y in q[1:]:
         dx, dy = x - prev[0], y - prev[1]
         prev = (x, y)
         if dx == 0 and dy == 0:
             continue
-        segs.append(f"{_n(dx)},{_n(dy)}")
-    return out[0] + " ".join(segs) + "Z"
+        nums += [_n(dx), _n(dy)]
+    return out[0] + svgfmt.join_nums(nums) + "Z"
 
 def _n(v10):
     """0.1 単位の整数を短い文字に(-0.5 → -.5、1.0 → 1)。"""
