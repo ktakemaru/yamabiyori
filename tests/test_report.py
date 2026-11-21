@@ -359,5 +359,311 @@ class TestBaseline(unittest.TestCase):
                 render(["--out", "x.html"])
 
 
+class TestPanorama(unittest.TestCase):
+    """--panorama-html / --panorama-viewpoint-html: 展望図を1枚だけ、総評(と注意)のあとに、iframe を使わず直接入れる。"""
+
+    CSS = (':root{--bg:#f7f8fa;--fg:#1d2733;--B1:hsl(208 29% 38%)}\n'
+           '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#11161c}}\n'
+           ':root[data-theme="dark"]{--bg:#11161c}\n'
+           "*{box-sizing:border-box}\nbody{margin:0;background:var(--bg);color:var(--fg)}\n"
+           "main{max-width:1100px;margin:0 auto;padding:16px}\n"
+           "path.near{fill:url(#hatch)} path.B1{fill:var(--B1)}\n#frame{position:relative}\n"
+           "body.narrow #vp svg{width:100%}\nbody.wide .ctl{display:flex}\n"
+           "@media (orientation:landscape) and (max-height:500px){\n body.narrow .ctl{display:flex;gap:6px}\n"
+           " main.p39{padding:4px 8px 12px}\n}\n")
+    JS = ("(function(){\nvar D=JSON.parse(document.getElementById('p39data').textContent);\n"
+          "var svg=document.querySelector('#vp svg'),vp=document.getElementById('vp'),body=document.body;\n"
+          "var W=window.innerWidth||document.documentElement.clientWidth;var h=location.hash;\n"
+          "document.querySelectorAll('.stbar button[data-st]');document.addEventListener('click',function(){});\n"
+          "window.__p39=D;\n})();\n")
+    SUMMIT = ('<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>大菩薩嶺からの展望と雲(2026-11-22)</title>'
+              '<style>' + CSS + '</style></head><body class="narrow"><main class="p39">\n<div class="ctl"><div class="stbar">'
+              '<button data-st="h08">8時</button></div></div><div id="frame"><div id="vp"><svg><defs>'
+              '<pattern id="hatch"></pattern><clipPath id="cc1"><circle/></clipPath></defs><g id="bw1">山頂の図</g>'
+              '<path d="M0 0" class="near"/><path d="M0 0" class="B1" clip-path="url(#cc1)"/><use href="#bw1"/></svg></div>'
+              '<div class="credit39">出典</div></div>'
+              '<p class="intro">視点: 山頂(国土地理院の山頂の点)。</p>\r\n<script type="application/json" id="p39data">{"a":1}</script>'
+              '<script>' + JS + '</script></main></body></html>')
+    VIEW = (SUMMIT.replace("大菩薩嶺からの", "大菩薩嶺・雷岩からの").replace("山頂の図", "展望地の図")
+            .replace("視点: 山頂(国土地理院の山頂の点)。",
+                     "視点: 雷岩(OpenStreetMap の展望地。山頂の南 276m)。'x' &amp;"))
+    NONAME = VIEW.replace("雷岩", "名前のない展望地")
+    COMMENTARY = {"overview": "総評の文。", "alert": {"heading": "注意", "body": "注意の文。"}}
+
+    def _write(self, d, name, text):
+        path = os.path.join(d, name)
+        with open(path, "wb") as f:
+            f.write(text.encode("utf-8"))
+        return path
+
+    def _render(self, extra, base=None, commentary=True, view=None):
+        """extra の {S}・{V} を山頂・展望地の仮の展望図のパスに置き換えて変換する。"""
+        with tempfile.TemporaryDirectory() as d:
+            s = self._write(d, "m.html", self.SUMMIT)
+            v = self._write(d, "mv.html", view or self.VIEW)
+            c = self._write(d, "c.json", json.dumps(self.COMMENTARY, ensure_ascii=False))
+            args = [a.replace("{S}", s).replace("{V}", v) for a in extra]
+            o = os.path.join(d, "o.html")
+            if base is None:
+                base = ["--data", os.path.join(FIX, "diagnosis.json")] + (["--commentary", c] if commentary else [])
+            code, _, err = render(base + ["--out", o] + args)
+            page = ""
+            if code == 0:
+                with open(o, encoding="utf-8", newline="") as f:
+                    page = f.read()
+        return code, page, err
+
+    @staticmethod
+    def section(page):
+        """展望の節(直接入れた CSS・本文・スクリプトを含む)。無ければ ""。"""
+        i = page.find('<div class="section" id="panorama">')
+        if i < 0:
+            return ""
+        j = page.find('<div class="section"', i + 10)
+        return page[i:j if j > 0 else len(page)]
+
+    @staticmethod
+    def styles(sec):
+        return "".join(re.findall(r"<style>(.*?)</style>", sec, re.S))
+
+    @staticmethod
+    def selectors(css):
+        """CSS の指定(@media の中も)を全部取り出す。"""
+        out = []
+        for head in re.findall(r"([^{}]+)\{", css):
+            head = head.strip()
+            if not head.startswith("@"):
+                out += [x.strip() for x in head.split(",")]
+        return out
+
+    def assert_ids_ok(self, page):
+        ids = re.findall(r'\bid="([^"]+)"', page)
+        dup = sorted({i for i in ids if ids.count(i) > 1})
+        self.assertEqual(dup, [], "同じ id が 2 つ以上ある")
+        refs = set(re.findall(r"url\(#([^)]+)\)", page)) | set(re.findall(r'href="#([^"]+)"', page))
+        self.assertEqual(sorted(refs - set(ids)), [], "指す先の無い url(#…)・href=\"#…\" がある")
+
+    # ---- 出す・出さない、位置、見出し ----
+    def test_without_arguments_no_section(self):
+        code, page, err = self._render([])
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("からの展望", page)
+        self.assertNotIn("ybp", page)  # 展望図の CSS・スクリプトも足さない
+
+    def test_without_panorama_output_is_unchanged(self):
+        spec = load(os.path.join(EXAMPLES, "diagnosis.json"))
+        a = render_report.Renderer(copy.deepcopy(spec), EXAMPLES, False).render()
+        b = render_report.Renderer(copy.deepcopy(spec), EXAMPLES, False, None).render()
+        self.assertEqual(a, b)
+
+    def test_summit_only(self):
+        code, page, err = self._render(["--panorama-html", "{S}"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("<h2>山頂からの展望</h2>", page)
+        self.assertIn("山頂の図", self.section(page))
+        self.assertEqual(page.count('id="ybp-root"'), 1)
+
+    def test_both_embeds_only_viewpoint(self):
+        code, page, err = self._render(["--panorama-html", "{S}", "--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(page.count('id="ybp-root"'), 1)
+        self.assertIn("展望地の図", page)
+        self.assertNotIn("山頂の図", page)
+        self.assertNotIn("山頂からの展望", page)
+
+    def test_viewpoint_only_is_allowed(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(page.count('id="ybp-root"'), 1)
+
+    def test_heading_has_viewpoint_name(self):
+        code, page, err = self._render(["--panorama-html", "{S}", "--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("<h2>雷岩(展望地)からの展望</h2>", page)  # 読み仮名は付けない
+        self.assertIn("11/22(日)の予報にもとづく展望図", page)
+
+    def test_heading_without_viewpoint_name(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"], view=self.NONAME)
+        self.assertEqual(code, 0, err)
+        self.assertIn("<h2>展望地からの展望</h2>", page)
+
+    def test_section_after_overview_and_alert(self):
+        # 順番は 総評 → 注意 → 展望(安全に関わる注意を図の下に回さない)
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        i_over, i_alert = page.index("総評の文。"), page.index("注意の文。")
+        i_pano = page.index('<div class="section" id="panorama">')
+        self.assertLess(i_over, i_alert)
+        self.assertLess(i_alert, i_pano)
+        self.assertNotIn('class="section', page[i_over:i_pano])  # 総評・注意と展望の節のあいだに、ほかの節が無い
+        self.assertLess(i_pano, page.index("気圧配置と実況"))
+
+    def test_section_right_after_overview_without_alert(self):
+        with tempfile.TemporaryDirectory() as d:
+            c = self._write(d, "c.json", json.dumps({"overview": "総評の文。"}, ensure_ascii=False))
+            code, page, err = self._render(["--panorama-viewpoint-html", "{V}"],
+                                           base=["--data", os.path.join(FIX, "diagnosis.json"), "--commentary", c])
+        self.assertEqual(code, 0, err)
+        i_over, i_pano = page.index("総評の文。"), page.index('<div class="section" id="panorama">')
+        self.assertLess(i_over, i_pano)
+        self.assertNotIn('class="section', page[i_over:i_pano])
+
+    def test_position_rule(self):
+        pos = render_report.Renderer.panorama_position
+        ov = {"type": "analysis", "items": [{"tag": "総評"}]}
+        self.assertEqual(pos([{"type": "hero"}, {"type": "summary"}, ov, {"type": "alert"}, {"type": "section"}]), 4)
+        self.assertEqual(pos([{"type": "hero"}, {"type": "summary"}, ov, {"type": "section"}, {"type": "alert"}]), 3)
+        self.assertEqual(pos([{"type": "hero"}, {"type": "summary"}, {"type": "alert"}]), 2)   # 総評が無いときは今のまま
+
+    def test_section_without_overview_follows_summary(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"], commentary=False)
+        self.assertEqual(code, 0, err)
+        i_sum, i_pano = page.index('<p class="summary">'), page.index('<div class="section" id="panorama">')
+        self.assertLess(i_sum, i_pano)
+        self.assertNotIn('class="section', page[i_sum:i_pano])
+
+    # ---- 直接入れる形 ----
+    def test_no_iframe_srcdoc_template(self):
+        # 共有の審査を通らなかった形(別のページを srcdoc に入れる)と、それに近い仕組みを使わない
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        low = page.lower()
+        for w in ("<iframe", "srcdoc", "<template", "<object", "<embed", "document.write", "new function", "eval(",
+                  "postmessage", "defineproperty", "blob:", "data:text/html"):
+            self.assertNotIn(w, low)
+        self.assertNotIn("<!doctype", low[low.index('<div class="section" id="panorama">'):])
+        self.assertEqual(page.lower().count("<body"), 1)
+
+    def test_content_kept_and_captions_hidden(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        sec = self.section(page)
+        self.assertIn('<div class="ybp narrow" id="ybp-root"', sec)   # body の class は包む要素に
+        self.assertIn('<div id="ybp-frame">', sec)
+        self.assertIn("展望地の図", sec)
+        self.assertIn("出典", sec)                                    # 出典は図の枠の中に残る
+        self.assertIn(".ybp main.p39>#ybp-frame~*{display:none!important}", self.styles(sec))   # 図の下の説明は出さない
+        self.assertIn('<script type="application/json" id="ybp-p39data">{"a":1}</script>', sec)
+
+    def test_ids_are_prefixed_unique_and_resolve(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        sec = self.section(page)
+        for i in re.findall(r'\bid="([^"]+)"', sec)[1:]:      # 最初は節の id(panorama)
+            self.assertTrue(i.startswith("ybp-"), i)
+        self.assertIn('fill:url(#ybp-hatch)', self.styles(sec))
+        self.assertIn('clip-path="url(#ybp-cc1)"', sec)
+        self.assertIn('href="#ybp-bw1"', sec)
+        self.assert_ids_ok(page)
+
+    def test_css_is_scoped(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        css = self.styles(self.section(page))
+        for sel in self.selectors(css):
+            self.assertRegex(sel, r'^(html(\[data-theme="dark"\]|:not\(\[data-theme="light"\]\)) )?\.ybp([.\s,#\[:>]|$)', sel)
+        self.assertNotIn(":root", css)
+        self.assertNotRegex(css, r"(^|[}\s,])(body|html)\s*[{.,]")
+        # 図の CSS の変数は --ybp- で始まる(レポートの変数を読むのは、地の色をレポートに合わせる 1 か所だけ)
+        self.assertEqual(css.count("var(--bg)"), 1)
+        self.assertNotRegex(css.replace("var(--bg)", ""), r"(?<![\w-])--(?!ybp-)[A-Za-z]")
+        self.assertIn(".ybp{--ybp-bg:#f7f8fa;", css)
+        self.assertIn('@media (prefers-color-scheme: dark){html:not([data-theme="light"]) .ybp{--ybp-bg:#11161c}}', css)
+        self.assertIn('html[data-theme="dark"] .ybp{--ybp-bg:#11161c}', css)
+        self.assertIn(".ybp.narrow #ybp-vp svg{width:100%}", css)       # body.narrow → 包む要素の class
+        self.assertIn("@media (orientation:landscape) and (max-height:500px){.ybp.narrow .ctl{display:flex;gap:6px}", css)
+        self.assertTrue(css.startswith(".ybp{all:initial;display:block;position:relative}"))   # レポートから受け継がない
+
+    def test_background_follows_report(self):
+        # 地の色はレポートの --bg(ライト・ダーク・data-theme は report.css の決まりのまま)
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        self.assertIn(".ybp{background:var(--bg)!important}", self.styles(self.section(page)))
+        self.assertIn("--bg:", render_report.CSS_PATH.read_text(encoding="utf-8"))
+
+    def test_script_only_looks_inside_root(self):
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        js = re.findall(r"<script>(.*?)</script>", self.section(page), re.S)
+        self.assertEqual(len(js), 1)
+        js = js[0]
+        self.assertTrue(js.startswith("(function(){var R=document.getElementById('ybp-root');if(!R)return;"))
+        rest = js.split("if(!R)return;", 1)[1]
+        for w in ("document.", "location", "window.innerWidth"):
+            self.assertNotIn(w, rest)
+        self.assertIn("R.querySelector('#ybp-p39data')", rest)
+        self.assertIn("R.querySelector('#ybp-vp svg')", rest)
+        self.assertIn("R.addEventListener('click'", rest)
+
+    def test_real_panorama_css_and_script_are_scoped(self):
+        # 展望図を作る側(panorama.draw)の本物の CSS とスクリプトでも、外を見る所・漏れる指定が残らない
+        from panorama import draw
+        css = render_report.scope_panorama_css(draw.style(8) + draw.CSS39, {"frame", "vp", "hatch", "omitnote", "p39data"})
+        for sel in self.selectors(css):
+            self.assertRegex(sel, r'^(html(\[data-theme="dark"\]|:not\(\[data-theme="light"\]\)) )?\.ybp([.\s,#\[:>]|$)', sel)
+        self.assertNotRegex(css, r"(?<![\w-])--(?!ybp-)[A-Za-z]")
+        self.assertIn("@media (orientation:landscape) and (max-height:500px){", css)
+        self.assertEqual(css.count("{"), css.count("}"))
+        js = render_report.scope_panorama_js(draw.JS39, {"frame", "vp", "hatch", "omitnote", "p39data"})
+        rest = js.split("if(!R)return;", 1)[1]
+        for w in ("document.", "location", "window.innerWidth"):
+            self.assertNotIn(w, rest)
+
+    def test_class_names_do_not_collide_with_report(self):
+        # 図の class(CSS の指定に出てくるもの)と包む要素の class は、レポートの CSS の class と重ならない
+        from panorama import draw
+        def classes(css):
+            return set(re.findall(r"\.([A-Za-z_　-鿿][\w　-鿿-]*)", re.sub(r"\{[^{}]*\}", "{}", css)))
+        report = classes(render_report.CSS_PATH.read_text(encoding="utf-8"))
+        pano = classes(draw.style(8) + draw.CSS39) | {"ybp", "narrow", "wide"}
+        self.assertEqual(sorted(report & pano), [])
+
+    def test_unexpected_page_fails(self):
+        code, _, err = self._render(["--panorama-viewpoint-html", "{V}"], view="<html><body>図</body></html>")
+        self.assertEqual(code, 2)
+        self.assertIn("展望図の HTML の形が想定と違います", err)
+
+    # ---- 注記・名前 ----
+    @staticmethod
+    def vstate(*texts):
+        return "".join(f'<p class="vstate wxt" data-st="h{h:02d}"{"" if h == 8 else " style=" + chr(34) + "display:none" + chr(34)}>'
+                       f"<b>視点の状態:</b> {t}</p>" for h, t in zip((6, 8, 10, 12), texts))
+
+    def test_viewer_state_text(self):
+        f = render_report.viewer_state_text
+        self.assertEqual(f(self.vstate("とくになし", "とくになし", "とくになし", "とくになし")), "とくになし")
+        self.assertEqual(f(self.vstate("視点が雲の中の見込み", "視点が雲の中の見込み", "とくになし", "とくになし")),
+                         "6・8時 視点が雲の中の見込み/10・12時 とくになし")
+        self.assertEqual(f(self.vstate("a &amp; b", "c", "a &amp; b", "a &amp; b")), "6時 a & b/8時 c/10・12時 a & b")
+        self.assertIsNone(f("<p>なし</p>"))
+
+    def test_viewer_state_in_note(self):
+        # 図の下の説明(視点の状態を含む)は出さないので、見出しの下の注記に出す
+        view = self.VIEW.replace("</main>", self.vstate("眼下に雲海の見込み", "とくになし", "とくになし", "とくになし") + "</main>")
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"], view=view)
+        self.assertEqual(code, 0, err)
+        note = page.split('<div class="section" id="panorama">', 1)[1].split("</div></div>", 1)[0]
+        self.assertIn("視点の状態: 6時 眼下に雲海の見込み/8・10・12時 とくになし。", note)
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])     # 読めないときは足さない
+        self.assertNotIn("視点の状態:", page.split('id="ybp-root"', 1)[0])
+
+    def test_viewpoint_name_is_not_double_escaped(self):
+        view = self.VIEW.replace("雷岩", "雷岩 &amp; 東")
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"], view=view)
+        self.assertEqual(code, 0, err)
+        self.assertIn("<h2>雷岩 &amp; 東(展望地)からの展望</h2>", page)
+
+    def test_works_with_spec_json(self):
+        code, page, err = self._render(["--panorama-html", "{S}"], [os.path.join(EXAMPLES, "diagnosis.json")])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(page.count('id="ybp-root"'), 1)
+        self.assert_ids_ok(page)
+
+    def test_missing_file_fails(self):
+        code, _, err = self._render(["--panorama-html", "no_such_panorama.html"])
+        self.assertEqual(code, 2)
+        self.assertIn("エラー", err)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,6 +11,8 @@ import math
 import numpy as np
 import random
 
+from . import svgfmt
+
 
 # ---- 元: experiments/panorama/stage35_clouds.py ----
 
@@ -500,21 +502,26 @@ def _stops(cols, full, a0, a1, step):
         stops.append((round((az - a0) / span, 4), round((ab - at_) / (1.0 - at_), 3), round(at_, 3), round(ab, 3)))
     return stops
 
+PATH_TOL_10 = 2     # 雲の輪郭を書くとき、点を間引いてよいずれ(0.1 画素単位。2 = 0.2 画素)
+
 def path_d(pts) -> str:
-    """閉じた輪郭(段階3.6 の path_d と同じ形)を、相対座標(l)で短く書く。点は 0.1 画素に丸めてから差を取る(ずれがたまらない)。"""
+    """閉じた輪郭(段階3.6 の path_d と同じ形)を、相対座標(l)で短く書く。点は 0.1 画素に丸めてから差を取る(ずれがたまらない)。
+    数の区切りは、要らない所(次の数が - で始まる、前の数に . があって次が . で始まる)では省く。
+    輪郭から 0.2 画素(PATH_TOL_10)以内にしかならない点は書かない(書き方を短くするため。形の差は画面の 1 画素に満たない)。"""
     if not pts:
         return ""
     q = [(round(x * 10), round(y * 10)) for x, y in pts]
+    q = svgfmt.simplify_closed(q, PATH_TOL_10)
     out = [f"M{q[0][0] / 10:.1f},{q[0][1] / 10:.1f}l"]
     prev = q[0]
-    segs = []
+    nums = []
     for x, y in q[1:]:
         dx, dy = x - prev[0], y - prev[1]
         prev = (x, y)
         if dx == 0 and dy == 0:
             continue
-        segs.append(f"{_n(dx)},{_n(dy)}")
-    return out[0] + " ".join(segs) + "Z"
+        nums += [_n(dx), _n(dy)]
+    return out[0] + svgfmt.join_nums(nums) + "Z"
 
 def _n(v10):
     """0.1 単位の整数を短い文字に(-0.5 → -.5、1.0 → 1)。"""
@@ -553,8 +560,8 @@ def band_svg37(geom, bid, wrap_px=None, title="", clip_id=None) -> str:
     y0, y1 = min(ys) - 2, max(ys) + 2
 
     def grad(gid, idx):
-        st = "".join(f'<stop offset="{s[0]:.4f}" stop-color="#fff" stop-opacity="{s[idx]:.3f}"/>' for s in geom["stops"])
-        return (f'<linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="{x0:.1f}" y1="0" x2="{x1:.1f}" y2="0">'
+        st = svgfmt.stops((s[0], s[idx]) for s in geom["stops"])
+        return (f'<linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="{x0:.1f}" x2="{x1:.1f}">'
                 f'{st}</linearGradient>')
     has_thin = bool(geom["thin_upper"])
     defs = grad(f"mg{bid}", 1)
@@ -635,7 +642,7 @@ def clump_svg37(x, y, c_pct, width_px, height_px, seed, title="", cid="", thin=F
     (グループの不透明度の中なので濃くならない)。cid は図の中で一意。"""
     t = f"<title>{title}</title>" if title else ""
     shape = clump_shape(seed, width_px, height_px)
-    circles = "".join(f'<circle cx="{x + cx:.1f}" cy="{y + cy:.1f}" r="{r:.1f}"/>' for cx, cy, r in shape)
+    circles = "".join(svgfmt.circle(x + cx, y + cy, r) for cx, cy, r in shape)
     ybot = max(y + cy + r for cx, cy, r in shape)
     ytop = min(y + cy - r for cx, cy, r in shape)
     xl = min(x + cx - r for cx, cy, r in shape) - 1
@@ -1035,7 +1042,7 @@ def clump_svg39(x, y, c_pct, width_px, height_px, seed, title="", cid="", thin=F
     """1 つの山のかたまり(形は clump_shape39)。それ以外は段階3.7 の clump_svg37 と同じ作り。"""
     t = f"<title>{title}</title>" if title else ""
     shape = clump_shape39(seed, width_px, height_px)
-    circles = "".join(f'<circle cx="{x + cx:.1f}" cy="{y + cy:.1f}" r="{r_:.1f}"/>' for cx, cy, r_ in shape)
+    circles = "".join(svgfmt.circle(x + cx, y + cy, r_) for cx, cy, r_ in shape)
     ybot = max(y + cy + r_ for cx, cy, r_ in shape)
     ytop = min(y + cy - r_ for cx, cy, r_ in shape)
     xl = min(x + cx - r_ for cx, cy, r_ in shape) - 1
@@ -1077,11 +1084,10 @@ def merged_clump_svg(members, cid, thin=False) -> tuple:
         ysh.append(b_ - (b_ - t_) * SHADOW_FRAC)
     sh = _shadow_path(xl, xr, lambda x: float(np.interp(x, xs, ysh)), ybot, random.Random(seed_of("mshadow", members[0]["key"])))
     k = THIN_RATIO if thin else 1.0
-    stops = "".join(f'<stop offset="{(m["x"] - xl) / (xr - xl):.4f}" stop-color="#fff" stop-opacity="{opacity(m["c"]) * k:.3f}"/>'
-                    for m in members)
-    circ = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r_:.1f}"/>' for x, y, r_ in circles)
+    stops = svgfmt.stops(((m["x"] - xl) / (xr - xl), opacity(m["c"]) * k) for m in members)
+    circ = "".join(svgfmt.circle(x, y, r_) for x, y, r_ in circles)
     t = "<title>" + html.escape(" / ".join(html.unescape(m["tt"]) for m in members)) + "</title>"
-    defs = (f'<linearGradient id="mcg{cid}" gradientUnits="userSpaceOnUse" x1="{xl:.1f}" y1="0" x2="{xr:.1f}" y2="0">{stops}'
+    defs = (f'<linearGradient id="mcg{cid}" gradientUnits="userSpaceOnUse" x1="{xl:.1f}" x2="{xr:.1f}">{stops}'
             f'</linearGradient><mask id="mcm{cid}" maskUnits="userSpaceOnUse" x="{xl - 1:.1f}" y="{ytop - 2:.1f}" '
             f'width="{xr - xl + 2:.1f}" height="{ybot - ytop + 4:.1f}"><rect x="{xl - 1:.1f}" y="{ytop - 2:.1f}" '
             f'width="{xr - xl + 2:.1f}" height="{ybot - ytop + 4:.1f}" fill="url(#mcg{cid})"/></mask>'

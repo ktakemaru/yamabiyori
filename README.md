@@ -2,7 +2,7 @@
 
 ![ヤマビヨリ](assets/yamabiyori_banner.png)
 
-[![version](https://img.shields.io/badge/version-1.10.0-2c7fb8)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-1.10.1-2c7fb8)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-3776ab)](requirements.txt)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](#claude-codeとの連携)
@@ -187,6 +187,9 @@ Open-Meteoの降水確率は山では当たりにくい。そこでMSM範囲内�
 - **保存先**: `out/panorama/<山の ID>.html`(外の読み込みのない HTML 1枚)。`--panorama-out ファイル` で場所を変えられる
   (例: `--mountain m008 --panorama --panorama-out out/koma.html`)。山頂から 300m 以内に OpenStreetMap の展望地があれば、
   展望地の図 `<ID>v.html` も作る。
+- **HTMLレポートに入れる**: `scripts/render_report.py` に `--panorama-html out/panorama/<ID>.html`(展望地の図があれば
+  `--panorama-viewpoint-html out/panorama/<ID>v.html` も)を渡すと、総評のすぐあとに図が1枚入る(展望地の図があればそちら。
+  手順は `skills/yamabiyori/references/report_style.md`)。図は iframe を使わずレポートのページに直接入る。レポートは 1 枚でおよそ 0.85MB 大きくなる。
 - **初回は時間がかかる**: その山のまわり(半径 200km)の国土地理院の標高タイル約 560 枚を、1 枚ごとに 1 秒あけて取る(**約 12 分**・ディスク
   **約 300MB**、`terrain_cache/`。2026-11-20 に大菩薩嶺で空のフォルダから測った値: 566 枚・12 分 14 秒・286MB。タイルのあとの予報 155 回と
   図づくりは 109 秒で、全体は約 14 分)。図の地形の計算は 1 座 15〜50 秒(`cache/panorama/parts/` に保存し、2 回目からは使い回す)。
@@ -442,6 +445,7 @@ claude --plugin-dir .
 
 詳細は [CHANGELOG.md](CHANGELOG.md)。
 
+- **v1.10.1 (2026-11-22)** — 診断のレポート(`scripts/render_report.py`)に展望図を1枚入れられるようにした(`--panorama-html`・`--panorama-viewpoint-html`。iframe を使わずページに直接入れる)。展望図の HTML を約半分の大きさに軽くした(図の見た目は同じ)。引数を付けないときのレポート・スコアは変更なし。
 - **v1.10.0 (2026-11-20)** — 診断モードに `--panorama` を足し、山頂から見た翌日の雲を重ねた展望図(HTML)を作れるようにした(76 座だけ。初回は標高タイルの取得に約 14 分)。山に変わらない ID(`m001`〜)を付けた。Open-Meteo の利用上限(429)を種類で分けて扱い、探索モードの通信の間隔を調整するようにした。14 座の座標を国土地理院の山頂の点に直した(この 14 座は同じ日でも v1.9.2 と点数が変わることがある)。
 - **v1.9.2 (2026-11-15)** — 診断モードの時間ごとの表で、列名「雲量地上%」を「総雲量%」に改めた(中身は地上付近ではなく空全体の雲量)。低層雲%・中層雲%・高層雲%の列を足し、高い雲だけの朝に雲海・快晴チャンスが出ないよう、判定を低層雲で行うようにした。スコアの計算は変更なし。
 - **v1.9.1 (2026-11-11)** — Open-Meteo への通信で、1つの接続を使い回すようにした(GitHub Actions などで新しい接続が途中で止まり、取得に失敗する山が出ていたため)。URL・時間切れ・再試行・キャッシュ、予報の数字は変更なし。

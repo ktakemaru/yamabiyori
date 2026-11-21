@@ -12,7 +12,7 @@ import numpy as np
 import os
 import re
 
-from . import terrain, names, weather, clouds  # noqa: E402
+from . import terrain, names, weather, clouds, svgfmt  # noqa: E402
 
 
 # ---- 元: experiments/panorama/stage15_draw.py ----
@@ -191,7 +191,7 @@ def layout(items, width, row_ys, *, gap=3.0):
 def style(n_bands, bands=terrain.DEFAULT_BANDS):
     lv = "".join(f"--B{i}:{band_color(i, n_bands, False)};--R{i}:{band_color(max(0, i - 2), n_bands, False)};" for i in range(n_bands))
     dv = "".join(f"--B{i}:{band_color(i, n_bands, True)};--R{i}:{band_color(max(0, i - 2), n_bands, True)};" for i in range(n_bands))
-    rules = "".join(f"polygon.B{i}{{fill:var(--B{i})}}polyline.R{i}{{stroke:var(--R{i})}}" for i in range(n_bands))
+    rules = "".join(f"path.B{i}{{fill:var(--B{i})}}polyline.R{i}{{stroke:var(--R{i})}}" for i in range(n_bands))
     dark_vars = ("--bg:#11161c;--fg:#e6ebf0;--mut:#9aa7b4;--card:#18202a;--line:#2a3542;"
                  "--main:#ff7a7f;--sub:#8cb8ff;--side:#c2ccd6;--nearbg:#7d6a52;--nearln:#5c4d3b;" + dv)
     base = (":root{--bg:#f7f8fa;--fg:#1d2733;--mut:#5b6876;--card:#fff;--line:#d8dee6;--main:#b4232c;--sub:#1f4f8a;"
@@ -208,8 +208,9 @@ table{border-collapse:collapse;font-size:13px;margin:8px 0;width:100%} td,th{bor
 a{color:var(--sub)}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--card);border:1px solid var(--line);border-radius:8px;margin:8px 0}
 .scroll svg{display:block;max-width:none}
-polygon.near{fill:url(#hatch)} rect.nearbg{fill:var(--nearbg)} line.nearln{stroke:var(--nearln);stroke-width:2}
-polyline.ridge{fill:none;stroke-width:1.6}
+path.near{fill:url(#hatch)} rect.nearbg{fill:var(--nearbg)} line.nearln{stroke:var(--nearln);stroke-width:2}
+polyline.ridge{fill:none;stroke-width:1.6} stop{stop-color:#fff}
+path.skyc{fill:none;stroke-width:%(sky_w)s}
 line.tick{stroke:var(--mut);stroke-width:1} text.tickt{fill:var(--mut);font-size:11px} text.tickt.dir{fill:var(--fg);font-weight:600}
 text.nm{fill:var(--side)} text.nm.大{fill:var(--main)} text.nm.中{fill:var(--sub)} tspan.mk{fill:var(--mut)}
 line.lead{stroke:var(--mut);stroke-width:.7;opacity:.8} line.lead.大{stroke:var(--main);opacity:.9}
@@ -218,7 +219,7 @@ text.credit{fill:var(--mut);font-size:10px} text.nearlab{fill:#fff;font-size:11p
 .legend span{display:inline-block;margin-right:14px;font-size:13px}
 .k{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 """
-    return base
+    return base.replace("%(sky_w)s", svgfmt.num(sky_cell_width(terrain.PX360)))
 
 
 # ---- 元: experiments/panorama/stage25_draw.py ----
@@ -287,10 +288,9 @@ def render_v2(sky, peaks, *, az0, az1, px_per_deg, v_exag, title, bands=terrain.
              '<rect width="6" height="6" class="nearbg"/><line x1="0" y1="0" x2="0" y2="6" class="nearln"/></pattern></defs>']
     for bi in range(n_b - 1, -1, -1):
         ys = np.where(np.isfinite(ang[:, bi]), np.clip(Y(ang[:, bi]), top_sky, bottom), bottom)
-        pts = " ".join(f"{X(a):.1f},{y:.1f}" for a, y in zip(az, ys))
-        poly = f"{X(az[0]):.1f},{bottom:.1f} {pts} {X(az[-1]):.1f},{bottom:.1f}"
+        poly = [(X(az[0]), bottom)] + [(X(a), y) for a, y in zip(az, ys)] + [(X(az[-1]), bottom)]
         cls = "near" if bands[bi] <= terrain.NEAR_BAND_M else f"B{bi}"
-        parts.append(f'<polygon points="{poly}" class="{cls}"/>')
+        parts.append(f'<path d="{svgfmt.polygon_path(poly)}" class="{cls}"/>')   # 地形の帯(相対座標の path。weather.POLY_RE で探す)
     for p in peaks:
         if p.get("ridge"):
             pts = " ".join(f"{X(a):.1f},{min(max(Y(v), top_sky), bottom):.1f}" for a, v in p["ridge"])
@@ -407,12 +407,46 @@ def _name_text(n, label, op):
     return (f'<text x="{n["x0"]:.1f}" y="{n["y"]}" text-anchor="start" class="{n["cls"]}" '
             f'style="{op_s}font-size:{n["fs"]}px;font-weight:{n["fw"]}">{html.escape(label)}{n["mark"]}</text>')
 
-def sky_paths(runs, X, px):
-    """空の区画を、色ごとに 1 つの path にまとめる(区画の形・色・重なりの幅は段階3.6 の長方形と同じ)。"""
-    by = {}
+def merge_sky_cells(runs):
+    """空の区画(方位 1° ごとの縦の帯の中の区画)のうち、となりの方位で上下の端と色が同じものを横につなぐ。
+    返り値: [(方位の始め, 方位の数, y0, y1, 色)]。上下の端は図に書く値(小数 1 桁)で比べる。"""
+    cols = {}
     for a, y0, y1, col in runs:
-        by.setdefault(col, []).append(f"M{X(a):.1f} {y0:.1f}h{px + 0.6:.1f}v{y1 - y0:.1f}h-{px + 0.6:.1f}z")
-    return "".join(f'<path class="skyc" d="{"".join(v)}" fill="{k}"/>' for k, v in by.items())
+        cols.setdefault(a, []).append((f"{y0:.1f}", f"{y1 - y0:.1f}", y0, y1, col))
+    out, open_ = [], {}
+    for a in sorted(cols):
+        nxt = {}
+        for k0, kh, y0, y1, col in cols[a]:
+            key = (k0, kh, col)
+            cell = open_.get(key)
+            if cell is not None and cell[0] + cell[1] == a:
+                cell[1] += 1
+            else:
+                cell = [a, 1, y0, y1, col]
+                out.append(cell)
+            nxt[key] = cell
+        open_ = nxt
+    return [tuple(c) for c in out]
+
+def sky_cell_width(px):
+    """空の区画 1 つ(方位 1°)の幅。となりと 0.6 画素重ねる(段階3.6 の長方形と同じ)。"""
+    return px + 0.6
+
+def sky_paths(runs, X, px):
+    """空の区画を、色ごと・幅ごとに 1 つの path にまとめる(区画の形・色・重なりの幅は段階3.6 の長方形と同じ)。
+    となりの方位で上下の端と色が同じ区画は、1 つの長方形につなぐ(案 D。塗る所は同じ)。
+    長方形は、横の真ん中を通る縦の線を区画の幅の太さで引いて描く(線の端は平ら。塗る所は長方形と同じで、書き方が短い)。
+    幅が 1 区画の線の太さは CSS(path.skyc)、それより広い線は style で書く(属性の stroke-width は CSS に負けるので使わない)。"""
+    by = {}       # 色 → 幅 → 区画(描く順番は、これまでと同じく色の出てきた順。となりと重なる所の色が変わらないように)
+    for a, n, y0, y1, col in merge_sky_cells(runs):
+        w = (n - 1) * px + sky_cell_width(px)
+        y0s, hs = f"{y0:.1f}", f"{y1 - y0:.1f}"
+        by.setdefault(col, {}).setdefault(f"{w:.1f}", []).append(
+            f"M{svgfmt.num(X(a) + w / 2, 2)} {svgfmt.num(float(y0s))}v{svgfmt.num(float(hs))}")
+    one = f"{sky_cell_width(px):.1f}"
+    return "".join(f'<path class="skyc" d="{"".join(v)}" stroke="{col}"'
+                   + ("" if w == one else f' style="stroke-width:{svgfmt.num(float(w))}"') + "/>"
+                   for col, ws in by.items() for w, v in ws.items())
 
 def _sky_runs(scene, sky, X, Y, top_sky, bottom, px):
     azs = np.asarray(sky["az"], dtype=float)
