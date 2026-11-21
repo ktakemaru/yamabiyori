@@ -209,6 +209,14 @@ def panorama_embed_page(page, bg):
     return page[:at] + add + page[at:] if at >= 0 else add + page
 
 
+def srcdoc_value(page):
+    """srcdoc 属性の値(' で囲む前提)。& と ' だけを文字参照にする(" < > はそのまま。" で囲んで全部を文字参照に
+    すると、展望図では約 15% 大きくなる)。改行も文字参照にする(出力時の改行の変換で CR が増えたり、属性値の
+    改行の扱いで中身が変わったりしないように)。"""
+    return (page.replace("&", "&amp;").replace("'", "&#39;")
+            .replace("\r", "&#13;").replace("\n", "&#10;"))
+
+
 WEEKDAYS = "月火水木金土日"
 
 
@@ -482,12 +490,11 @@ class Renderer:
         p = self.panorama
         when = f"{p['day']}の予報にもとづく" if p.get("day") else "予報にもとづく"
         page = panorama_embed_page(p["page"], report_bg_colors(css_text))
-        # 改行も文字参照にする(出力時の改行の変換で CR が増えたり、属性値の改行の正規化で中身が変わったりしないように)
-        doc = esc(page).replace("\r", "&#13;").replace("\n", "&#10;")
+        doc = srcdoc_value(page)
         return (
             f'<div class="section" id="panorama"><div class="section-head"><h2>{esc(p["heading"])}</h2>'
             f'<div class="note">{when}展望図(目安)。時刻のボタンで雲が替わり、図を横になぞると方角が動きます。</div></div>'
-            f'<iframe class="panorama" title="{esc(p["heading"])}の展望図" srcdoc="{doc}" '
+            f'<iframe class="panorama" title="{esc(p["heading"])}の展望図" srcdoc=\'{doc}\' '
             f'style="display:block;width:100%;height:{PANORAMA_IFRAME_HEIGHT}px;border:0;margin:0 0 16px"></iframe></div>'
         )
 

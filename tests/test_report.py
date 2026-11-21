@@ -399,7 +399,7 @@ class TestPanorama(unittest.TestCase):
     @staticmethod
     def srcdocs(page):
         import html as html_lib
-        return [html_lib.unescape(x) for x in re.findall(r'<iframe[^>]* srcdoc="([^"]*)"', page)]
+        return [html_lib.unescape(x) for x in re.findall(r"<iframe[^>]* srcdoc='([^']*)'", page)]
 
     def test_without_arguments_no_section(self):
         code, page, err = self._render([])
@@ -526,6 +526,16 @@ class TestPanorama(unittest.TestCase):
         self.assertIn("OK=(window.innerHeight===VH);", js)
         self.assertIn("if(!b||!OK)return;", js)
         self.assertIn("height:460px", self._render(["--panorama-viewpoint-html", "{V}"])[1])
+
+    def test_srcdoc_is_single_quoted_and_short(self):
+        # srcdoc は ' で囲み、& と ' と改行だけを文字参照にする(< > " はそのまま)
+        self.assertEqual(render_report.srcdoc_value("<a href=\"x\">'&amp;'</a>\r\n"),
+                         "<a href=\"x\">&#39;&amp;amp;&#39;</a>&#13;&#10;")
+        code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("srcdoc='<!doctype html>", page)
+        self.assertNotIn("srcdoc=\"", page)
+        self.assertNotIn("&lt;", page.split("srcdoc='", 1)[1].split("'", 1)[0])
 
     def test_viewpoint_name_is_not_double_escaped(self):
         view = self.VIEW.replace("雷岩", "雷岩 &amp; 東")
