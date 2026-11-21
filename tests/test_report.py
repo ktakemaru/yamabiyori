@@ -447,16 +447,33 @@ class TestPanorama(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("<h2>展望地からの展望</h2>", page)
 
-    def test_section_right_after_overview(self):
+    def test_section_after_overview_and_alert(self):
+        # 順番は 総評 → 注意 → 展望(安全に関わる注意を図の下に回さない)
         code, page, err = self._render(["--panorama-viewpoint-html", "{V}"])
+        self.assertEqual(code, 0, err)
+        i_over, i_alert = page.index("総評の文。"), page.index("注意の文。")
+        i_pano = page.index('<div class="section" id="panorama">')
+        self.assertLess(i_over, i_alert)
+        self.assertLess(i_alert, i_pano)
+        self.assertNotIn('class="section', page[i_over:i_pano])  # 総評・注意と展望の節のあいだに、ほかの節が無い
+        self.assertLess(i_pano, page.index("気圧配置と実況"))
+
+    def test_section_right_after_overview_without_alert(self):
+        with tempfile.TemporaryDirectory() as d:
+            c = self._write(d, "c.json", json.dumps({"overview": "総評の文。"}, ensure_ascii=False))
+            code, page, err = self._render(["--panorama-viewpoint-html", "{V}"],
+                                           base=["--data", os.path.join(FIX, "diagnosis.json"), "--commentary", c])
         self.assertEqual(code, 0, err)
         i_over, i_pano = page.index("総評の文。"), page.index('<div class="section" id="panorama">')
         self.assertLess(i_over, i_pano)
-        between = page[i_over:i_pano]
-        self.assertNotIn('class="section', between)  # 総評と展望の節のあいだに、ほかの節が無い
-        self.assertNotIn("注意の文。", between)
-        self.assertLess(i_pano, page.index("注意の文。"))
-        self.assertLess(i_pano, page.index("気圧配置と実況"))
+        self.assertNotIn('class="section', page[i_over:i_pano])
+
+    def test_position_rule(self):
+        pos = render_report.Renderer.panorama_position
+        ov = {"type": "analysis", "items": [{"tag": "総評"}]}
+        self.assertEqual(pos([{"type": "hero"}, {"type": "summary"}, ov, {"type": "alert"}, {"type": "section"}]), 4)
+        self.assertEqual(pos([{"type": "hero"}, {"type": "summary"}, ov, {"type": "section"}, {"type": "alert"}]), 3)
+        self.assertEqual(pos([{"type": "hero"}, {"type": "summary"}, {"type": "alert"}]), 2)   # 総評が無いときは今のまま
 
     def test_section_without_overview_follows_summary(self):
         code, page, err = self._render(["--panorama-viewpoint-html", "{V}"], commentary=False)

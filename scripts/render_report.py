@@ -503,10 +503,14 @@ class Renderer:
 
     @staticmethod
     def panorama_position(blocks):
-        """展望の節を入れる位置(本文のブロックの番号)。総評のすぐあと。総評が無ければ、先頭の要約(無ければ先頭の見込み)のあと。"""
+        """展望の節を入れる位置(本文のブロックの番号)。総評のすぐあと(総評のすぐあとに「注意」があれば、その注意のあと。
+        安全に関わる注意を図の下に回さない)。総評が無ければ、先頭の要約(無ければ先頭の見込み)のあと。"""
         for i, b in enumerate(blocks):
             if b.get("type") == "analysis" and any(it.get("tag") == "総評" for it in b.get("items") or []):
-                return i + 1
+                j = i + 1
+                while j < len(blocks) and blocks[j].get("type") == "alert":
+                    j += 1
+                return j
         for kind in ("summary", "hero"):
             for i, b in enumerate(blocks):
                 if b.get("type") == kind or (kind == "hero" and b.get("id") == "hero"):
