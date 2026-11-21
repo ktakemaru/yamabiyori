@@ -210,6 +210,7 @@ a{color:var(--sub)}
 .scroll svg{display:block;max-width:none}
 path.near{fill:url(#hatch)} rect.nearbg{fill:var(--nearbg)} line.nearln{stroke:var(--nearln);stroke-width:2}
 polyline.ridge{fill:none;stroke-width:1.6} stop{stop-color:#fff}
+path.skyc{fill:none;stroke-width:%(sky_w)s}
 line.tick{stroke:var(--mut);stroke-width:1} text.tickt{fill:var(--mut);font-size:11px} text.tickt.dir{fill:var(--fg);font-weight:600}
 text.nm{fill:var(--side)} text.nm.大{fill:var(--main)} text.nm.中{fill:var(--sub)} tspan.mk{fill:var(--mut)}
 line.lead{stroke:var(--mut);stroke-width:.7;opacity:.8} line.lead.大{stroke:var(--main);opacity:.9}
@@ -218,7 +219,7 @@ text.credit{fill:var(--mut);font-size:10px} text.nearlab{fill:#fff;font-size:11p
 .legend span{display:inline-block;margin-right:14px;font-size:13px}
 .k{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:4px;vertical-align:-1px}
 """
-    return base
+    return base.replace("%(sky_w)s", svgfmt.num(sky_cell_width(terrain.PX360)))
 
 
 # ---- 元: experiments/panorama/stage25_draw.py ----
@@ -427,14 +428,25 @@ def merge_sky_cells(runs):
         open_ = nxt
     return [tuple(c) for c in out]
 
+def sky_cell_width(px):
+    """空の区画 1 つ(方位 1°)の幅。となりと 0.6 画素重ねる(段階3.6 の長方形と同じ)。"""
+    return px + 0.6
+
 def sky_paths(runs, X, px):
-    """空の区画を、色ごとに 1 つの path にまとめる(区画の形・色・重なりの幅は段階3.6 の長方形と同じ)。
-    となりの方位で上下の端と色が同じ区画は、1 つの長方形につなぐ(案 D。塗る所は同じ)。"""
+    """空の区画を、色ごと・幅ごとに 1 つの path にまとめる(区画の形・色・重なりの幅は段階3.6 の長方形と同じ)。
+    となりの方位で上下の端と色が同じ区画は、1 つの長方形につなぐ(案 D。塗る所は同じ)。
+    長方形は、横の真ん中を通る縦の線を区画の幅の太さで引いて描く(線の端は平ら。塗る所は長方形と同じで、書き方が短い)。
+    幅が 1 区画の線の太さは CSS(path.skyc)、それより広い線は style で書く(属性の stroke-width は CSS に負けるので使わない)。"""
     by = {}
     for a, n, y0, y1, col in merge_sky_cells(runs):
-        w = n * px + 0.6
-        by.setdefault(col, []).append(f"M{X(a):.1f} {y0:.1f}h{w:.1f}v{y1 - y0:.1f}h-{w:.1f}z")
-    return "".join(f'<path class="skyc" d="{"".join(v)}" fill="{k}"/>' for k, v in by.items())
+        w = (n - 1) * px + sky_cell_width(px)
+        y0s, hs = f"{y0:.1f}", f"{y1 - y0:.1f}"
+        by.setdefault((col, f"{w:.1f}"), []).append(
+            f"M{svgfmt.num(X(a) + w / 2, 2)} {svgfmt.num(float(y0s))}v{svgfmt.num(float(hs))}")
+    one = f"{sky_cell_width(px):.1f}"
+    return "".join(f'<path class="skyc" d="{"".join(v)}" stroke="{col}"'
+                   + ("" if w == one else f' style="stroke-width:{svgfmt.num(float(w))}"') + "/>"
+                   for (col, w), v in by.items())
 
 def _sky_runs(scene, sky, X, Y, top_sky, bottom, px):
     azs = np.asarray(sky["az"], dtype=float)

@@ -113,7 +113,24 @@ class TestSkyMerge(unittest.TestCase):
     def test_path_is_one_rect_for_merged_run(self):
         from panorama import draw
         s = draw.sky_paths(self.RUNS, lambda a: 20 + a * 24, 24)
-        self.assertIn("M20.0 94.0h72.6v26.0h-72.6z", s)      # 3 マス: 幅 3×24 + 重なり 0.6
+        # 3 マス(幅 3×24 + 重なり 0.6 = 72.6)は、真ん中 x=56.3 に太さ 72.6 の縦の線
+        self.assertIn('<path class="skyc" d="M56.3 94v26" stroke="#a" style="stroke-width:72.6"/>', s)
+        # 1 マス(幅 24.6)は太さを CSS に任せる
+        self.assertIn('<path class="skyc" d="M128.3 94v26" stroke="#a"/>', s)
+        self.assertIn("path.skyc{fill:none;stroke-width:24.6}", draw.style(3))
+
+    def test_stroke_covers_same_rect(self):
+        # 線の左右の端 = 元の長方形の左右の端(x, x+w)、上下の端 = y0, y1
+        from panorama import draw
+        s = draw.sky_paths(self.RUNS, lambda a: 20 + a * 24, 24)
+        rects = set()
+        for d, col, w in re.findall(r'd="([^"]*)" stroke="([^"]*)"(?: style="stroke-width:([^"]*)")?', s):
+            w = float(w or 24.6)
+            for xc, y0, h in re.findall(r"M([\d.]+) ([\d.]+)v([\d.]+)", d):
+                rects.add((round(float(xc) - w / 2, 1), float(y0), round(float(xc) + w / 2, 1), round(float(y0) + float(h), 1), col))
+        want = {(round(20 + 24 * a, 1), round(y0, 1), round(20 + 24 * (a + n) + 0.6, 1), round(y1, 1), col)
+                for a, n, y0, y1, col in draw.merge_sky_cells(self.RUNS)}
+        self.assertEqual(rects, want)
 
 
 class TestStops(unittest.TestCase):
