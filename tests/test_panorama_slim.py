@@ -88,5 +88,33 @@ class TestPolygonPath(unittest.TestCase):
         self.assertNotIn("polygon", css)
 
 
+class TestSkyMerge(unittest.TestCase):
+    """案 D: 空のマスを横につなぐ(塗る所と色は同じ)。"""
+
+    RUNS = [(0, 94.0, 120.0, "#a"), (0, 119.4, 289.0, "#b"),
+            (1, 94.0, 120.0, "#a"), (1, 119.4, 289.0, "#c"),
+            (2, 94.0, 120.0, "#a"), (2, 119.4, 289.0, "#b"),
+            (4, 94.0, 120.0, "#a")]
+
+    def test_merge_keeps_area_and_color(self):
+        from panorama import draw
+        cells = draw.merge_sky_cells(self.RUNS)
+        self.assertIn((0, 3, 94.0, 120.0, "#a"), cells)      # 0〜2° は 1 つに
+        self.assertIn((4, 1, 94.0, 120.0, "#a"), cells)      # 3° が空くので別
+        self.assertIn((0, 1, 119.4, 289.0, "#b"), cells)     # 色が違う所はつながない
+        self.assertIn((2, 1, 119.4, 289.0, "#b"), cells)
+        # 方位ごとの色が元と同じ
+        covered = {}
+        for a, n, y0, y1, col in cells:
+            for k in range(a, a + n):
+                covered[(k, round(y0, 1))] = col
+        self.assertEqual(covered, {(a, round(y0, 1)): col for a, y0, y1, col in self.RUNS})
+
+    def test_path_is_one_rect_for_merged_run(self):
+        from panorama import draw
+        s = draw.sky_paths(self.RUNS, lambda a: 20 + a * 24, 24)
+        self.assertIn("M20.0 94.0h72.6v26.0h-72.6z", s)      # 3 マス: 幅 3×24 + 重なり 0.6
+
+
 if __name__ == "__main__":
     unittest.main()

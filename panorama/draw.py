@@ -406,11 +406,34 @@ def _name_text(n, label, op):
     return (f'<text x="{n["x0"]:.1f}" y="{n["y"]}" text-anchor="start" class="{n["cls"]}" '
             f'style="{op_s}font-size:{n["fs"]}px;font-weight:{n["fw"]}">{html.escape(label)}{n["mark"]}</text>')
 
-def sky_paths(runs, X, px):
-    """空の区画を、色ごとに 1 つの path にまとめる(区画の形・色・重なりの幅は段階3.6 の長方形と同じ)。"""
-    by = {}
+def merge_sky_cells(runs):
+    """空の区画(方位 1° ごとの縦の帯の中の区画)のうち、となりの方位で上下の端と色が同じものを横につなぐ。
+    返り値: [(方位の始め, 方位の数, y0, y1, 色)]。上下の端は図に書く値(小数 1 桁)で比べる。"""
+    cols = {}
     for a, y0, y1, col in runs:
-        by.setdefault(col, []).append(f"M{X(a):.1f} {y0:.1f}h{px + 0.6:.1f}v{y1 - y0:.1f}h-{px + 0.6:.1f}z")
+        cols.setdefault(a, []).append((f"{y0:.1f}", f"{y1 - y0:.1f}", y0, y1, col))
+    out, open_ = [], {}
+    for a in sorted(cols):
+        nxt = {}
+        for k0, kh, y0, y1, col in cols[a]:
+            key = (k0, kh, col)
+            cell = open_.get(key)
+            if cell is not None and cell[0] + cell[1] == a:
+                cell[1] += 1
+            else:
+                cell = [a, 1, y0, y1, col]
+                out.append(cell)
+            nxt[key] = cell
+        open_ = nxt
+    return [tuple(c) for c in out]
+
+def sky_paths(runs, X, px):
+    """空の区画を、色ごとに 1 つの path にまとめる(区画の形・色・重なりの幅は段階3.6 の長方形と同じ)。
+    となりの方位で上下の端と色が同じ区画は、1 つの長方形につなぐ(案 D。塗る所は同じ)。"""
+    by = {}
+    for a, n, y0, y1, col in merge_sky_cells(runs):
+        w = n * px + 0.6
+        by.setdefault(col, []).append(f"M{X(a):.1f} {y0:.1f}h{w:.1f}v{y1 - y0:.1f}h-{w:.1f}z")
     return "".join(f'<path class="skyc" d="{"".join(v)}" fill="{k}"/>' for k, v in by.items())
 
 def _sky_runs(scene, sky, X, Y, top_sky, bottom, px):
