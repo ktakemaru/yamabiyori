@@ -76,6 +76,9 @@ class TestTimeText(unittest.TestCase):
         self.assertEqual(row.group(1), te.about(te.EXPLORE_ALL_SEC))
         row = re.search(r"^\| 診断モード 1 座 \|[^|]*\| ([^|]*) \|", text, re.M)
         self.assertEqual(row.group(1), "未実測" if te.DIAGNOSIS_SEC is None else te.about(te.DIAGNOSIS_SEC))
+        row = re.search(r"^\| 診断モード \+ 展望図\(2 回目以降\) \|.*$", text, re.M).group(0)
+        self.assertIn(f"すべて保存済みで{te.about(te.PANORAMA_SAVED_SEC)}", row)
+        self.assertIn(f"予報は保存なしで{te.about(te.PANORAMA_FORECAST_SEC)}", row)
 
 
 class TestEstimate(NoNetwork):
@@ -112,7 +115,8 @@ class TestEstimate(NoNetwork):
         with open(path, "wb") as fh:
             pickle.dump({"conditions": run.parts_conditions(v, gsi), "parts": parts}, fh)
 
-    def test_all_saved_is_short_and_partly_saved_is_long(self):
+    def test_saved_parts_shorten_the_estimate(self):
+        """地形の計算だけ保存済み(予報は無い)= 49.3 秒の実測、予報もそろっている = 約 20 秒。"""
         v, n11, n14 = self.needed()
         self.put(11, n11)
         self.put(14, n14)
@@ -120,11 +124,31 @@ class TestEstimate(NoNetwork):
         est = run.estimate(self.mtn)                             # 地形の計算だけ保存済み、予報は無い
         self.assertTrue(est["parts_saved"])
         self.assertFalse(est["weather_saved"])
-        self.assertEqual(est["sec"], te.PANORAMA_FIRST_SEC)
+        self.assertEqual(est["sec"], te.PANORAMA_FORECAST_SEC)
+        self.assertEqual(run.estimate_lines(self.mtn, est)[2], "時間の目安: 約 50 秒(タイルの取得 なし + 予報と図づくり 約 50 秒)")
         with mock.patch.object(weather, "get_fc", return_value={"time": []}):
             est = run.estimate(self.mtn)                         # 予報もそろっている
         self.assertTrue(est["weather_saved"])
         self.assertEqual(est["sec"], te.PANORAMA_SAVED_SEC)
+
+    def test_saved_weather_without_parts_is_long(self):
+        """地形の計算の保存が無ければ、予報がそろっていても初回の値(その組み合わせの実測は無い)。"""
+        _, n11, n14 = self.needed()
+        self.put(11, n11)
+        self.put(14, n14)
+        with mock.patch.object(weather, "get_fc", return_value={"time": []}):
+            est = run.estimate(self.mtn)
+        self.assertFalse(est["parts_saved"])
+        self.assertEqual(est["sec"], te.PANORAMA_FIRST_SEC)
+
+    def test_missing_tiles_are_added_to_forecast_only_case(self):
+        v, n11, n14 = self.needed()
+        self.put(11, n11[:-10])
+        self.put(14, n14)
+        self._save_parts(v)
+        est = run.estimate(self.mtn)
+        self.assertEqual(est["missing"], 10)
+        self.assertAlmostEqual(est["sec"], 10 * 734 / 566 + te.PANORAMA_FORECAST_SEC)
 
     def test_context_is_restored_and_does_not_fetch(self):
         v, n11, n14 = self.needed()

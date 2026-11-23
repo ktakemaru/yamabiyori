@@ -464,9 +464,11 @@ def estimate(mtn, day=None, main_days=None):
     miss = len(m11) + len(m14)
     parts = saved_parts(summit, gsi_file)
     weather_ok = parts is not None and forecast_saved(parts, day, mtn, main_days, (summit["lat"], summit["lon"]))
-    # 地形の計算と予報の片方だけ保存があるときの実測は無いので、長いほう(初回の値)を使う
-    draw_sec = (time_estimates.PANORAMA_SAVED_SEC if parts is not None and weather_ok
-                else time_estimates.PANORAMA_FIRST_SEC)
+    # 地形の計算の保存が無いときは、予報の保存があっても初回の値(その組み合わせの実測は無いので、長いほう)
+    if parts is None:
+        draw_sec = time_estimates.PANORAMA_FIRST_SEC
+    else:
+        draw_sec = time_estimates.PANORAMA_SAVED_SEC if weather_ok else time_estimates.PANORAMA_FORECAST_SEC
     tiles_sec = miss * time_estimates.PANORAMA_TILE_SEC
     return {"zoom": {11: {"needed": len(need11), "missing": len(m11)}, 14: {"needed": len(need14), "missing": len(m14)}},
             "needed": len(need11) + len(need14), "missing": miss, "parts_saved": parts is not None,
