@@ -22,7 +22,7 @@
 | 0 | `0a58d1c` | 指示書を `docs/release-1.10.2-instructions.md` に写した |
 | 1 | `6a73ac4` | `mountain_terrain.py` の `summarize_lift()`: 多数派の風向が同数なら、先に出たほう。テスト 3 件、CHANGELOG 1 行 |
 | 2 | `0b9a439` | 版を 1.10.2 に(`plugin.json`・CHANGELOG・README) |
-| 3 | `c2b695a` | `docs/v1.10.2-release-notes.md` と、この報告書(このあと、報告書の commit の番号などを足した commit がもう 1 つある) |
+| 3 | `c2b695a` | `docs/v1.10.2-release-notes.md` と、この報告書(このあと、報告書の commit の番号などを足した・直した commit が 2 つある) |
 
 飛ばした部はありません。
 
@@ -38,7 +38,7 @@
 
 ## 4. 地形の風向の直しの確かめ
 
-入力は手元に保存済みの予報です。分析を始める前に `C:\yamabiyori-archive\terrain-from-2026-11-24\cache` に写し(`CLAUDE.md` の決まり)、その写しを読みました。**通信しようとすると例外で止まる仕組みを入れて**実行し、止めた回数は全実行で 0 回でした。`PYTHONHASHSEED` 1・2・3 の 3 つで、変更前(main と同じコード)と変更後を実行しました。比べに使った出力・同数の記録・スクリプトは `C:\yamabiyori-archive	errain-from-2026-11-24\check` に残しました(commit していません)。
+入力は手元に保存済みの予報です。分析を始める前に `C:\yamabiyori-archive\terrain-from-2026-11-24\cache` に写し(`CLAUDE.md` の決まり)、その写しを読みました。**通信しようとすると例外で止まる仕組みを入れて**実行し、止めた回数は全実行で 0 回でした。`PYTHONHASHSEED` 1・2・3 の 3 つで、変更前(main と同じコード)と変更後を実行しました。比べに使った出力・同数の記録・スクリプトは `C:\yamabiyori-archive\terrain-from-2026-11-24\check` に残しました(commit していません)。
 
 **探索モード(全 76 座・15 日、終了コード 0)**
 
