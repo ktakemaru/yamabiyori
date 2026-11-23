@@ -2,7 +2,7 @@
 
 ![ヤマビヨリ](assets/yamabiyori_banner.png)
 
-[![version](https://img.shields.io/badge/version-1.10.1-2c7fb8)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-1.10.2-2c7fb8)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-3776ab)](requirements.txt)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](#claude-codeとの連携)
@@ -467,6 +467,7 @@ claude --plugin-dir .
 
 詳細は [CHANGELOG.md](CHANGELOG.md)。
 
+- **v1.10.2 (2026-11-24)** — 長い作業の前に時間の目安を1行で伝える決まりを書き、展望図の時間を手元の保存の状態から見積もる `--panorama-estimate` を足した(標高タイルの取得中は進み具合も出る)。探索モードの同点の並びを、危険信号の軽い順 → 稜線の風が弱い順に決めた。レポートでおすすめの山が日ごとのランキングにも必ず出るようにし(★ の印・順位の列)、ランキングを2つの表に分ける `--ranking-layout split` を足した(既定は1つの表)。地形の列の風向が実行ごとに変わることがあった不具合を直した。スコア・危険信号の判定・予報の数字は変更なし。
 - **v1.10.1 (2026-11-22)** — 診断のレポート(`scripts/render_report.py`)に展望図を1枚入れられるようにした(`--panorama-html`・`--panorama-viewpoint-html`。iframe を使わずページに直接入れる)。展望図の HTML を約半分の大きさに軽くした(図の見た目は同じ)。引数を付けないときのレポート・スコアは変更なし。
 - **v1.10.0 (2026-11-20)** — 診断モードに `--panorama` を足し、山頂から見た翌日の雲を重ねた展望図(HTML)を作れるようにした(76 座だけ。初回は標高タイルの取得に約 14 分)。山に変わらない ID(`m001`〜)を付けた。Open-Meteo の利用上限(429)を種類で分けて扱い、探索モードの通信の間隔を調整するようにした。14 座の座標を国土地理院の山頂の点に直した(この 14 座は同じ日でも v1.9.2 と点数が変わることがある)。
 - **v1.9.2 (2026-11-15)** — 診断モードの時間ごとの表で、列名「雲量地上%」を「総雲量%」に改めた(中身は地上付近ではなく空全体の雲量)。低層雲%・中層雲%・高層雲%の列を足し、高い雲だけの朝に雲海・快晴チャンスが出ないよう、判定を低層雲で行うようにした。スコアの計算は変更なし。
