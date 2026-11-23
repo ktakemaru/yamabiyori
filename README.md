@@ -400,6 +400,9 @@ Windows PowerShell 5.1 で `>` を使うと文字化けするので、出力を�
 ./venv/Scripts/python.exe -X utf8 -m unittest
 ```
 
+Claude Code・Codex から使うときは、30 秒以上かかる作業の前に、何をするかと時間の目安が 1 行で先に伝えられる
+(目安の表と出どころは [AGENTS.md](AGENTS.md) の「長い作業の前に伝える」。測っていない作業は「まだ測っていません」と言う)。
+
 探索モードの主な調整パラメータ(`mountain_weather_mvp.py` 冒頭): `REGION_FILTER`(空=全地域)、`TOP_N_PER_DAY`、`MIN_SCORE_THRESHOLD`(既定70点。v1.5.0で80から変更)。
 
 ## Claude Codeとの連携

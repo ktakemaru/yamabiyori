@@ -38,6 +38,29 @@ python -m venv venv                       # python が無ければ py -m venv ve
 自作の確認スクリプトは Windows + Python 3.14 以前だと `UnicodeEncodeError`(cp932)で止まる。コードの不具合ではない。
 
 ## 実行
+### 長い作業の前に伝える
+- 30 秒以上かかる見込みの作業の前に、**何をするか**と**時間の目安**を 1 行で利用者に伝える。例: 「全 76 座の予報を取ります。5 分ほどかかります。」(30 秒は仮の値)
+- 伝えるのは、最初の長いコマンドを呼ぶ直前に 1 回だけ。途中の実況はしない。短い作業(30 秒未満)には出さない。
+- 時間の目安は、下の表から引く。**自分で見積もらない。** 表に無い作業・「未実測」の作業は「時間の目安はまだ測っていません」と言う。
+- 条件で時間が大きく変わる作業(展望図)は、先に見積もりのコマンド(`--panorama-estimate`。通信しない)を実行して、その結果の時間を伝える。
+- 終わったあとに「○分かかりました」と報告する必要はない(コマンドの出力に実行時間の内訳がある)。
+
+| 作業 | コマンド | 目安 | 出どころ(いつ・どこで測ったか) |
+|---|---|---|---|
+| 探索モード 全 76 座 | `mountain_weather_mvp.py` | 約 4 分 | 2026-11-18、開発用の PC、空のキャッシュで 2 回: 250・246 秒(ほかに、キャッシュの状態の記録が無い 1 回が 252 秒。`docs/mountain-coordinates-fix-report.md` 4 章)。予報の保存(3 時間)があると短い(62 座が保存済みで 16 秒、同上) |
+| 探索モード 一部(`--limit`・`--region`) | `mountain_weather_mvp.py --limit 3` など | 未実測 | — |
+| 診断モード 1 座 | `mountain_weather_detail.py --mountain 山` | 未実測 | — |
+| 診断モード + 展望図(初回) | `mountain_weather_detail.py --mountain 山 --panorama` | **`--panorama-estimate` の結果** | 標高タイルが 1 枚も無いとき 566 枚・12 分 14 秒 + 予報と図づくり 109 秒(2026-11-20、大菩薩嶺。`docs/panorama-v1.10-finish-report.md`) |
+| 診断モード + 展望図(2 回目以降) | 同上 | **`--panorama-estimate` の結果** | すべて保存済みで約 20 秒(20.7 秒・22.4 秒、大菩薩嶺。`docs/panorama-v1.10-report.md`・同上) |
+| 計画モード(GPX) | `mountain_weather_detail.py`(対話式) | 未実測 | — |
+| HTML レポートの作成 | `scripts/render_report.py` | 未実測 | — |
+| 天気図・ひまわりの取得 | `scripts/fetch_synoptic.py` | 未実測 | — |
+| 地形の事前計算 | `precompute_terrain.py` | 未実測 | — |
+| テスト | `-m unittest` | 約 1 分 | 2026-11-24、開発用の PC、1 回: 187 件・67 秒 |
+
+(参考。PC の値ではない: GitHub のマシンでの探索モード 全 76 座は、229 件・333 秒 / 228 件・319 秒。2026-11-22・23 の 3 回のうち利用者から聞いた値。ビヨリコンシェルの取得の記録)
+
+### コマンド
 ```powershell
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py --limit 3        # 最初の動作確認(先頭3座だけ、数十秒)
 ./venv/Scripts/python.exe -X utf8 mountain_weather_mvp.py                  # 探索モード全山(初回は数分、出力は数百行)
@@ -46,7 +69,7 @@ python -m venv venv                       # python が無ければ py -m venv ve
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山   # 診断モード(番号でも可)
 ```
 - **76座に無い山**は診断モードに `--name 山名 --lat 緯度 --lon 経度 --elevation 標高m`(4つ一緒。`--mountain` とは併用不可)を渡す。座標・標高はWeb検索(Wikipedia・国土地理院など)で調べ、出典を伝える。地形(風上/風下)の表示は付かず、探索モードの対象にはならない。`MOUNTAINS` への追加は別途ユーザーに確認する。
-- **展望図(山頂から見た雲の絵)を頼まれたら** `mountain_weather_detail.py --mountain 山 --panorama`(76 座だけ。HTML を `out/panorama/` に書き、最後に「展望図: パス」)。初回は標高タイルの取得に約 12 分かかるので、先に伝える。展望図が作れなくても診断の出力・終了コードは変わらない。
+- **展望図(山頂から見た雲の絵)を頼まれたら** `mountain_weather_detail.py --mountain 山 --panorama`(76 座だけ。HTML を `out/panorama/` に書き、最後に「展望図: パス」)。時間は手元の標高タイルの枚数で大きく変わるので、**先に同じ山で `--panorama-estimate` を実行し、出た時間を伝えてから作る**(上の「長い作業の前に伝える」)。展望図が作れなくても診断の出力・終了コードは変わらない。
 - 引数なしの `mountain_weather_detail.py` は対話式(GPXルート診断もこちら)。エージェントからは `--mountain` を使う。山の番号はリスト順なので、使う前に `--list` で確認する。2回目以降は `cache/` が効いて速い。
 - 診断モードの時間ごとの表(画面・`--json-out` とも同じ列)の **「総雲量%」は空全体の雲量で、地上付近の雲量ではない**。内訳の「低層雲%」「中層雲%」「高層雲%」で、山頂より下の雲か、山の上の高い雲かを読み分ける(読み方は `skills/yamabiyori/references/report_style.md`)。
 - **PowerShell では python の出力を `>`・`|`・`$x = ...` で受けない。** Windows PowerShell 5.1 では日本語が化け、`>` の
