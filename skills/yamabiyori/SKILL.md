@@ -53,7 +53,7 @@ description: 'Design/implementation reference for "ヤマビヨリ"(ヤマビヨ
 
 - `mountain_terrain.py`(2026-09-10追加) — 地形レイヤー(国土地理院DEMタイル、地形プロファイル、風上/風下判定。後述「地形レイヤー」節)。`precompute_terrain.py`が76座分を`terrain_profiles.json`に事前計算する。
 - `mountain_weather_core.py`(2026-09追加) — mvp.py/detail.pyが共有する土台モジュール。`MOUNTAINS`リスト、標高補間レイヤー(`LEVEL_STACK_HPA`/`level_stack_vars`/`interp_at_altitude`/`add_altitude_columns`/`climb_layer_moist_series`/`FIXED_ALTITUDE_BANDS_M`/`BAND_VARS`/`WIND_SPEED_BAND_VARS`/`SUMMIT_VARS`/`altitude_col`、2026-09-09〜。旧: `nearest_pressure_level`/`ALTITUDE_BAND_HPA`/`nearest_band`による気圧面スナップ。`nearest_pressure_level`はアンサンブルAPI用に残存)、スコア算出ロジック(penalty関数群/`wet_chill_adjustment_c`/`SCORE_WEIGHTS`/`mountain_climb_score`/雷・強風の危険信号判定`hazard_level`/`mountain_hazards`/`hazard_cell`/`safe_avg`/`safe_avg_or_none`/`wind_chill_c`/`KMH_TO_MS`/`WIND_PEAK_WARNING_MS`)、生JSONキャッシュ層(`fetch_open_meteo`/`_cache_path`/`_load_cache`/`_save_cache`/`get_with_retry`/`CACHE_DIR`/`CACHE_TTL_SECONDS`/`OPEN_METEO_URL`)、日付/表示ヘルパー(`display_width`/`pad`/`WEEKDAY_JA`/`format_date_with_weekday`)、`PRECIP_TIMING_*`定数、気象衛星ひまわり画像取得(`fetch_himawari_image`/`fetch_himawari_tile`/`himawari_latest_basetime`/`latlon_to_tile_xy`/`HIMAWARI_IMG_TYPES`、後述「気象衛星ひまわり画像取得機能」節)を1箇所で定義する。単体では実行しない(`if __name__ == "__main__"`を持たない)、mvp.py/detail.pyから`from mountain_weather_core import (...)`されるだけのモジュール。**2026-09より前はこれら全てが2ファイルへ手でコピーされていたが、この移行で単一のソースに統合した**(詳細は各セクション参照)。
-- `mountain_weather_mvp.py` — 候補となる山76座を、指定期間内で登山向け総合スコア(`mountain_climb_score`、後述)が高い順にランキング表示する非対話スクリプト。Open-Meteoレスポンスのディスクキャッシュも実装済み(core.py経由)。
+- `mountain_weather_mvp.py` — 候補となる山76座を、指定期間内で登山向け総合スコア(`mountain_climb_score`、後述)が高い順にランキング表示する非対話スクリプト。同点(小数1桁が同じ)の中は、危険信号の軽い順 → 稜線風速の弱い順 → 山の ID の順(`report_data.rank_key()`、2026-11-24。スコアと危険信号の判定は変えず、並びだけ)。同点が2座以上ある日は表の上に1行(`tie_note()`)出す。Open-Meteoレスポンスのディスクキャッシュも実装済み(core.py経由)。
 - `mountain_weather_detail.py` — 山を1つ対話的に選び、(1)登山向け総合スコアの日別サマリーと(2)14日分の1時間ごと詳細(雲量・風など)の2段構成で表示する。Open-Meteoレスポンスのディスクキャッシュも実装済み(core.py経由)。
 - `requirements.txt` — 中核機能の依存(`requests`・`numpy`)を記載。オプション機能(`playwright`/`Pillow`)は別途コメントで案内(後述のオプション依存セクション参照)。
 - `cli_output.py`(v1.7.0) — `--out`(出力をUTF-8 BOM付きでファイルに保存)の共通処理。mvp.py/detail.pyが使う。
@@ -74,7 +74,11 @@ mvp.py/detail.pyは**それぞれの独自機能については引き続き意�
 - **探索モード**(`mountain_weather_mvp.py`): 「〇〇な山を探して」「どこかいい山ない?」のような広域探索の質問。
 - **診断モード**(`mountain_weather_detail.py`): 「〇〇山の天気は?」「〇〇岳を詳しく/評価して」のような個別の山を深掘りする質問。
 - ユーザーから「探索モードで」「診断モードで」と直接指定された場合は、上記の対応関係に沿って迷わず該当スクリプトを実行する。
-- **展望図**(「〇〇岳の山頂から何が見える?」「明日の朝、山頂からの景色に雲はかかる?」): 診断モードに `--panorama` を付ける(76 座だけ。`out/panorama/<ID>.html` に天気入りの展望図。翌日の 6・8・10・12 時)。初回は標高タイルの取得に約 12 分かかることを先に伝える。図は予報にもとづく目安で、答え合わせは少数(README「天気入りの展望図」)。
+- **展望図**(「〇〇岳の山頂から何が見える?」「明日の朝、山頂からの景色に雲はかかる?」): 診断モードに `--panorama` を付ける(76 座だけ。`out/panorama/<ID>.html` に天気入りの展望図。翌日の 6・8・10・12 時)。先に `--panorama-estimate`(通信しない見積もり)を実行し、出た時間を伝えてから作る(下の「長い作業の前に伝える」)。図は予報にもとづく目安で、答え合わせは少数(README「天気入りの展望図」)。
+
+### 長い作業の前に伝える
+
+30 秒以上かかる見込みの作業の前に、**何をするか**と**時間の目安**を 1 行で伝える(例: 「全 76 座の予報を取ります。5 分ほどかかります。」)。最初の長いコマンドの直前に 1 回だけで、途中の実況・終わったあとの所要時間の報告はしない。時間の目安は `AGENTS.md` の「長い作業の前に伝える」の表から引き、**自分で見積もらない**(表に無い作業・未実測の作業は「時間の目安はまだ測っていません」と言う)。展望図は手元の標高タイルの枚数で時間が大きく変わるので、先に `--panorama-estimate` を実行してその結果を伝える(2026-11-24: 固定の「約 12 分」と先に伝えたが、実際は 2〜3 分だったため)。
 
 ## 共通のデータ取得ロジック
 

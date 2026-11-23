@@ -11,6 +11,7 @@ import re
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 import mountain_weather_detail as detail
 import mountain_weather_mvp as mvp
@@ -292,6 +293,196 @@ class TestBaseline(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertNotIn("おすすめの山", base)
         self.assertIn("上位: ", base)                           # 既定は従来どおり
+
+    def _tied_data(self, n=20, score=98.6, hazards=None):
+        """同点 n 座の1日(作った値。稜線の風は m001 がいちばん弱い)。hazards: {番号: 危険信号の段階}。"""
+        data = load(os.path.join(FIX, "explore.json"))
+        day = copy.deepcopy(next(d for d in data["days"] if d["rows"]))
+        base = day["rows"][0]
+        rows = []
+        for i in range(1, n + 1):
+            r = copy.deepcopy(base)
+            level = (hazards or {}).get(i, "-")
+            r.update(mountain=f"見本{i:02d}山(1000m)", id=f"m{i:03d}", score=score, ridge_wind_ms=float(i), rank=i,
+                     hazards={"thunder": "-", "wind": level, "cold": "-", "any": level != "-"})
+            r["hazard_class"] = report_data.hazard_class(r["hazards"])
+            r["cells"] = dict(r["cells"], hazard="-" if level == "-" else f"⚠強風{level}")
+            rows.append(r)
+        day["rows"] = rows
+        day["all"] = [{"mountain": r["mountain"], "region": r["region"], "score": r["score"],
+                       "hazard_class": r["hazard_class"], "id": r["id"]} for r in rows]
+        data["days"] = [day]
+        return data, day
+
+    def _page(self, data, cm=None, *extra):
+        with tempfile.TemporaryDirectory() as d:
+            p, c, o = (os.path.join(d, x) for x in ("d.json", "c.json", "o.html"))
+            for path, obj in ((p, data), (c, cm or {})):
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(obj, f, ensure_ascii=False)
+            code, _, err = render(["--data", p, "--commentary", c, "--out", o, *extra])
+            self.assertEqual(code, 0, err)
+            with open(o, encoding="utf-8") as f:
+                return f.read()
+
+    @staticmethod
+    def _row(page, name, start=0):
+        """その山の行(tr)の文字を、セルごとに取り出す(start 以降の最初の行)。"""
+        for m in re.finditer(r"<tr>(.*?)</tr>", page[start:], re.S):
+            if name in m.group(1):
+                return [re.sub(r"<[^>]+>", "", c) for c in re.findall(r"<td[^>]*>(.*?)</td>", m.group(1), re.S)]
+        return None
+
+    def test_pick_outside_top_is_added_to_ranking(self):
+        """上位の外のおすすめの山が、区切りの行の下に、並びの番号と★つきで出る。避ける山も印つき。"""
+        data, _ = self._tied_data(hazards={2: "注意"})
+        page = self._page(data, {"picks": ["見本18山"], "avoid": ["見本03山", "見本19山"]}, "--ranking-layout", "single")
+        at = page.index("日ごとのランキング")
+        ranking = page[at:]
+        self.assertEqual(ranking.count("★ 見本18山"), 1)
+        self.assertLess(ranking.index("おすすめの山(上位 15 座の外)"), ranking.index("★ 見本18山"))
+        self.assertLess(ranking.index("★ 見本18山"), ranking.index("避ける山(上位 15 座の外)"))
+        self.assertEqual(self._row(page, "★ 見本18山", at)[0], "17")           # 見本02山(注意)は最後の20番
+        self.assertEqual(self._row(page, "見本19山", at)[0], "18")
+        self.assertIn("避ける", self._row(page, "見本03山", at)[1])              # 上位の中でも印が付く
+        self.assertEqual(ranking.count("凡例: ★ = おすすめの山、「避ける」= 避ける山。"), 1)
+        # おすすめ・避ける表の「順位」: 同点は同じ順位
+        head = page[:at]
+        self.assertIn("<th", head[head.index(">順位<") - 40:head.index(">順位<")])
+        self.assertEqual(self._row(head, "見本18山")[2], "1位(同点 20 座)")
+        self.assertEqual(self._row(head, "見本03山")[2], "1位(同点 20 座)")
+
+    def test_pick_inside_top_has_no_extra_row(self):
+        data, _ = self._tied_data()
+        page = self._page(data, {"picks": ["見本01山"]}, "--ranking-layout", "single")
+        ranking = page[page.index("日ごとのランキング"):]
+        self.assertEqual(ranking.count("★ 見本01山"), 1)
+        self.assertNotIn("座の外", ranking)
+        self.assertNotIn("避ける", ranking)                                      # avoid が無ければ凡例にも出さない
+
+    def test_place_counts_ties_once(self):
+        data, day = self._tied_data()
+        for i in (0, 1):
+            day["rows"][i]["score"] = day["all"][i]["score"] = 99.0
+        day["rows"][5]["score"] = day["all"][5]["score"] = 90.0
+        page = self._page(data, {"picks": ["見本01山", "見本06山", "見本10山"]})
+        head = page[:page.index("日ごとのランキング")]
+        self.assertEqual([self._row(head, f"見本{n}山")[2] for n in ("01", "10", "06")],
+                         ["1位(同点 2 座)", "3位(同点 17 座)", "20位"])
+
+    def test_pick_below_threshold_is_still_listed(self):
+        data, day = self._tied_data()
+        day["rows"] = day["rows"][:3]
+        day["all"][19].update(score=30.0, hazard_class="warning")
+        page = self._page(data, {"picks": ["見本20山"]}, "--ranking-layout", "single")
+        at = page.index("日ごとのランキング")
+        row = self._row(page, "★ 見本20山", at)
+        self.assertEqual((row[0], row[4], row[5]), ("-", "30.0", "⚠警戒以上"))
+        self.assertEqual(self._row(page[:at], "見本20山")[2], "基準点未満")
+
+    def test_tie_line_and_nothing_else_without_picks(self):
+        """picks の無いレポートは、同点の1行のほかは変わらない(見出し・印・順位の列・凡例は出ない)。"""
+        import report_baseline
+        data, _ = self._tied_data()
+        page = self._page(data, None, "--ranking-layout", "single")
+        line = '<p class="summary">※ 98.6点が 20 座あります。同点の中は、危険信号の軽い順・稜線の風が弱い順に並べています。</p>'
+        self.assertEqual(page.count(line), 1)
+        for word in ("★", "凡例", "順位", "座の外"):
+            self.assertNotIn(word, page)
+        with unittest.mock.patch.object(report_baseline, "tie_note", lambda rows: None):
+            self.assertEqual(page.replace(line, ""), self._page(data, None, "--ranking-layout", "single"))
+
+    def test_old_json_order_is_fixed_in_report(self):
+        """同点が登録順のままの JSON(2026-11-24 より前)でも、レポートでは危険信号の軽い順に並ぶ。数値は変えない。"""
+        data, day = self._tied_data(n=3, hazards={1: "危険", 2: "注意"})
+        before = copy.deepcopy(data)
+        page = self._page(data, None, "--ranking-layout", "single")
+        ranking = page[page.index("日ごとのランキング"):]
+        self.assertEqual(re.findall(r"見本0[123]山", ranking[ranking.index("<tbody>"):]), ["見本03山", "見本02山", "見本01山"])
+        self.assertEqual(data, before)
+
+    @staticmethod
+    def _tables(page):
+        """ランキングの節の、表ごとの山の名前(印つき)。"""
+        ranking = page[page.index("日ごとのランキング"):]
+        return [[re.sub(r"<span.*", "", m) for m in re.findall(r'<td class="strong">(.*?)</td>', t, re.S)]
+                for t in re.findall(r"<tbody>(.*?)</tbody>", ranking, re.S)]
+
+    def _split_data(self):
+        """20座: 1・2 は危険、3〜8 は警戒、9・10 は注意、ほかは危険信号なし。"""
+        levels = {1: "危険", 2: "危険", 9: "注意", 10: "注意", **{i: "警戒" for i in range(3, 9)}}
+        data, day = self._tied_data(hazards=levels)
+        return data, day
+
+    def test_layout_default_is_single(self):
+        """既定は1つの表(2026-11-24 に利用者が決めた)。split は引数で選べる。"""
+        data, _ = self._split_data()
+        self.assertEqual(self._page(data), self._page(data, None, "--ranking-layout", "single"))
+        self.assertNotEqual(self._page(data), self._page(data, None, "--ranking-layout", "split"))
+
+    def test_split_tables(self):
+        data, day = self._split_data()
+        day["rows"][1]["score"] = day["all"][1]["score"] = 99.9           # 危険どうしはスコアの高い順
+        page = self._page(data, None, "--ranking-layout", "split")
+        go, skip = self._tables(page)
+        self.assertEqual(go, [f"見本{i:02d}山" for i in list(range(11, 21)) + [9, 10]])
+        self.assertEqual(skip, ["見本02山", "見本01山", "見本03山", "見本04山", "見本05山"])      # 危険の重い順 → スコア → ID、5座まで
+        self.assertIn("スコアが高くても、危険信号が警戒以上の山です(危険信号はスコアとは別の警告)", page)
+        self.assertIn("全12座。危険信号なし・注意の山", page)
+        self.assertIn("全8座のうち5座", page)
+        at = page.index("<b>見送る山")
+        self.assertEqual(self._row(page, "見本02山", at)[0], "1")          # 番号は表の中で数える
+        self.assertEqual(self._row(page, "見本11山", page.index("<b>行ける山"))[0], "1")
+
+    def test_split_options(self):
+        data, _ = self._split_data()
+        go, skip = self._tables(self._page(data, None, "--ranking-layout", "split", "--top", "3", "--skip-top", "2"))
+        self.assertEqual((len(go), len(skip)), (3, 2))
+        go, skip = self._tables(self._page(data, None, "--ranking-layout", "split", "--top", "0", "--skip-top", "0"))
+        self.assertEqual((len(go), len(skip)), (12, 8))
+
+    def test_single_has_one_table(self):
+        data, _ = self._split_data()
+        page = self._page(data, None, "--ranking-layout", "single")
+        self.assertEqual(len(self._tables(page)), 1)
+        for word in ("行ける山", "見送る山"):
+            self.assertNotIn(word, page)
+
+    def test_split_marks_go_to_their_own_table(self):
+        data, _ = self._split_data()
+        page = self._page(data, {"picks": ["見本20山"], "avoid": ["見本08山", "見本01山"]}, "--ranking-layout", "split", "--top", "3")
+        go, skip = self._tables(page)
+        self.assertEqual(go[-1], "★ 見本20山")
+        self.assertEqual((len(go), len(skip)), (4, 6))
+        self.assertEqual(skip[-1], "見本08山")
+        self.assertIn("おすすめの山(上位 3 座の外)", page)
+        self.assertIn("避ける山(上位 5 座の外)", page)
+        self.assertIn("それぞれの表の中の並びの番号", page)
+        self.assertEqual(page.count("凡例: "), 1)
+
+    def test_split_day_without_go(self):
+        data, _ = self._tied_data(n=3, hazards={1: "警戒", 2: "警戒", 3: "危険"})
+        page = self._page(data, None, "--ranking-layout", "split")
+        self.assertIn("この日は、危険信号が警戒未満の山がありません", page)
+        self.assertEqual(self._tables(page), [["見本03山", "見本01山", "見本02山"]])
+        self.assertNotIn("上位: ", page)                                      # 見送る山を「上位」に挙げない
+
+    def test_split_day_without_skip(self):
+        data, _ = self._tied_data(n=3)
+        page = self._page(data, None, "--ranking-layout", "split")
+        self.assertEqual(len(self._tables(page)), 1)
+        self.assertNotIn("<b>見送る山", page)
+
+    def test_split_does_not_change_summary_and_pick_tables(self):
+        data, _ = self._split_data()
+        cm = {"picks": ["見本20山"], "avoid": ["見本01山"]}
+        a, b = self._page(data, cm, "--ranking-layout", "split"), self._page(data, cm, "--ranking-layout", "single")
+        self.assertEqual(a[:a.index("日ごとのランキング")], b[:b.index("日ごとのランキング")])
+
+    def test_tie_note_in_json_is_used(self):
+        data, day = self._tied_data()
+        day["tie_note"] = "※ 見本の1行"
+        self.assertIn("※ 見本の1行", self._page(data))
 
     def test_explore_picks_unknown_name_fails(self):
         code, err, _ = self._explore_page({"picks": ["存在しない山"]})

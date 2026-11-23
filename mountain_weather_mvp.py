@@ -32,9 +32,10 @@ from datetime import date, datetime, timedelta
 
 import mountain_terrain as terrain
 from cli_output import run_with_output_file
-from report_data import hazard_class, row_to_json, write_report_json
+from report_data import hazard_class, rank_key, row_to_json, tie_note, write_report_json
 
 import mountain_weather_core as core
+import time_estimates
 from mountain_weather_core import (
     MOUNTAINS, pad,
     level_stack_vars, add_altitude_columns, climb_layer_moist_series,
@@ -631,7 +632,7 @@ def report_cells(r) -> dict:
     }
 
 
-def report_day(day_index: int, date_str: str, all_rows: list, day_rows: list, note) -> dict:
+def report_day(day_index: int, date_str: str, all_rows: list, day_rows: list, note, tie=None) -> dict:
     """--json-out の1日分: 表に出る行(順位つき・全列)と、全山のスコア(山域サマリー用の集計元)。"""
     return {
         "index": day_index, "date": date_str, "label": format_date_with_weekday(date_str),
@@ -646,6 +647,7 @@ def report_day(day_index: int, date_str: str, all_rows: list, day_rows: list, no
             for r in all_rows
         ],
         "timing_note": note,
+        "tie_note": tie,   # 同点の数と、同点の中の並べ方の1行(2026-11-24)。同点が無ければ null
     }
 
 
@@ -686,6 +688,11 @@ def main(argv=None) -> int:
         return 2
     # 通信の間隔の調整は探索モードだけで有効にする(2026-11-16。診断モード・ほかの呼び出し元では無効のまま)
     core.configure_open_meteo_pacing(enabled=True)
+    # 始まりの1行(標準エラー。2026-11-24)。時間の目安は実測のある全山のときだけ書く
+    whole = len(pool) == len(MOUNTAINS)
+    time_estimates.announce(time_estimates.start_line(
+        f"{len(pool)} 座の予報を取ります", time_estimates.EXPLORE_ALL_SEC if whole else None,
+        "。予報の保存があれば短くなります"))
     try:
         if args.out:
             code = run_with_output_file(args.out, lambda: run_ranking(args, regions, pool))
@@ -820,12 +827,15 @@ def run_ranking(args, regions, pool) -> int:
         for i in day_range:
             d = target_dates[i]
             qualifying = [r for r in by_date[d] if r["score"] >= MIN_SCORE_THRESHOLD]
-            ranked = sorted(qualifying, key=lambda r: r["score"], reverse=True)
+            ranked = sorted(qualifying, key=rank_key)   # スコア順。同点は危険信号・風・ID の順(2026-11-24、report_data.rank_key)
+            tie = tie_note(ranked)
             day_rows = ranked if TOP_N_PER_DAY is None else ranked[:TOP_N_PER_DAY]
-            report["days"].append(report_day(i, d, by_date[d], day_rows, precip_timing_note(i, day_rows)))
+            report["days"].append(report_day(i, d, by_date[d], day_rows, precip_timing_note(i, day_rows), tie))
             if not day_rows:
                 continue
             print(f"\n-- {format_date_with_weekday(d)} --")
+            if tie:
+                print(tie)
             print_ranking_table(day_rows)
             note = precip_timing_note(i, day_rows)
             if note:

@@ -29,6 +29,42 @@ def hazard_class(hazards) -> str:
     return "none"
 
 
+# ----------------------------------------------------------------------------- 日ごとの並び順(2026-11-24)
+# 晴れの日はほぼ全山が同点になり、スコアだけで並べると山の登録順が残って、危険信号つきの山が上位に見える。
+# スコアの値・危険信号の判定は変えず、同点の中の順だけを決める(探索モードの画面・--json-out・レポートで共通)。
+HAZARD_RANK = {"-": 0, "注意": 1, "警戒": 2, "危険": 3}
+
+
+def hazard_severity(hazards) -> tuple:
+    """(いちばん重い段階, 出ている信号の数)。行が持っている段階の文字だけを見る(新しい判定はしない)。"""
+    levels = [HAZARD_RANK[hazards.get(k, "-")] for k in ("thunder", "wind", "cold")]
+    return max(levels), sum(1 for n in levels if n)
+
+
+def shown_score(r) -> float:
+    """表示の桁(小数1桁)のスコア。同点はこの値で決める(表示が同じなのに内部の差で並びが決まることが無いように)。"""
+    return round(r["score"], 1)
+
+
+def rank_key(r) -> tuple:
+    """並びのキー: スコアの高い順 → 危険信号の軽い順 → 稜線風速の弱い順(値の無い行は最後) → 山の ID の順。"""
+    wind = r.get("ridge_wind_ms")
+    return (-shown_score(r), *hazard_severity(r["hazards"]), wind is None, 0.0 if wind is None else wind, r.get("id") or "")
+
+
+def tie_note(rows):
+    """同点が2座以上ある日の1行(無ければ None)。同点の組が多い日は、いちばん座数の多い組の数を書く。"""
+    counts: dict = {}
+    for r in rows:
+        counts[shown_score(r)] = counts.get(shown_score(r), 0) + 1
+    ties = [(n, s) for s, n in counts.items() if n >= 2]
+    if not ties:
+        return None
+    n, score = max(ties)
+    more = f"(ほかにも同点の組が {len(ties) - 1} 組)" if len(ties) > 1 else ""
+    return f"※ {score:.1f}点が {n} 座あります{more}。同点の中は、危険信号の軽い順・稜線の風が弱い順に並べています。"
+
+
 def row_to_json(r: dict, cells: dict) -> dict:
     """行 dict の数値(ROW_KEYS)と、画面に出す整形済みの文字列(cells)をまとめる。
 

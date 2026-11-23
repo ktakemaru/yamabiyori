@@ -11,6 +11,7 @@ commentary.json(すべて省略可):
    "footer_extra": ["..."], "dates": ["2026-10-17", "2026-10-18"]}
   picks: ["天上山(カチカチ山)", "霧ヶ峰(車山)"] — 探索モードで、おすすめの山の日ごとの数値表を先頭(総評の次)に出す(山名は数値データの山に一意に当たる名前。
          標高や括弧の補足は省略可)。表の数値は自動で入る。picks を指定すると、日別タブの要約から「上位: …」の列挙を外す(おすすめと食い違わないように)。
+         おすすめの山は日ごとのランキングにも「★」つきで必ず出る(上位の外なら表の下に足す)。表には「順位」(同点は同じ順位)が入る。
          picks_title: 表の見出し。avoid: ["美ヶ原", ...] — 避ける山の表(同じ列)。avoid_title: その見出し。
   dates: 出す日だけに絞る(「今週末」なら土日の2日)。診断モードでは先頭の大きなカード・表・確信度などがその日だけになり、
          1〜2日なら時間ごとの降水確率・雲量・風の表も載る(日帰り・1泊2日の計画向け)。
@@ -18,16 +19,27 @@ commentary.json(すべて省略可):
 synoptic.json(scripts/fetch_synoptic.py の出力): 天気図・ひまわり画像の保存先と、取得に失敗したものの理由。
 """
 import re
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from report_data import hazard_severity, rank_key, shown_score, tie_note  # noqa: E402  同点の並び・同点の数は探索モードと同じ関数で決める
 
 DATE_RE = re.compile(r"^\d{4}-(\d\d)-(\d\d)\((.)\)$")
 NAME_RE = re.compile(r"^(.*)\((\d+)m\)$")
 HAZARD_PLAIN = "危険信号なし"
 MAX_LIST = 8
 
+# 日ごとのランキングの形(2026-11-24)。"single": 1つの表、"split": 「行ける山」と「見送る山」(危険信号が警戒以上)の2つの表。
+# 既定は、利用者が見本2枚を見比べて single に決めた(render_report.py の --ranking-layout の既定もこの値)。
+RANKING_LAYOUTS = ("single", "split")
+RANKING_LAYOUT_DEFAULT = "single"
+SKIP_TOP_DEFAULT = 5          # split の見送る山の表に出す座数(仮の値)
+
 
 # 表の列の最小幅(px)。長めの文字列(危険信号・地形など)の列が細くなって1文字ずつ折り返すのを防ぐ。
 COL_WIDTH = {"date": 150, "hazard": 210, "score": 64, "wind": 84, "cape": 70, "cloud": 100, "vis": 90,
-             "wet": 190, "chill": 80, "mm": 90, "terrain": 230, "name": 140, "region": 100, "access": 100, "rank": 36}
+             "wet": 190, "chill": 80, "mm": 90, "terrain": 230, "name": 140, "region": 100, "access": 100, "rank": 36, "place": 150}
 
 
 def sized(cols):
@@ -413,14 +425,16 @@ def region_table(days, n_dates):
     return cols, rows, len(use)
 
 
-def day_summary_explore(day, data, shown, show_top=True):
+def day_summary_explore(day, data, shown, show_top=True, top_rows=None):
+    """top_rows: 「上位: …」に挙げる行(既定は day["rows"]。ランキングを分けたときは行ける山)。"""
+    top_rows = day["rows"] if top_rows is None else top_rows
     allr, rows = day["all"], day["rows"]
     n_all = len(allr)
     n_min = len(rows)
     parts = [f"{n_all}座中、**{n_min}座が{data['min_score']:.0f}点以上**です。"] if n_all else []
     if rows:
-        if show_top:
-            top = "、".join(f"{split_name(r['mountain'])[0]}({r['score']:.1f})" for r in rows[:3])
+        if show_top and top_rows:
+            top = "、".join(f"{split_name(r['mountain'])[0]}({r['score']:.1f})" for r in top_rows[:3])
             parts.append(f"上位: {top}。")
         warn = sum(1 for r in rows if r["hazard_class"] == "warning")
         if warn:
@@ -443,11 +457,131 @@ def find_mountain(data, name):
     return hits[0]
 
 
+def ranked_day(day):
+    """日ごとの行を、探索モードと同じ並び(スコア → 危険信号 → 風 → ID)にして番号を付け直した写し。
+    2026-11-24 より前の JSON(同点が山の登録順のまま)でも、同じ並びになる。数値は変えない。"""
+    rows = sorted(day["rows"], key=rank_key)
+    return {**day, "rows": [{**r, "rank": n} for n, r in enumerate(rows, start=1)]}
+
+
+def place_text(day, mountain, min_score):
+    """その日の順位(同点は同じ順位)。例「1位(同点 71 座)」「58位」。基準点未満は「基準点未満」、値が無ければ「-」。"""
+    scores = {a["mountain"]: shown_score(a) for a in day["all"]}
+    s = scores.get(mountain)
+    if s is None:
+        return "-"
+    if s < min_score:
+        return "基準点未満"
+    place = 1 + sum(1 for v in scores.values() if v > s)
+    same = sum(1 for v in scores.values() if v == s)
+    return f"{place}位" + (f"(同点 {same} 座)" if same > 1 else "")
+
+
+def rank_cells(r, mark=None):
+    """ランキングの表の1行。mark: "pick"(★)・"avoid"(避ける)・None。"""
+    name, elev = split_name(r["mountain"])
+    cell = {"text": ("★ " if mark == "pick" else "") + name, "sub": elev}
+    if mark == "avoid":
+        cell["tag"] = "避ける"
+    return {
+        "rank": r["rank"], "name": cell, "region": r["region"], "access": r["access"],
+        "score": r["score"], "hazard": hazard_cell(r),
+        "wind": num(r["ridge_wind_ms"], " m/s"), "cape": num(r["cape"], digits=0), "cloud": r["cells"]["cloud"],
+        "vis": num(r["ridge_visibility"], " m", thousands=True), "wet": r["cells"]["wet"],
+        "chill": num(r["chill"], "℃"), "mm": num(r["day_total_precip_mm"], " mm"), "terrain": r["cells"]["terrain"],
+    }
+
+
+def low_cells(a, access, mark):
+    """基準点未満の日の、おすすめ・避ける山の1行(数値データに載っているスコアと、危険信号の段階だけ)。"""
+    hazard = {"caution": "⚠注意", "warning": "⚠警戒以上"}.get(a["hazard_class"], "")
+    r = {"rank": "-", "mountain": a["mountain"], "region": a["region"], "access": access, "score": a["score"],
+         "hazard_class": a["hazard_class"], "ridge_wind_ms": None, "cape": None, "ridge_visibility": None, "chill": None,
+         "day_total_precip_mm": None, "cells": {"hazard": hazard, "cloud": "-", "wet": "-", "terrain": "-"}}
+    return rank_cells(r, mark)
+
+
+def extra_groups(day, table_rows, shown, marks, access, belongs=lambda hazard_class: True):
+    """上位の表に入らなかったおすすめの山・避ける山を、表の下に足す分({"label", "rows"} の list)。
+    table_rows: その表に並ぶ全部の行(番号つき)。shown: そのうち表に出した行。belongs: その表に入る危険信号の色分けか。"""
+    shown_names = {r["mountain"] for r in shown}
+    by_row = {r["mountain"]: r for r in table_rows}
+    by_all = {a["mountain"]: a for a in day["all"]}
+    in_rows = {r["mountain"] for r in day["rows"]}
+    where = f"上位 {len(shown)} 座の外" if len(shown) < len(table_rows) else "基準点未満"
+    groups = []
+    for kind, title in (("pick", "おすすめの山"), ("avoid", "避ける山")):
+        rows = []
+        for m in (m for m, k in marks.items() if k == kind and m not in shown_names):
+            if m in by_row:
+                rows.append((by_row[m]["rank"], rank_cells(by_row[m], kind)))
+            elif m in by_all and m not in in_rows and belongs(by_all[m]["hazard_class"]):
+                rows.append((len(day["all"]) + 1, low_cells(by_all[m], access.get(m, "-"), kind)))
+        if rows:
+            groups.append({"label": f"{title}({where})", "rows": [c for _, c in sorted(rows, key=lambda x: x[0])]})
+    return groups
+
+
+def numbered(rows):
+    return [{**r, "rank": n} for n, r in enumerate(rows, start=1)]
+
+
+def split_rows(day):
+    """日ごとの行を (行ける山, 見送る山) に分ける(どちらも表の中の番号つき)。見送る山 = 危険信号が警戒以上。
+    行ける山は今の並び(スコア → 危険信号 → 風 → ID)、見送る山は危険の重い順 → スコアの高い順 → ID の順。"""
+    go = [r for r in day["rows"] if r["hazard_class"] != "warning"]
+    skip = [r for r in day["rows"] if r["hazard_class"] == "warning"]
+    skip.sort(key=lambda r: (-hazard_severity(r["hazards"])[0], -shown_score(r), r.get("id") or ""))
+    return numbered(go), numbered(skip)
+
+
+def shown_text(n, total):
+    return f"全{total}座のうち{n}座" if n < total else f"全{total}座"
+
+
+def ranking_tables(day, data, marks, access, top, skip_top, layout, columns):
+    """日ごとのランキングの表(見出しつき)のブロック。layout は RANKING_LAYOUTS のどちらか。"""
+    def table(groups):
+        return {"type": "table", "min_width": 1200, "columns": sized(columns), "groups": groups}
+
+    def marked(rows):
+        return [rank_cells(r, marks.get(r["mountain"])) for r in rows]
+
+    if layout == "single":
+        shown = day["rows"][:top] if top else day["rows"]
+        groups = [{"rows": marked(shown)}] + extra_groups(day, day["rows"], shown, marks, access)
+        return [table(groups)] if any(g["rows"] for g in groups) else []
+
+    go, skip = split_rows(day)
+    blocks = []
+    for rows, limit, belongs in ((go, top, lambda c: c != "warning"), (skip, skip_top, lambda c: c == "warning")):
+        shown = rows[:limit] if limit else rows
+        groups = [{"rows": marked(shown)}] + extra_groups(day, rows, shown, marks, access, belongs)
+        if rows is go and day["rows"]:
+            note = (f"({shown_text(len(shown), len(go))}。危険信号なし・注意の山)" if go else
+                    f"この日は、危険信号が警戒未満の山がありません(基準点{data['min_score']:.0f}点以上の山のうち)。")
+            blocks.append({"type": "summary", "text": "**行ける山** " + note})
+        elif rows is skip and skip:
+            blocks.append({"type": "summary", "text": "**見送る山(危険信号が警戒以上)** スコアが高くても、危険信号が警戒以上の山です"
+                           f"(危険信号はスコアとは別の警告)。{shown_text(len(shown), len(skip))}(危険の重い順)。"})
+        if any(g["rows"] for g in groups):
+            blocks.append(table(groups))
+    return blocks
+
+
+def legend_text(marks, layout):
+    """ランキングの表の下の凡例(おすすめ・避ける山を指定したときだけ)。"""
+    kinds = set(marks.values())
+    parts = (["★ = おすすめの山"] if "pick" in kinds else []) + (["「避ける」= 避ける山"] if "avoid" in kinds else [])
+    return "凡例: " + "、".join(parts) + f"。# は{'それぞれの表の中の' if layout == 'split' else ''}並びの番号です(同点の中も順に数えます)。上の表の「順位」は、同点を同じ順位と数えています。"
+
+
 def pick_table_section(data, sel, names, sec_id, title, note):
     """名前を指定した山の、日ごとの数値表(探索の数値データから自動で組み立てる。手で写さない)。"""
     access = {r["mountain"]: r["access"] for d in data["days"] for r in d["rows"]}
     cols = [
         {"key": "name", "label": "山", "kind": "strong"}, {"key": "access", "label": "アクセス", "kind": "nowrap"},
+        {"key": "place", "label": "順位", "kind": "nowrap"},
         {"key": "score", "label": "スコア", "kind": "score"}, {"key": "hazard", "label": "危険信号", "kind": "badge"},
         {"key": "wind", "label": "稜線風速", "kind": "num"}, {"key": "chill", "label": "体感温度", "kind": "num"},
         {"key": "wet", "label": "雨天割合%", "kind": "num"}, {"key": "mm", "label": "降水量(全日)", "kind": "num"},
@@ -461,32 +595,39 @@ def pick_table_section(data, sel, names, sec_id, title, note):
         for m in mountains:
             name, elev = split_name(m)
             r = by_row.get(m)
+            place = place_text(d, m, data["min_score"])
             if r:
-                trows.append({"name": {"text": name, "sub": elev}, "access": r["access"], "score": r["score"],
+                trows.append({"name": {"text": name, "sub": elev}, "access": r["access"], "place": place, "score": r["score"],
                               "hazard": hazard_cell(r), "wind": num(r["ridge_wind_ms"], " m/s"),
                               "chill": num(r["chill"], "℃"), "wet": r["cells"]["wet"],
                               "mm": num(r["day_total_precip_mm"], " mm")})
             else:
                 partial = True
                 a = by_all.get(m)
-                trows.append({"name": {"text": name, "sub": elev}, "access": access.get(m, "-"),
+                trows.append({"name": {"text": name, "sub": elev}, "access": access.get(m, "-"), "place": place,
                               "score": a["score"] if a else "-", "hazard": "-",
                               "wind": "-", "chill": "-", "wet": "-", "mm": "-"})
         groups.append({"label": md(d["label"]), "rows": trows})
     if partial:
         note += " 基準点(" + f"{data['min_score']:.0f}" + "点)未満の日は、スコア以外の値をこの数値データに載せていません(「-」)。"
     return {"type": "section", "id": sec_id, "title": title, "note": note,
-            "content": [{"type": "table", "min_width": 900, "columns": sized(cols), "groups": groups}]}
+            "content": [{"type": "table", "min_width": 1050, "columns": sized(cols), "groups": groups}]}
 
 
-def explore_spec(data, cm, syn, n_days=7, top=15):
+def explore_spec(data, cm, syn, n_days=7, top=15, layout=RANKING_LAYOUT_DEFAULT, skip_top=SKIP_TOP_DEFAULT):
+    if layout not in RANKING_LAYOUTS:
+        raise ValueError(f"ランキングの形は {RANKING_LAYOUTS} のいずれか: {layout!r}")
     days = data["days"]
     if cm.get("dates"):
         wanted = set(cm["dates"])
         sel = [d for d in days if d["date"] in wanted]
     else:
         sel = days[:n_days] if n_days else days
-    sel = [d for d in sel if d["all"]]
+    sel = [ranked_day(d) for d in sel if d["all"]]
+    # 山 → "pick"(おすすめ)・"avoid"(避ける)。ランキングの印と、上位の外の行に使う(両方に書かれた山はおすすめ)
+    marks = {find_mountain(data, n): "avoid" for n in cm.get("avoid") or []}
+    marks.update({find_mountain(data, n): "pick" for n in cm.get("picks") or []})
+    access = {r["mountain"]: r["access"] for d in data["days"] for r in d["rows"]}
     now_images, fc_images, attributions, failed_text = synoptic_images(syn)
     blocks = []
     if cm.get("overview"):
@@ -525,22 +666,26 @@ def explore_spec(data, cm, syn, n_days=7, top=15):
     for d in sel:
         shown_rows = d["rows"][:top] if top else d["rows"]
         label, wk = tab_parts(d["label"])
-        trows = []
-        for r in shown_rows:
-            name, elev = split_name(r["mountain"])
-            trows.append({
-                "rank": r["rank"], "name": {"text": name, "sub": elev}, "region": r["region"], "access": r["access"],
-                "score": r["score"], "hazard": hazard_cell(r),
-                "wind": num(r["ridge_wind_ms"], " m/s"), "cape": num(r["cape"], digits=0), "cloud": r["cells"]["cloud"],
-                "vis": num(r["ridge_visibility"], " m", thousands=True), "wet": r["cells"]["wet"],
-                "chill": num(r["chill"], "℃"), "mm": num(r["day_total_precip_mm"], " mm"), "terrain": r["cells"]["terrain"],
-            })
-        content = [{"type": "summary", "text": day_summary_explore(d, data, len(shown_rows), show_top=not cm.get("picks"))}]
-        if trows:
-            content.append({"type": "table", "min_width": 1200, "columns": sized(rank_cols), "rows": trows})
+        tables = ranking_tables(d, data, marks, access, top, skip_top, layout, rank_cols)
+        if layout == "split":      # 出した座数は、それぞれの表の上に書く
+            text = day_summary_explore(d, data, len(d["rows"]), show_top=not cm.get("picks"), top_rows=split_rows(d)[0])
+        else:
+            text = day_summary_explore(d, data, len(shown_rows), show_top=not cm.get("picks"))
+        content = [{"type": "summary", "text": text}]
+        tie = d.get("tie_note") or tie_note(d["rows"])
+        if tie:
+            content.append({"type": "summary", "text": tie})
+        content += tables
+        if marks and any(b["type"] == "table" for b in tables):
+            content.append({"type": "summary", "text": legend_text(marks, layout)})
         tabs.append({"label": label, "wk": wk, "heading": md(d["label"]), "content": content})
-    blocks.append({"type": "section", "id": "ranking", "title": "日ごとのランキング",
-                   "note": f"スコアの高い順(基準点{data['min_score']:.0f}点以上" + (f"、上位{top}座まで" if top else "") + ")。",
+    if layout == "split":
+        rank_note = (f"行ける山(危険信号が警戒未満)はスコアの高い順(基準点{data['min_score']:.0f}点以上"
+                     + (f"、上位{top}座まで" if top else "") + ")、見送る山(警戒以上)は危険の重い順"
+                     + (f"(上位{skip_top}座まで)" if skip_top else "") + "。")
+    else:
+        rank_note = f"スコアの高い順(基準点{data['min_score']:.0f}点以上" + (f"、上位{top}座まで" if top else "") + ")。"
+    blocks.append({"type": "section", "id": "ranking", "title": "日ごとのランキング", "note": rank_note,
                    "content": [{"type": "tabs", "tabs": tabs}]})
 
     has_analysis = bool([a for a in (cm.get("synoptic") or {}).get("analysis", []) if a.get("text")])
@@ -554,7 +699,8 @@ def explore_spec(data, cm, syn, n_days=7, top=15):
     }
 
 
-def build_spec(data, commentary=None, synoptic=None, n_days=7, top=15):
+def build_spec(data, commentary=None, synoptic=None, n_days=7, top=15, layout=RANKING_LAYOUT_DEFAULT,
+               skip_top=SKIP_TOP_DEFAULT):
     """数値データ(+任意の解説・天気図取得結果)→ render_report.py のレポート仕様。"""
     cm = commentary or {}
     if data.get("schema", "").split("/")[0] != "yamabiyori-report-data":
@@ -562,5 +708,5 @@ def build_spec(data, commentary=None, synoptic=None, n_days=7, top=15):
     if data.get("mode") == "diagnosis":
         return diagnosis_spec(data, cm, synoptic)
     if data.get("mode") == "explore":
-        return explore_spec(data, cm, synoptic, n_days=n_days, top=top)
+        return explore_spec(data, cm, synoptic, n_days=n_days, top=top, layout=layout, skip_top=skip_top)
     raise ValueError(f"未対応の mode: {data.get('mode')!r}")
