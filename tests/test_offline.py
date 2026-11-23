@@ -9,6 +9,8 @@ import contextlib
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -378,3 +380,39 @@ class TestCloudSeaLowCloud(unittest.TestCase):
         # 山頂より上の帯が80%未満なら、3000m未満の山でも低層雲で判定する
         fc = self._forecast(low=90.0, mid=0.0, high=0.0, total=90.0, bands={3000: 40.0})
         self.assertEqual(len(detail.detect_cloud_sea_opportunity(fc, 2057)), 2)
+
+
+class TestTerrainMajorityWind(unittest.TestCase):
+    """活動時間の風向の多数派(terrain.summarize_lift の "from")。同数なら先に出たほう(2026-11-24)。
+
+    set の並びは実行ごと(PYTHONHASHSEED)に変わるので、set から選ぶと同じ予報でも表示が変わっていた。"""
+
+    # 16方位のうち同数の風向がたくさんある並び(西→…の順に各2時間)。set から選べば種によって変わる。
+    TIED = [270.0, 0.0, 90.0, 180.0, 45.0, 315.0] * 2
+
+    @staticmethod
+    def _lifts(degs):
+        return [{"w_ms": 0.1, "slope": 0.1, "drop_m": 100.0, "rel_drop": 1.0, "from_deg": d, "label": "並"} for d in degs]
+
+    def test_single_majority_unchanged(self):
+        s = terrain.summarize_lift(self._lifts([0.0, 0.0, 270.0, 270.0, 270.0, 90.0]))
+        self.assertEqual(s["from"], "西")
+
+    def test_tie_takes_first_seen(self):
+        self.assertEqual(terrain.summarize_lift(self._lifts([0.0, 270.0, 270.0, 0.0]))["from"], "北")
+        self.assertEqual(terrain.summarize_lift(self._lifts([270.0, 0.0, 0.0, 270.0]))["from"], "西")
+        # 先に出ても数の少ない風向は選ばない。欠けた時間(None)は飛ばす
+        self.assertEqual(terrain.summarize_lift(
+            [None] + self._lifts([90.0, 180.0, 180.0, 0.0, 0.0]))["from"], "南")
+
+    def test_tie_same_for_every_hash_seed(self):
+        code = ("import mountain_terrain as t; "
+                f"print(t.COMPASS_16.index(t.summarize_lift([dict(w_ms=0.1, from_deg=d, label='並') for d in {self.TIED}])['from']))")
+        got = []
+        for seed in ("0", "1", "2", "3"):
+            env = dict(os.environ, PYTHONHASHSEED=seed, PYTHONUTF8="1")
+            proc = subprocess.run([sys.executable, "-X", "utf8", "-c", code], cwd=ROOT, capture_output=True,
+                                  env=env, timeout=120)
+            self.assertEqual(proc.returncode, 0, proc.stderr.decode("utf-8", "replace"))
+            got.append(proc.stdout.decode("utf-8").strip())
+        self.assertEqual(got, [str(terrain.COMPASS_16.index("西"))] * 4)
