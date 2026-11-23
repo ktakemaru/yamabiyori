@@ -34,6 +34,7 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta, timezone
 
 import mountain_terrain as terrain
+import time_estimates
 from cli_output import run_with_output_file
 from report_data import row_to_json, write_report_json
 
@@ -2819,6 +2820,8 @@ def main_single_mountain(mtn: dict = None, report: dict = None) -> int:
     summit_m, wind_speed_var, wind_dir_var = wind_vars_for_elevation(mtn["elevation_m"])
     temp_var = temp_var_for_elevation(mtn["elevation_m"])
 
+    # 始まりの1行(標準エラー。2026-11-24)。標準出力は変えない
+    time_estimates.announce(time_estimates.start_line(f"{mtn['name']}の予報を取ります", time_estimates.DIAGNOSIS_SEC))
     try:
         forecast = fetch_forecast(mtn["lat"], mtn["lon"], summit_m=summit_m,
                                   terrain_profile=terrain.terrain_for(mtn["name"]))
@@ -2916,7 +2919,26 @@ def parse_args(argv=None):
                              "初回は標高タイルの取得に数分かかる。--mountain と一緒にだけ使える)")
     parser.add_argument("--panorama-out", metavar="ファイル",
                         help="展望図の出力先(既定 out/panorama/<山の ID>.html。展望地の図は名前の後ろに v)。--panorama と一緒に使う")
+    parser.add_argument("--panorama-estimate", action="store_true",
+                        help="展望図(--panorama)にかかる時間の見積もりだけを出して終了する(通信しない・予報も図も作らない。"
+                             "手元の標高タイルと保存を数える。--mountain と一緒にだけ使える)")
     return parser.parse_args(argv)
+
+
+def run_panorama_estimate(mtn: dict, is_custom: bool) -> int:
+    """--panorama-estimate: 通信せずに、展望図の時間の見積もりを出す。断り方は --panorama と同じ(終了コードは 0)。"""
+    if is_custom:
+        print("展望図は 76 座だけです")
+        return 0
+    try:
+        from panorama import run as pano
+        lines = pano.estimate_lines(mtn, pano.estimate(mtn, main_days=FORECAST_DAYS))
+    except Exception as e:  # noqa: BLE001  --panorama と同じ断り方
+        print(f"展望図は作れませんでした({e})")
+        return 0
+    for line in lines:
+        print(line)
+    return 0
 
 
 def run_panorama(mtn: dict, is_custom: bool, out_path: str = None) -> None:
@@ -2957,6 +2979,9 @@ def main(argv=None) -> int:
     if args.panorama and args.mountain is None and custom_mtn is None:
         print("--panorama は --mountain と一緒に使ってください(対話モード・--list では使えません)。")
         return 2
+    if args.panorama_estimate and args.mountain is None and custom_mtn is None:
+        print("--panorama-estimate は --mountain と一緒に使ってください(対話モード・--list では使えません)。")
+        return 2
     if args.out and not (args.list or args.mountain is not None or custom_mtn is not None):
         # 対話モード(引数なし・GPX)では input() のプロンプトがファイル側に行き、止まって見えるため受け付けない
         print("--out は --mountain・--name・--list のどれかと一緒に使ってください(対話モードでは使えません)。")
@@ -2979,6 +3004,11 @@ def main(argv=None) -> int:
             else:
                 print(f"「{args.mountain}」に当てはまる山がありません(番号は1-{len(MOUNTAINS)}。--list で一覧を表示)。")
             return 2
+        if args.panorama_estimate:
+            # 見積もりだけ: 予報の取得も展望図の作成もせず、--json-out も書かない
+            def show_estimate():
+                return run_panorama_estimate(mtn, custom_mtn is not None)
+            return run_with_output_file(args.out, show_estimate) if args.out else show_estimate()
         report = {} if args.json_out else None
 
         def run_single():

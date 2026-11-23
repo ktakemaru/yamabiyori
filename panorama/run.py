@@ -31,6 +31,7 @@ from datetime import date, timedelta
 import numpy as np
 
 import mountain_weather_core as core
+import time_estimates
 
 from . import config, draw, geometry, names, terrain, viewpoint, weather
 
@@ -41,7 +42,9 @@ OVERPASS_UA = "yamabiyori-panorama (github.com/ktakemaru/yamabiyori)"
 OVERPASS_TIMEOUT_S = 60
 OVERPASS_RETRIES = 1              # 502 など・つながらないとき、5 秒あけて 1 回だけ取り直す(指示書 v1.10 その2 の 7 章)
 OVERPASS_RETRY_WAIT_S = 5.0
-TILE_SEC_PER = 1.2                # 1 枚の見込みの秒数(1 秒の休み + 通信)
+TILE_SEC_PER = time_estimates.PANORAMA_TILE_SEC    # 1 枚の秒数(実測 566 枚・12 分 14 秒。見積もりと同じ値)
+PROGRESS_TILES = 50               # 標高タイルの進み具合を出す間隔(枚。仮の値)
+PROGRESS_SEC = 60.0               # 同(秒。どちらか早いほう。仮の値)
 HOURS = (6, 8, 10, 12)
 DEFAULT_HOUR = 8
 
@@ -193,18 +196,41 @@ def choose_viewpoint(summit, elements, elev):
 # ---------------------------------------------------------------------------
 # 3. 標高タイル
 # ---------------------------------------------------------------------------
-def ensure_tiles(viewers, stats, log=log_print, extra=False):
-    """要るタイルを数え、無い分を 1 枚ごとに 1 秒あけて取る。取れないタイルが残れば PanoramaUnavailable。
-    extra: 展望地のために足りない分を足して取るとき(知らせの文だけ違う)。数は stats に足していく。"""
-    led = terrain.TileLedger(limits={11: 10 ** 6, 14: 10 ** 6})
-    z11, z14 = terrain.Dem(led, 11, allow_fetch=True), terrain.Dem(led, 14, allow_fetch=True)
+class TileProgress:
+    """標高タイルの取得の進み具合(標準エラー)。PROGRESS_TILES 枚ごと、または PROGRESS_SEC 秒ごとの早いほうで 1 行。"""
+
+    def __init__(self, total, clock=time.monotonic, out=None):
+        self.total, self.clock, self.out = total, clock, out or time_estimates.announce
+        self.done = 0
+        self.last_n, self.last_t = 0, clock()
+
+    def step(self):
+        self.done += 1
+        if self.done >= self.total:
+            return
+        now = self.clock()
+        if self.done - self.last_n >= PROGRESS_TILES or now - self.last_t >= PROGRESS_SEC:
+            self.last_n, self.last_t = self.done, now
+            left = time_estimates.about((self.total - self.done) * TILE_SEC_PER)
+            self.out(f"標高タイル {self.done} / {self.total} 枚(残り {left})")
+
+
+def missing_tiles(viewers, z11, z14):
+    """視点に要る標高タイルと、手元に無いもの。返り値: (要る z11, 要る z14, 無い z11, 無い z14)。"""
     need11, need14 = set(), set()
     for v in viewers:
         t11, t14 = terrain.tiles_needed(z11, z14, v)
         need11 |= t11
         need14 |= t14
-    m11 = sorted(t for t in need11 if not z11.have(*t))
-    m14 = sorted(t for t in need14 if not z14.have(*t))
+    return (need11, need14, sorted(t for t in need11 if not z11.have(*t)), sorted(t for t in need14 if not z14.have(*t)))
+
+
+def ensure_tiles(viewers, stats, log=log_print, extra=False):
+    """要るタイルを数え、無い分を 1 枚ごとに 1 秒あけて取る。取れないタイルが残れば PanoramaUnavailable。
+    extra: 展望地のために足りない分を足して取るとき(知らせの文だけ違う)。数は stats に足していく。"""
+    led = terrain.TileLedger(limits={11: 10 ** 6, 14: 10 ** 6})
+    z11, z14 = terrain.Dem(led, 11, allow_fetch=True), terrain.Dem(led, 14, allow_fetch=True)
+    need11, need14, m11, m14 = missing_tiles(viewers, z11, z14)
     n = len(m11) + len(m14)
     stats["tiles_needed"] = max(stats.get("tiles_needed", 0), len(need11) + len(need14))
     if n:
@@ -215,9 +241,11 @@ def ensure_tiles(viewers, stats, log=log_print, extra=False):
         if log is log_print and sys.stdout is not sys.__stdout__ and sys.__stderr__ is not None:
             print(msg, file=sys.__stderr__, flush=True)    # --out で出力をファイルに送っているときも、画面に知らせる
     t0 = time.time()
+    progress = TileProgress(n)
     for dem, miss in ((z14, m14), (z11, m11)):
-        if miss:
-            dem.ensure(miss)
+        for t in miss:                 # dem.ensure(miss) と同じ順・同じ取り方(1 枚ごとに進み具合を数える)
+            dem.tile(*t)
+            progress.step()
     stats["tiles_fetched"] = stats.get("tiles_fetched", 0) + z11.fetched + z14.fetched
     stats["tiles_failed"] = stats.get("tiles_failed", 0) + z11.failed + z14.failed
     stats["tiles_sec"] = round(stats.get("tiles_sec", 0.0) + time.time() - t0, 1)
@@ -387,6 +415,76 @@ def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True
         files.append({"path": path, "kind": kind, "size": info["size"], "open": info["open"]})
     stats["sec"] = round(time.time() - t_all, 1)
     return {"files": files, "stats": stats, "notes": notes, "day": day}
+
+
+# ---------------------------------------------------------------------------
+# 時間の見積もり(--panorama-estimate。通信しない)
+# ---------------------------------------------------------------------------
+def forecast_saved(parts, day, mtn, main_days, grid_center):
+    """図に要る予報(視点・格子の点・名前の出る山の点)が、どれも手元にあるか。実際に読む関数を、通信しない設定で呼ぶ。"""
+    hours = [h for _, _, h in weather.make_states(day, HOURS) if h is not None]
+    pts = [(parts["v"]["lat"], parts["v"]["lon"])]
+    pts += [(g["lat"], g["lon"]) for g in weather.grid_points(*grid_center)]
+    pts += [(m["lat"], m["lon"]) for m in weather.figure_mountains(parts) if m["lat"] is not None]
+    before = weather.CTX
+    weather.CTX = weather.FetchContext(allow_fetch=False, main_point=(mtn["lat"], mtn["lon"]), main_days=main_days)
+    try:
+        for lat, lon in pts:
+            weather.get_fc(lat, lon, day, hours)
+        return True
+    except weather.WeatherUnavailable:
+        return False
+    finally:
+        weather.CTX = before
+
+
+def saved_parts(v, gsi_file):
+    """保存してある図の地形(作ったときの条件が合うものだけ)。無ければ None。"""
+    path = parts_path(v)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "rb") as fh:
+            saved = pickle.load(fh)
+        return saved["parts"] if saved.get("conditions") == parts_conditions(v, gsi_file) else None
+    except Exception:  # noqa: BLE001  壊れた保存は、無いのと同じ
+        return None
+
+
+def estimate(mtn, day=None, main_days=None):
+    """展望図の時間の見積もり(通信しない・図を作らない)。山頂の視点だけ(展望地は調べるのに通信が要るので入れない)。"""
+    if not any(m["id"] == mtn.get("id") for m in core.MOUNTAINS):
+        raise NotSupported("展望図は 76 座だけです")
+    day = day or tomorrow()
+    ctx, gsi_file = build_context()
+    summit = summit_viewer(mtn, ctx)
+    led = terrain.TileLedger()
+    z11, z14 = terrain.Dem(led, 11, allow_fetch=False), terrain.Dem(led, 14, allow_fetch=False)
+    need11, need14, m11, m14 = missing_tiles([summit], z11, z14)
+    miss = len(m11) + len(m14)
+    parts = saved_parts(summit, gsi_file)
+    weather_ok = parts is not None and forecast_saved(parts, day, mtn, main_days, (summit["lat"], summit["lon"]))
+    # 地形の計算と予報の片方だけ保存があるときの実測は無いので、長いほう(初回の値)を使う
+    draw_sec = (time_estimates.PANORAMA_SAVED_SEC if parts is not None and weather_ok
+                else time_estimates.PANORAMA_FIRST_SEC)
+    tiles_sec = miss * time_estimates.PANORAMA_TILE_SEC
+    return {"zoom": {11: {"needed": len(need11), "missing": len(m11)}, 14: {"needed": len(need14), "missing": len(m14)}},
+            "needed": len(need11) + len(need14), "missing": miss, "parts_saved": parts is not None,
+            "weather_saved": weather_ok, "tiles_sec": tiles_sec, "draw_sec": draw_sec, "sec": tiles_sec + draw_sec}
+
+
+def estimate_lines(mtn, est):
+    """見積もりの出力(決まった形。機械も読める)。"""
+    def z(n):
+        d = est["zoom"][n]
+        return f"ズーム{n}: 要る {d['needed']}・手元 {d['needed'] - d['missing']}・足りない {d['missing']}"
+    about = time_estimates.about
+    tiles = f"タイルの取得 {about(est['tiles_sec'])}" if est["missing"] else "タイルの取得 なし"
+    return [f"展望図の見積もり: {mtn['name']}({mtn['id']})",
+            f"標高タイル: 要る {est['needed']} 枚 / 手元にある {est['needed'] - est['missing']} 枚 / 足りない {est['missing']} 枚"
+            f"({z(11)}、{z(14)})",
+            f"時間の目安: {about(est['sec'])}({tiles} + 予報と図づくり {about(est['draw_sec'])})",
+            "展望地の図があるときは、少し長くなります"]
 
 
 def summary_lines(res):

@@ -35,6 +35,7 @@ from cli_output import run_with_output_file
 from report_data import hazard_class, row_to_json, write_report_json
 
 import mountain_weather_core as core
+import time_estimates
 from mountain_weather_core import (
     MOUNTAINS, pad,
     level_stack_vars, add_altitude_columns, climb_layer_moist_series,
@@ -686,6 +687,11 @@ def main(argv=None) -> int:
         return 2
     # 通信の間隔の調整は探索モードだけで有効にする(2026-11-16。診断モード・ほかの呼び出し元では無効のまま)
     core.configure_open_meteo_pacing(enabled=True)
+    # 始まりの1行(標準エラー。2026-11-24)。時間の目安は実測のある全山のときだけ書く
+    whole = len(pool) == len(MOUNTAINS)
+    time_estimates.announce(time_estimates.start_line(
+        f"{len(pool)} 座の予報を取ります", time_estimates.EXPLORE_ALL_SEC if whole else None,
+        "。予報の保存があれば短くなります"))
     try:
         if args.out:
             code = run_with_output_file(args.out, lambda: run_ranking(args, regions, pool))

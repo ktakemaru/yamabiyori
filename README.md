@@ -179,7 +179,11 @@ Open-Meteoの降水確率は山では当たりにくい。そこでMSM範囲内�
 
 - できた HTML をブラウザで開く。時刻のボタン(6・8・10・12時)で雲が替わる。スマートフォンでは縮尺(広く・標準・拡大)・◀▶・指でなぞる、で見る。
 - 名前が出るのは日本百名山とヤマビヨリの76座。名前が重なる所では、点だけにして名前を省く(スマートフォンでは「拡大」で出る。パソコンでは点にマウスを当てると出る)。
-- **初回は約14分かかる**(標高タイルを取るため)。2回目からは約20秒。
+- **時間は手元の標高タイルの枚数で変わる**(1枚も無ければ約14分、近くの山の図を作ったあとなら数分、保存がそろっていれば約20秒)。
+  作る前に `--panorama-estimate` で見積もれる(通信しない):
+  ```powershell
+  ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 大菩薩嶺 --panorama-estimate
+  ```
 - 予報にもとづく目安で、写真との答え合わせは少数([精度と限界](#展望図について))。
 
 ##### くわしい動き
@@ -195,6 +199,13 @@ Open-Meteoの降水確率は山では当たりにくい。そこでMSM範囲内�
   図づくりは 109 秒で、全体は約 14 分)。図の地形の計算は 1 座 15〜50 秒(`cache/panorama/parts/` に保存し、2 回目からは使い回す)。
   予報は 1 座 約 110〜170 回(Open-Meteo。通信の間隔は自動で調整。`cache/panorama/weather/`、3 時間で取り直す)。
   2 回目以降(保存済み)は 1 座 約 20 秒。
+- **時間の見積もり(`--panorama-estimate`)**: 山頂の図に要る標高タイルを数え(ズーム11・14ごとに、要る・手元・足りない枚数)、
+  足りない枚数 × 1 枚 約 1.3 秒(上の実測 566 枚・12 分 14 秒)+ 予報と図づくり(地形の計算と予報が保存済みなら約 20 秒、どちらかが無ければ
+  109 秒。片方だけ保存があるときの実測が無いため長いほうを使う)を出す。予報の取得・図の作成はせず、終了コード 0 で終わる。
+  展望地の図は調べるのに通信が要るので入れていない。見積もりだけなので、`--panorama`・`--json-out`・`--panorama-out` を一緒に付けても図も JSON も書かない
+  (`--out` を付けると見積もりの文をファイルに保存する)。76 座に無い山は `--panorama` と同じく「展望図は 76 座だけです」。
+- **進み具合**: 標高タイルを取っているあいだ、50 枚ごと(または 60 秒ごと)に「標高タイル 100 / 566 枚(残り 約 10 分)」を標準エラーに出す。
+  探索・診断の始まりの「○ 座の予報を取ります」も標準エラー。標準出力(診断・ランキングの文)は変わらない。
 - **山名**: 日本百名山とヤマビヨリの 76 座の名前は、はじめから出る(山頂の点は `panorama/data/summits.json`。国土地理院
   「日本の主な山岳標高」のうち、百名山と 76 座に当たる点だけを抜き出したもの)。図に「名前は日本百名山とヤマビヨリの 76 座です」と書く。
   そのほかの山の名前も出したいときは、「日本の主な山岳標高」(1003 山)の表(GeoJSON)を `cache/panorama/gsi_1003/` に置く
@@ -385,7 +396,8 @@ Windows PowerShell 5.1 で `>` を使うと文字化けするので、出力を�
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain m012   # 山の変わらない ID でも選べる(ID は --json-out の JSON にある)
 
-# 診断モード + 天気入りの展望図(76座だけ。初回は標高タイルの取得に約12分。上の「天気入りの展望図」)
+# 診断モード + 天気入りの展望図(76座だけ。時間は --panorama-estimate で先に見積もれる。上の「天気入りの展望図」)
+./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 大菩薩嶺 --panorama-estimate
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 大菩薩嶺 --panorama
 
 # 診断モード: 76座に無い山(山名・緯度・経度・標高を4つ一緒に指定。地形データなしで診断する)
@@ -428,6 +440,7 @@ claude --plugin-dir .
 | `mountain_terrain.py` / `precompute_terrain.py` / `terrain_profiles.json` | 地形レイヤー。地理院DEMから76座分を事前計算済み(`terrain_cache/` はタイルキャッシュ、自動生成) |
 | `panorama/` | 天気入りの展望図(`--panorama`)。地形・山名・雲・図(HTML)の部品。`panorama/data/` に山名の辞書と、百名山・76座の山頂の点(`summits.json`) |
 | `tools/build_panorama_summits.py` | `panorama/data/summits.json` を作り直すスクリプト(国土地理院「日本の主な山岳標高」の表が手元にあるときだけ動く) |
+| `time_estimates.py` | 時間の目安(実測の値)と、作業の始まりに標準エラーへ出す1行 |
 | `cli_output.py` | `--out`(出力を UTF-8 BOM付きでファイルに保存)の共通処理 |
 | `tests/`, `scripts/check_setup.py` | オフラインのテスト(参照3日の回帰チェックは `tests/fixtures/refs/` のフィクスチャで動く)とセットアップ確認 |
 | `AGENTS.md` | Codex などのコーディングエージェント向けの指示(セットアップ・成功条件・変更してよい範囲) |
