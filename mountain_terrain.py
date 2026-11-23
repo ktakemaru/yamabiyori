@@ -402,7 +402,7 @@ def summarize_lift(lifts: list) -> dict:
     """活動時間などの窓に含まれる upslope_lift() の結果を集計:
     {"windward_hours", "lee_hours", "neutral_hours", "mean_w_ms", "max_w_ms",
      "label", "from"}。label は多数派(風上/風下/並)、from は多数派の風向
-    (16方位)、データ無しは "-"。"""
+    (16方位。同数なら先に出たほう)、データ無しは "-"。"""
     clean = [l for l in lifts if l]
     if not clean:
         return {"windward_hours": 0, "lee_hours": 0, "neutral_hours": 0, "mean_w_ms": None, "max_w_ms": None,
@@ -413,7 +413,9 @@ def summarize_lift(lifts: list) -> dict:
     ws = [l["w_ms"] for l in clean]
     label = "風上" if ww > max(lee, neu) else "風下" if lee > max(ww, neu) else "並"
     dirs = [compass16(l["from_deg"]) for l in clean]
-    from_ = max(set(dirs), key=dirs.count)
+    # 同数なら先に出た風向(dirs は時刻順、max は最初の最大を返す)。set から選ぶと並びが実行ごとに
+    # 変わり、同じ予報でも風向の表示が変わっていた(2026-11-24)。
+    from_ = max(dirs, key=dirs.count)
     return {"windward_hours": ww, "lee_hours": lee, "neutral_hours": neu,
             "mean_w_ms": round(sum(ws) / len(ws), 2), "max_w_ms": round(max(ws), 2), "label": label, "from": from_}
 
