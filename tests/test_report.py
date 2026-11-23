@@ -336,7 +336,7 @@ class TestBaseline(unittest.TestCase):
     def test_pick_outside_top_is_added_to_ranking(self):
         """上位の外のおすすめの山が、区切りの行の下に、並びの番号と★つきで出る。避ける山も印つき。"""
         data, _ = self._tied_data(hazards={2: "注意"})
-        page = self._page(data, {"picks": ["見本18山"], "avoid": ["見本03山", "見本19山"]})
+        page = self._page(data, {"picks": ["見本18山"], "avoid": ["見本03山", "見本19山"]}, "--ranking-layout", "single")
         at = page.index("日ごとのランキング")
         ranking = page[at:]
         self.assertEqual(ranking.count("★ 見本18山"), 1)
@@ -354,7 +354,7 @@ class TestBaseline(unittest.TestCase):
 
     def test_pick_inside_top_has_no_extra_row(self):
         data, _ = self._tied_data()
-        page = self._page(data, {"picks": ["見本01山"]})
+        page = self._page(data, {"picks": ["見本01山"]}, "--ranking-layout", "single")
         ranking = page[page.index("日ごとのランキング"):]
         self.assertEqual(ranking.count("★ 見本01山"), 1)
         self.assertNotIn("座の外", ranking)
@@ -374,7 +374,7 @@ class TestBaseline(unittest.TestCase):
         data, day = self._tied_data()
         day["rows"] = day["rows"][:3]
         day["all"][19].update(score=30.0, hazard_class="warning")
-        page = self._page(data, {"picks": ["見本20山"]})
+        page = self._page(data, {"picks": ["見本20山"]}, "--ranking-layout", "single")
         at = page.index("日ごとのランキング")
         row = self._row(page, "★ 見本20山", at)
         self.assertEqual((row[0], row[4], row[5]), ("-", "30.0", "⚠警戒以上"))
@@ -384,22 +384,99 @@ class TestBaseline(unittest.TestCase):
         """picks の無いレポートは、同点の1行のほかは変わらない(見出し・印・順位の列・凡例は出ない)。"""
         import report_baseline
         data, _ = self._tied_data()
-        page = self._page(data, None)
+        page = self._page(data, None, "--ranking-layout", "single")
         line = '<p class="summary">※ 98.6点が 20 座あります。同点の中は、危険信号の軽い順・稜線の風が弱い順に並べています。</p>'
         self.assertEqual(page.count(line), 1)
         for word in ("★", "凡例", "順位", "座の外"):
             self.assertNotIn(word, page)
         with unittest.mock.patch.object(report_baseline, "tie_note", lambda rows: None):
-            self.assertEqual(page.replace(line, ""), self._page(data, None))
+            self.assertEqual(page.replace(line, ""), self._page(data, None, "--ranking-layout", "single"))
 
     def test_old_json_order_is_fixed_in_report(self):
         """同点が登録順のままの JSON(2026-11-24 より前)でも、レポートでは危険信号の軽い順に並ぶ。数値は変えない。"""
         data, day = self._tied_data(n=3, hazards={1: "危険", 2: "注意"})
         before = copy.deepcopy(data)
-        page = self._page(data, None)
+        page = self._page(data, None, "--ranking-layout", "single")
         ranking = page[page.index("日ごとのランキング"):]
         self.assertEqual(re.findall(r"見本0[123]山", ranking[ranking.index("<tbody>"):]), ["見本03山", "見本02山", "見本01山"])
         self.assertEqual(data, before)
+
+    @staticmethod
+    def _tables(page):
+        """ランキングの節の、表ごとの山の名前(印つき)。"""
+        ranking = page[page.index("日ごとのランキング"):]
+        return [[re.sub(r"<span.*", "", m) for m in re.findall(r'<td class="strong">(.*?)</td>', t, re.S)]
+                for t in re.findall(r"<tbody>(.*?)</tbody>", ranking, re.S)]
+
+    def _split_data(self):
+        """20座: 1・2 は危険、3〜8 は警戒、9・10 は注意、ほかは危険信号なし。"""
+        levels = {1: "危険", 2: "危険", 9: "注意", 10: "注意", **{i: "警戒" for i in range(3, 9)}}
+        data, day = self._tied_data(hazards=levels)
+        return data, day
+
+    def test_layout_default_is_split(self):
+        data, _ = self._split_data()
+        self.assertEqual(self._page(data), self._page(data, None, "--ranking-layout", "split"))
+        self.assertNotEqual(self._page(data), self._page(data, None, "--ranking-layout", "single"))
+
+    def test_split_tables(self):
+        data, day = self._split_data()
+        day["rows"][1]["score"] = day["all"][1]["score"] = 99.9           # 危険どうしはスコアの高い順
+        page = self._page(data)
+        go, skip = self._tables(page)
+        self.assertEqual(go, [f"見本{i:02d}山" for i in list(range(11, 21)) + [9, 10]])
+        self.assertEqual(skip, ["見本02山", "見本01山", "見本03山", "見本04山", "見本05山"])      # 危険の重い順 → スコア → ID、5座まで
+        self.assertIn("スコアが高くても、危険信号が警戒以上の山です(危険信号はスコアとは別の警告)", page)
+        self.assertIn("全12座。危険信号なし・注意の山", page)
+        self.assertIn("全8座のうち5座", page)
+        at = page.index("<b>見送る山")
+        self.assertEqual(self._row(page, "見本02山", at)[0], "1")          # 番号は表の中で数える
+        self.assertEqual(self._row(page, "見本11山", page.index("<b>行ける山"))[0], "1")
+
+    def test_split_options(self):
+        data, _ = self._split_data()
+        go, skip = self._tables(self._page(data, None, "--top", "3", "--skip-top", "2"))
+        self.assertEqual((len(go), len(skip)), (3, 2))
+        go, skip = self._tables(self._page(data, None, "--top", "0", "--skip-top", "0"))
+        self.assertEqual((len(go), len(skip)), (12, 8))
+
+    def test_single_has_one_table(self):
+        data, _ = self._split_data()
+        page = self._page(data, None, "--ranking-layout", "single")
+        self.assertEqual(len(self._tables(page)), 1)
+        for word in ("行ける山", "見送る山"):
+            self.assertNotIn(word, page)
+
+    def test_split_marks_go_to_their_own_table(self):
+        data, _ = self._split_data()
+        page = self._page(data, {"picks": ["見本20山"], "avoid": ["見本08山", "見本01山"]}, "--top", "3")
+        go, skip = self._tables(page)
+        self.assertEqual(go[-1], "★ 見本20山")
+        self.assertEqual((len(go), len(skip)), (4, 6))
+        self.assertEqual(skip[-1], "見本08山")
+        self.assertIn("おすすめの山(上位 3 座の外)", page)
+        self.assertIn("避ける山(上位 5 座の外)", page)
+        self.assertIn("それぞれの表の中の並びの番号", page)
+        self.assertEqual(page.count("凡例: "), 1)
+
+    def test_split_day_without_go(self):
+        data, _ = self._tied_data(n=3, hazards={1: "警戒", 2: "警戒", 3: "危険"})
+        page = self._page(data)
+        self.assertIn("この日は、危険信号が警戒未満の山がありません", page)
+        self.assertEqual(self._tables(page), [["見本03山", "見本01山", "見本02山"]])
+        self.assertNotIn("上位: ", page)                                      # 見送る山を「上位」に挙げない
+
+    def test_split_day_without_skip(self):
+        data, _ = self._tied_data(n=3)
+        page = self._page(data)
+        self.assertEqual(len(self._tables(page)), 1)
+        self.assertNotIn("<b>見送る山", page)
+
+    def test_split_does_not_change_summary_and_pick_tables(self):
+        data, _ = self._split_data()
+        cm = {"picks": ["見本20山"], "avoid": ["見本01山"]}
+        a, b = self._page(data, cm), self._page(data, cm, "--ranking-layout", "single")
+        self.assertEqual(a[:a.index("日ごとのランキング")], b[:b.index("日ごとのランキング")])
 
     def test_tie_note_in_json_is_used(self):
         data, day = self._tied_data()

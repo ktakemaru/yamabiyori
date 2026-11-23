@@ -601,6 +601,7 @@ def _load_json(path):
 
 
 def main(argv=None):
+    from report_baseline import RANKING_LAYOUT_DEFAULT, RANKING_LAYOUTS, SKIP_TOP_DEFAULT, build_spec
     ap = argparse.ArgumentParser(description="ヤマビヨリのレポートをHTMLにする(仕様JSON、または --json-out の数値データから)")
     ap.add_argument("spec", nargs="?", help="レポート仕様 JSON (UTF-8)。--data を使うときは不要")
     ap.add_argument("--data", help="--json-out で保存した数値データ(診断・探索)。表・集計・出典は自動で組み立てる")
@@ -608,6 +609,11 @@ def main(argv=None):
     ap.add_argument("--synoptic", help="--data と併用: scripts/fetch_synoptic.py の出力 JSON(天気図・ひまわり。省略可)")
     ap.add_argument("--days", type=int, default=7, help="--data(探索)で日別タブに出す日数(既定7、0=全日)")
     ap.add_argument("--top", type=int, default=15, help="--data(探索)で日ごとに出す上位の山数(既定15、0=全件)")
+    ap.add_argument("--ranking-layout", choices=RANKING_LAYOUTS, default=RANKING_LAYOUT_DEFAULT,
+                    help="--data(探索)の日ごとのランキングの形。split=「行ける山」と「見送る山」(危険信号が警戒以上)の2つの表、single=1つの表"
+                         f"(既定 {RANKING_LAYOUT_DEFAULT})")
+    ap.add_argument("--skip-top", type=int, default=SKIP_TOP_DEFAULT,
+                    help=f"--ranking-layout split で「見送る山」に出す座数(既定{SKIP_TOP_DEFAULT}、0=全件)")
     ap.add_argument("--out", required=True, help="出力する HTML のパス")
     ap.add_argument("--embed-images", action="store_true", help="画像を base64 で埋め込み、HTML 1ファイルで完結させる")
     ap.add_argument("--base-dir", help="画像の相対パスの基準(既定: JSON のあるフォルダ)")
@@ -623,11 +629,11 @@ def main(argv=None):
     src_path = Path(args.data or args.spec)
     try:
         if args.data:
-            from report_baseline import build_spec
             spec = build_spec(_load_json(args.data),
                               commentary=_load_json(args.commentary) if args.commentary else None,
                               synoptic=_load_json(args.synoptic) if args.synoptic else None,
-                              n_days=args.days or 999, top=args.top or 9999)
+                              n_days=args.days or 999, top=args.top or 9999,
+                              layout=args.ranking_layout, skip_top=args.skip_top)
         else:
             spec = _load_json(args.spec)
         panorama = None  # 載せるのは1枚だけ。展望地の図があればそれを、無ければ山頂の図を
