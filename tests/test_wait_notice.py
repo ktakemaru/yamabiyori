@@ -85,7 +85,7 @@ class TestEstimate(NoNetwork):
         self.assertEqual((est["needed"], est["missing"]), (len(n11) + len(n14), len(n11) + len(n14)))
         self.assertEqual(est["zoom"][11], {"needed": len(n11), "missing": len(n11)})
         self.assertEqual(est["zoom"][14], {"needed": len(n14), "missing": len(n14)})
-        self.assertAlmostEqual(est["sec"], est["missing"] * 734 / 566 + 109)
+        self.assertAlmostEqual(est["sec"], est["missing"] * 734 / 566 + te.PANORAMA_FIRST_SEC)
 
     def test_some_tiles(self):
         _, n11, n14 = self.needed()
@@ -102,7 +102,7 @@ class TestEstimate(NoNetwork):
         self.put(11, n11)
         self.put(14, n14)
         est = run.estimate(self.mtn)
-        self.assertEqual((est["missing"], est["tiles_sec"], est["sec"]), (0, 0, 109.0))
+        self.assertEqual((est["missing"], est["tiles_sec"], est["sec"]), (0, 0, te.PANORAMA_FIRST_SEC))
 
     def _save_parts(self, v):
         ctx, gsi = run.build_context()
@@ -120,11 +120,11 @@ class TestEstimate(NoNetwork):
         est = run.estimate(self.mtn)                             # 地形の計算だけ保存済み、予報は無い
         self.assertTrue(est["parts_saved"])
         self.assertFalse(est["weather_saved"])
-        self.assertEqual(est["sec"], 109.0)
+        self.assertEqual(est["sec"], te.PANORAMA_FIRST_SEC)
         with mock.patch.object(weather, "get_fc", return_value={"time": []}):
             est = run.estimate(self.mtn)                         # 予報もそろっている
         self.assertTrue(est["weather_saved"])
-        self.assertEqual(est["sec"], 20.0)
+        self.assertEqual(est["sec"], te.PANORAMA_SAVED_SEC)
 
     def test_context_is_restored_and_does_not_fetch(self):
         v, n11, n14 = self.needed()
@@ -166,7 +166,7 @@ class TestEstimateCommand(NoNetwork):
         lines = out.splitlines()
         self.assertEqual(lines[0], "展望図の見積もり: 大菩薩嶺(m058)")
         self.assertRegex(lines[1], r"^標高タイル: 要る (\d+) 枚 / 手元にある 0 枚 / 足りない \1 枚")
-        self.assertRegex(lines[2], r"^時間の目安: 約 \d+ 分\(タイルの取得 約 \d+ 分 \+ 予報と図づくり 約 2 分\)$")
+        self.assertRegex(lines[2], r"^時間の目安: 約 \d+ 分\(タイルの取得 約 \d+ 分 \+ 予報と図づくり 約 3 分\)$")
         self.assertEqual(len(lines), 4)
 
     def test_with_panorama_and_json_out_writes_nothing(self):

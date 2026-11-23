@@ -47,13 +47,13 @@ python -m venv venv                       # python が無ければ py -m venv ve
 
 | 作業 | コマンド | 目安 | 出どころ(いつ・どこで測ったか) |
 |---|---|---|---|
-| 探索モード 全 76 座 | `mountain_weather_mvp.py` | 約 4 分 | 2026-11-18、開発用の PC、空のキャッシュで 2 回: 250・246 秒(ほかに、キャッシュの状態の記録が無い 1 回が 252 秒。`docs/mountain-coordinates-fix-report.md` 4 章)。予報の保存(3 時間)があると短い(62 座が保存済みで 16 秒、同上) |
+| 探索モード 全 76 座 | `mountain_weather_mvp.py` | 約 4 分 | 2026-11-24、この PC、1 回(利用者の実行): 246.0 秒。2026-11-18、空のキャッシュで 2 回: 250・246 秒(`docs/mountain-coordinates-fix-report.md` 4 章)。予報の保存(3 時間)があると短い: 2026-11-24、この PC、1 回: 全座が保存済みで 17.1 秒(通信 0) |
 | 探索モード 一部(`--limit`・`--region`) | `mountain_weather_mvp.py --limit 3` など | 未実測 | — |
-| 診断モード 1 座 | `mountain_weather_detail.py --mountain 山` | 未実測 | — |
-| 診断モード + 展望図(初回) | `mountain_weather_detail.py --mountain 山 --panorama` | **`--panorama-estimate` の結果** | 標高タイルが 1 枚も無いとき 566 枚・12 分 14 秒 + 予報と図づくり 109 秒(2026-11-20、大菩薩嶺。`docs/panorama-v1.10-finish-report.md`) |
+| 診断モード 1 座 | `mountain_weather_detail.py --mountain 山` | 未実測 | 予報の保存があるときは 2026-11-24、この PC、1 回: 高尾山 1.6 秒(通信 0)。保存が無いときは未実測 |
+| 診断モード + 展望図(初回) | `mountain_weather_detail.py --mountain 山 --panorama` | **`--panorama-estimate` の結果** | 標高タイルが 1 枚も無いとき 566 枚・12 分 14 秒 + 予報と図づくり 109 秒(2026-11-20、大菩薩嶺。`docs/panorama-v1.10-finish-report.md`)。タイルがそろっているとき 192 秒(うち図 190 秒。2026-11-24、この PC、1 回: 高尾山、予報 115 回、図 2 枚) |
 | 診断モード + 展望図(2 回目以降) | 同上 | **`--panorama-estimate` の結果** | すべて保存済みで約 20 秒(20.7 秒・22.4 秒、大菩薩嶺。`docs/panorama-v1.10-report.md`・同上) |
 | 計画モード(GPX) | `mountain_weather_detail.py`(対話式) | 未実測 | — |
-| HTML レポートの作成 | `scripts/render_report.py` | 未実測 | — |
+| HTML レポートの作成 | `scripts/render_report.py` | 約 1 秒 | 2026-11-24、この PC、1 回: 探索の JSON(7 日)から 0.9 秒(通信なし) |
 | 天気図・ひまわりの取得 | `scripts/fetch_synoptic.py` | 未実測 | — |
 | 地形の事前計算 | `precompute_terrain.py` | 未実測 | — |
 | テスト | `-m unittest` | 約 1 分 | 2026-11-24、開発用の PC、1 回: 187 件・67 秒 |
