@@ -409,8 +409,8 @@ Windows PowerShell 5.1 で `>` を使うと文字化けするので、出力を�
 # HTMLレポート: 数値をJSONで保存 → 解説を足して変換(手順は skills/yamabiyori/references/report_style.md)
 ./venv/Scripts/python.exe -X utf8 mountain_weather_detail.py --mountain 富士山 --json-out out/fuji.json
 ./venv/Scripts/python.exe -X utf8 scripts/render_report.py --data out/fuji.json --out out/fuji.html
-# 探索モードのレポートのランキングは、既定で「行ける山」と「見送る山」(危険信号が警戒以上)の2つの表に分かれる(1つの表にするには --ranking-layout single)
-./venv/Scripts/python.exe -X utf8 scripts/render_report.py --data out/explore.json --out out/explore.html --ranking-layout single
+# 探索モードのレポートのランキングは、既定で1つの表(「行ける山」と「見送る山」(危険信号が警戒以上)の2つの表に分けるには --ranking-layout split)
+./venv/Scripts/python.exe -X utf8 scripts/render_report.py --data out/explore.json --out out/explore.html --ranking-layout split
 # --json-out の JSON には、各山の変わらない ID(`id`: m001〜。並べ替えても変わらない)が入る。76座に無い山(--name)は null
 
 # テスト(オフライン)

@@ -30,11 +30,11 @@ NAME_RE = re.compile(r"^(.*)\((\d+)m\)$")
 HAZARD_PLAIN = "危険信号なし"
 MAX_LIST = 8
 
-# 日ごとのランキングの形(2026-11-24)。"split": 「行ける山」と「見送る山」(危険信号が警戒以上)の2つの表、"single": 1つの表。
-# 既定を1つの表に戻すには、ここを "single" にする(render_report.py の --ranking-layout の既定もこの値)。
-RANKING_LAYOUTS = ("split", "single")
-RANKING_LAYOUT_DEFAULT = "split"
-SKIP_TOP_DEFAULT = 5          # 見送る山の表に出す座数(仮の値)
+# 日ごとのランキングの形(2026-11-24)。"single": 1つの表、"split": 「行ける山」と「見送る山」(危険信号が警戒以上)の2つの表。
+# 既定は、利用者が見本2枚を見比べて single に決めた(render_report.py の --ranking-layout の既定もこの値)。
+RANKING_LAYOUTS = ("single", "split")
+RANKING_LAYOUT_DEFAULT = "single"
+SKIP_TOP_DEFAULT = 5          # split の見送る山の表に出す座数(仮の値)
 
 
 # 表の列の最小幅(px)。長めの文字列(危険信号・地形など)の列が細くなって1文字ずつ折り返すのを防ぐ。

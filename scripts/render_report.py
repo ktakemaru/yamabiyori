@@ -610,7 +610,7 @@ def main(argv=None):
     ap.add_argument("--days", type=int, default=7, help="--data(探索)で日別タブに出す日数(既定7、0=全日)")
     ap.add_argument("--top", type=int, default=15, help="--data(探索)で日ごとに出す上位の山数(既定15、0=全件)")
     ap.add_argument("--ranking-layout", choices=RANKING_LAYOUTS, default=RANKING_LAYOUT_DEFAULT,
-                    help="--data(探索)の日ごとのランキングの形。split=「行ける山」と「見送る山」(危険信号が警戒以上)の2つの表、single=1つの表"
+                    help="--data(探索)の日ごとのランキングの形。single=1つの表、split=「行ける山」と「見送る山」(危険信号が警戒以上)の2つの表"
                          f"(既定 {RANKING_LAYOUT_DEFAULT})")
     ap.add_argument("--skip-top", type=int, default=SKIP_TOP_DEFAULT,
                     help=f"--ranking-layout split で「見送る山」に出す座数(既定{SKIP_TOP_DEFAULT}、0=全件)")
