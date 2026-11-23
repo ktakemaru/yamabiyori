@@ -22,7 +22,7 @@
 | 0 | `0a58d1c` | 指示書を `docs/release-1.10.2-instructions.md` に写した |
 | 1 | `6a73ac4` | `mountain_terrain.py` の `summarize_lift()`: 多数派の風向が同数なら、先に出たほう。テスト 3 件、CHANGELOG 1 行 |
 | 2 | `0b9a439` | 版を 1.10.2 に(`plugin.json`・CHANGELOG・README) |
-| 3 | この報告書の commit(`git log -1 -- docs/release-1.10.2-report.md`) | `docs/v1.10.2-release-notes.md` と、この報告書 |
+| 3 | `c2b695a` | `docs/v1.10.2-release-notes.md` と、この報告書(このあと、報告書の commit の番号などを足した commit がもう 1 つある) |
 
 飛ばした部はありません。
 
@@ -32,13 +32,13 @@
 
 ## 3. テストの結果
 
-- 変更前 237 件 → 変更後 **240 件**。第 1 部の commit の前と、第 2 部の commit の前に実行し、どちらも最後の行は `OK (skipped=1)`。
+- 変更前 237 件 → 変更後 **240 件**。第 1〜3 部の commit の前(と、報告書を直した commit の前)に実行し、どれも `Ran 240 tests`、最後の行は `OK (skipped=1)`。第 0 部(指示書を写しただけ)の commit の前は、上の 237 件の実行。
 - 足したテスト: `tests/test_offline.py` の `TestTerrainMajorityWind` に 3 件(多数派が 1 つなら今までと同じ / 同数なら先に出たほう / `PYTHONHASHSEED` 0〜3 の子プロセスで同じ)。`mountain_terrain.py` だけを直す前に戻すと落ちることを確かめました(3 件中 2 件が失敗)。
 - **書き換えた既存の期待値はありません**(4.3 の例外は使いませんでした)。テストで消えた行もありません。
 
 ## 4. 地形の風向の直しの確かめ
 
-入力は手元に保存済みの予報です。分析を始める前に `C:\yamabiyori-archive\terrain-from-2026-11-24\cache` に写し(`CLAUDE.md` の決まり)、その写しを読みました。**通信しようとすると例外で止まる仕組みを入れて**実行し、止めた回数は全実行で 0 回でした。`PYTHONHASHSEED` 1・2・3 の 3 つで、変更前(main と同じコード)と変更後を実行しました。
+入力は手元に保存済みの予報です。分析を始める前に `C:\yamabiyori-archive\terrain-from-2026-11-24\cache` に写し(`CLAUDE.md` の決まり)、その写しを読みました。**通信しようとすると例外で止まる仕組みを入れて**実行し、止めた回数は全実行で 0 回でした。`PYTHONHASHSEED` 1・2・3 の 3 つで、変更前(main と同じコード)と変更後を実行しました。比べに使った出力・同数の記録・スクリプトは `C:\yamabiyori-archive	errain-from-2026-11-24\check` に残しました(commit していません)。
 
 **探索モード(全 76 座・15 日、終了コード 0)**
 
