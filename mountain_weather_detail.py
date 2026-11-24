@@ -34,6 +34,7 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta, timezone
 
 import mountain_terrain as terrain
+import sun_times
 import time_estimates
 from cli_output import run_with_output_file
 from report_data import row_to_json, write_report_json
@@ -1020,6 +1021,22 @@ def print_day_score_table(mtn: dict, day_scores: dict):
     note = precip_timing_note(day_scores)
     if note:
         print(f"\n{note}")
+
+
+def sun_times_by_day(mtn: dict, days) -> list:
+    """予報の日ごとの日の出・日没(計算値。平らな地平線での目安)。日ごとに 1 件。"""
+    out = []
+    for day_str in sorted(days):
+        rise, sunset = sun_times.sun_times(mtn["lat"], mtn["lon"], day_str)
+        out.append({"date": day_str, "label": format_date_with_weekday(day_str), "sunrise": rise, "sunset": sunset})
+    return out
+
+
+def print_sun_times(mtn: dict, sun_days: list):
+    print(f"\n=== {mtn['name']}の日の出・日没 ===")
+    for d in sun_days:
+        print(f"{pad(d['label'], 18)}日の出 {d['sunrise'] or '-'}  日没 {d['sunset'] or '-'}")
+    print(f"({sun_times.NOTE})")
 
 
 def print_hourly_table(mtn: dict, rows: list):
@@ -2808,6 +2825,8 @@ def build_report_data(mtn: dict, day_scores: dict, opportunities: list, rows: li
         "transitions": transitions,
         "confidence": confidence, "confidence_error": confidence_error,
         "hourly": hourly_report_rows(mtn, rows),
+        # 日の出・日没(2026-11-25。計算値・平らな地平線での目安。スコア・活動時間の計算には使わない)
+        "sun_times": {"note": sun_times.NOTE, "days": sun_times_by_day(mtn, day_scores)},
     }
 
 
@@ -2831,6 +2850,7 @@ def main_single_mountain(mtn: dict = None, report: dict = None) -> int:
 
     day_scores = compute_day_scores(forecast, wind_speed_var, summit_m, temp_var)
     print_day_score_table(mtn, day_scores)
+    print_sun_times(mtn, sun_times_by_day(mtn, day_scores))
 
     rows = build_hourly_rows(forecast, wind_speed_var, wind_dir_var, summit_m=summit_m, temp_var=temp_var)
     print_hourly_table(mtn, rows)

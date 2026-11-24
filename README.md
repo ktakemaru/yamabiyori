@@ -449,6 +449,7 @@ claude --plugin-dir .
 | `mountain_weather_mvp.py` | 探索モード本体 |
 | `mountain_weather_detail.py` | 診断モード(山選択・GPXルート診断)本体。天気図取得・ルート地図PNG・アンサンブル確信度もここ |
 | `mountain_terrain.py` / `precompute_terrain.py` / `terrain_profiles.json` | 地形レイヤー。地理院DEMから76座分を事前計算済み(`terrain_cache/` はタイルキャッシュ、自動生成) |
+| `sun_times.py` | 日の出・日没の時刻の計算(診断モードの表示だけ。平らな地平線での目安) |
 | `panorama/` | 天気入りの展望図(`--panorama`)。地形・山名・雲・図(HTML)の部品。`panorama/data/` に山名の辞書と、百名山・76座の山頂の点(`summits.json`) |
 | `tools/build_panorama_summits.py` | `panorama/data/summits.json` を作り直すスクリプト(国土地理院「日本の主な山岳標高」の表が手元にあるときだけ動く) |
 | `time_estimates.py` | 時間の目安(実測の値)と、作業の始まりに標準エラーへ出す1行 |

@@ -72,6 +72,7 @@
    - 確信度・風速・雲量などの範囲や最大・最小は、表(`--json-out` の値、時間別の表)から読み直して書く。
    - 「終日」「ほぼ無風」「快晴」などの丸めた言い方は、時間による変化(午後に雲が増える、昼に風が強まる)を隠さない。変化があるときは時刻と値を書く。
    - **`dates` で絞った日以外のこと(来週の強風など)は書かない。**
+   - **日没・日の出に触れるときは時刻を書く**(例: 「日没 16:26」。`sun_times` の値を写す。ページの先頭の数値にも「日の出/日没」が出る)。平らな地平線での目安で、山や尾根で隠れる分は含まない。
 5. **変換**:
    ```powershell
    ./venv/Scripts/python.exe -X utf8 scripts/render_report.py --data out/<山>.json --synoptic out/synoptic.json --commentary out/commentary.json --out out/<山>.html

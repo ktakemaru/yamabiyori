@@ -199,8 +199,12 @@ def diagnosis_spec(data, cm, syn):
             raise ValueError(f"commentary の dates {sorted(wanted)} に当たる日が data にありません")
     labels = {d["label"] for d in days} if cm.get("dates") else None
     now_images, fc_images, attributions, failed_text = synoptic_images(syn)
+    sun = {d["date"]: d for d in (data.get("sun_times") or {}).get("days") or []}
+
     def stats_of(t):
-        return [
+        s = sun.get(t["date"])
+        sun_row = [{"l": "日の出/日没", "v": f"{s['sunrise'] or '-'} / {s['sunset'] or '-'}"}] if s else []
+        return sun_row + [
             {"l": "稜線風速", "v": num(t["ridge_wind_ms"], " m/s")},
             {"l": "稜線雲量(較正/生)", "v": t["cells"]["cloud"] + "%"},
             {"l": "視程", "v": num(t["ridge_visibility"], " m", thousands=True)},
@@ -257,6 +261,8 @@ def diagnosis_spec(data, cm, syn):
                      for d in next_days],
         }
     blocks = [hero, {"type": "summary", "text": auto_summary_diagnosis(days)}]
+    if sun:
+        blocks.append({"type": "note", "text": data["sun_times"]["note"]})
     if cm.get("overview"):
         blocks.append({"type": "analysis", "items": [{"tag": "総評", "text": cm["overview"]}]})
     if cm.get("alert"):
