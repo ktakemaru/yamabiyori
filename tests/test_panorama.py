@@ -386,3 +386,67 @@ class TestFirstTiles(NoNetwork):
         logs, stats, err = self.run_tiles(fail=((10, 21),))
         self.assertEqual(stats["tiles_failed"], 1)
         self.assertIn("標高タイルが 1 枚取れない", err)
+
+
+class TestPanoramaDate(NoNetwork):
+    """--panorama-date(展望図の日付の指定)。予報の範囲は今日から FORECAST_DAYS 日分。"""
+
+    def test_check_day(self):
+        import datetime as dt
+        import mountain_weather_detail as detail
+        today = dt.date(2026, 11, 24)
+        last = today + dt.timedelta(days=detail.FORECAST_DAYS - 1)
+        for ok in (today, dt.date(2026, 11, 26), last):
+            self.assertEqual(detail.panorama_day_from_arg(ok.isoformat(), today), (ok.isoformat(), None))
+        for text, word in (("2026-11-23", "過去の日付"), ((last + dt.timedelta(days=1)).isoformat(), "より先"),
+                           ("11/26", "読めません"), ("20261126", "読めません"), ("2026-11-31", "読めません"), ("", "読めません")):
+            day, error = detail.panorama_day_from_arg(text, today)
+            self.assertIsNone(day, text)
+            self.assertIn(word, error)
+
+    def call(self, argv, error=None):
+        import mountain_weather_detail as detail
+        import panorama.run as pr
+        seen = {}
+
+        def fake(mtn, **kw):
+            seen.update(kw)
+            raise RuntimeError("ここまで")
+        out = io.StringIO()
+        with mock.patch.object(detail, "main_single_mountain", lambda m, r=None: 0), \
+                mock.patch.object(detail, "panorama_day_from_arg", lambda text: (None, error) if error else (text, None)), \
+                mock.patch.object(pr, "make_panorama", side_effect=fake), \
+                mock.patch.object(pr, "estimate", side_effect=fake), contextlib.redirect_stdout(out):
+            code = detail.main(argv)
+        return code, out.getvalue(), seen
+
+    def test_day_is_passed(self):
+        _, _, seen = self.call(["--mountain", "m026", "--panorama", "--panorama-date", "2026-11-26"])
+        self.assertEqual(seen["day"], "2026-11-26")
+        _, _, seen = self.call(["--mountain", "m026", "--panorama-estimate", "--panorama-date", "2026-11-26"])
+        self.assertEqual(seen["day"], "2026-11-26")
+
+    def test_without_date_is_as_before(self):
+        import datetime as dt
+        from panorama import run
+        _, _, seen = self.call(["--mountain", "m026", "--panorama"])
+        self.assertIsNone(seen["day"])                             # None = 翌日(make_panorama の既定)
+        with mock.patch.object(run, "date") as d:
+            d.today.return_value = dt.date(2026, 11, 24)
+            self.assertEqual(run.tomorrow(), "2026-11-25")
+        self.assertEqual(os.path.basename(run.default_out_path("m026")), "m026.html")
+        self.assertEqual(os.path.basename(run.default_out_path("m026", "viewpoint")), "m026v.html")
+
+    def test_file_name_with_date(self):
+        from panorama import run
+        self.assertEqual(os.path.basename(run.default_out_path("m026", day="2026-11-26")), "m026_2026-11-26.html")
+        self.assertEqual(os.path.basename(run.default_out_path("m029", "viewpoint", "2026-11-26")), "m029v_2026-11-26.html")
+
+    def test_refused_before_diagnosis(self):
+        code, out, seen = self.call(["--mountain", "m026", "--panorama", "--panorama-date", "2020-01-01"], error="断る文")
+        self.assertEqual((code, out, seen), (2, "断る文\n", {}))
+
+    def test_needs_panorama(self):
+        code, out, seen = self.call(["--mountain", "m026", "--panorama-date", "2026-11-26"])
+        self.assertEqual((code, seen), (2, {}))
+        self.assertIn("--panorama か --panorama-estimate", out)

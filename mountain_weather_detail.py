@@ -2915,8 +2915,11 @@ def parse_args(argv=None):
     parser.add_argument("--json-out", metavar="ファイル",
                         help="画面に出す表と同じ数値を、列も行も省かずに JSON で保存する(レポートHTML用。--mountain / --name と一緒にだけ使える)")
     parser.add_argument("--panorama", action="store_true",
-                        help="診断のあとに、その山の山頂から見た天気入りの展望図(HTML)を書く(76 座だけ。翌日の 6・8・10・12 時。"
+                        help="診断のあとに、その山の山頂から見た天気入りの展望図(HTML)を書く(76 座だけ。翌日(--panorama-date で変えられる)の 6・8・10・12 時。"
                              "初回は標高タイルの取得に数分かかる。--mountain と一緒にだけ使える)")
+    parser.add_argument("--panorama-date", metavar="YYYY-MM-DD",
+                        help="展望図の日付(既定は翌日)。今日から予報の最終日まで。--panorama か --panorama-estimate と一緒に使う。"
+                             "ファイル名は out/panorama/<山の ID>_<日付>.html になる(展望地の図は <山の ID>v_<日付>.html)")
     parser.add_argument("--panorama-out", metavar="ファイル",
                         help="展望図の出力先(既定 out/panorama/<山の ID>.html。展望地の図は名前の後ろに v)。--panorama と一緒に使う")
     parser.add_argument("--panorama-estimate", action="store_true",
@@ -2925,14 +2928,38 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def run_panorama_estimate(mtn: dict, is_custom: bool) -> int:
+_DATE_TEXT = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def panorama_day_from_arg(text: str, today: date = None):
+    """--panorama-date の値を確かめる。返り値 (日付の文字列 or None, 断る文 or None)。通信しない。
+
+    範囲は、診断モードの予報と同じ今日〜今日+FORECAST_DAYS-1 日。形式は YYYY-MM-DD だけ(20261126 などは受けない)。"""
+    today = today or date.today()
+    last = today + timedelta(days=FORECAST_DAYS - 1)
+    span = f"{today.isoformat()}〜{last.isoformat()}"
+    text = (text or "").strip()
+    try:
+        if not _DATE_TEXT.fullmatch(text):
+            raise ValueError(text)
+        d = date.fromisoformat(text)
+    except ValueError:
+        return None, f"--panorama-date {text} は日付として読めません。YYYY-MM-DD の形で指定してください(例: {last.isoformat()})。"
+    if d < today:
+        return None, f"--panorama-date {text} は過去の日付です。{span} の範囲で指定してください。"
+    if d > last:
+        return None, f"--panorama-date {text} は予報の範囲({FORECAST_DAYS}日分)より先です。{span} の範囲で指定してください。"
+    return d.isoformat(), None
+
+
+def run_panorama_estimate(mtn: dict, is_custom: bool, day: str = None) -> int:
     """--panorama-estimate: 通信せずに、展望図の時間の見積もりを出す。断り方は --panorama と同じ(終了コードは 0)。"""
     if is_custom:
         print("展望図は 76 座だけです")
         return 0
     try:
         from panorama import run as pano
-        lines = pano.estimate_lines(mtn, pano.estimate(mtn, main_days=FORECAST_DAYS))
+        lines = pano.estimate_lines(mtn, pano.estimate(mtn, day=day, main_days=FORECAST_DAYS))
     except Exception as e:  # noqa: BLE001  --panorama と同じ断り方
         print(f"展望図は作れませんでした({e})")
         return 0
@@ -2941,14 +2968,14 @@ def run_panorama_estimate(mtn: dict, is_custom: bool) -> int:
     return 0
 
 
-def run_panorama(mtn: dict, is_custom: bool, out_path: str = None) -> None:
+def run_panorama(mtn: dict, is_custom: bool, out_path: str = None, day: str = None) -> None:
     """--panorama: 診断の出力のあとに展望図を書き、最後に「展望図: <パス>」を足す。失敗しても診断の結果・終了コードは変えない。"""
     if is_custom:
         print("展望図は 76 座だけです")
         return
     try:
         from panorama import run as pano
-        res = pano.make_panorama(mtn, out_path=out_path, main_days=FORECAST_DAYS)
+        res = pano.make_panorama(mtn, day=day, out_path=out_path, main_days=FORECAST_DAYS)
     except Exception as e:  # noqa: BLE001  展望図のどこで失敗しても、診断は止めない
         print(f"展望図は作れませんでした({e})")
         return
@@ -2976,6 +3003,15 @@ def main(argv=None) -> int:
     if args.panorama_out and not args.panorama:
         print("--panorama-out は --panorama と一緒に使ってください。")
         return 2
+    panorama_day = None
+    if args.panorama_date is not None:
+        if not (args.panorama or args.panorama_estimate):
+            print("--panorama-date は --panorama か --panorama-estimate と一緒に使ってください。")
+            return 2
+        panorama_day, error = panorama_day_from_arg(args.panorama_date)
+        if error:
+            print(error)
+            return 2
     if args.panorama and args.mountain is None and custom_mtn is None:
         print("--panorama は --mountain と一緒に使ってください(対話モード・--list では使えません)。")
         return 2
@@ -3007,7 +3043,7 @@ def main(argv=None) -> int:
         if args.panorama_estimate:
             # 見積もりだけ: 予報の取得も展望図の作成もせず、--json-out も書かない
             def show_estimate():
-                return run_panorama_estimate(mtn, custom_mtn is not None)
+                return run_panorama_estimate(mtn, custom_mtn is not None, panorama_day)
             return run_with_output_file(args.out, show_estimate) if args.out else show_estimate()
         report = {} if args.json_out else None
 
@@ -3017,7 +3053,7 @@ def main(argv=None) -> int:
                       "地形(風上/風下)のデータはありません。座標・標高が山頂からずれていると標高補間の値もずれます。")
             code = main_single_mountain(mtn, report)
             if args.panorama:
-                run_panorama(mtn, custom_mtn is not None, args.panorama_out)
+                run_panorama(mtn, custom_mtn is not None, args.panorama_out, panorama_day)
             return code
         code = run_with_output_file(args.out, run_single) if args.out else run_single()
         if code == 0 and args.json_out:

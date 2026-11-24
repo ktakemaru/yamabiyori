@@ -340,16 +340,19 @@ def tomorrow():
     return (date.today() + timedelta(days=1)).isoformat()
 
 
-def default_out_path(mtn_id, kind="summit"):
-    return os.path.join(config.out_dir(), f"{mtn_id}{'v' if kind == 'viewpoint' else ''}.html")
+def default_out_path(mtn_id, kind="summit", day=None):
+    """day: 日付を指定して作ったときだけ渡す(名前に日付が入る)。"""
+    name = f"{mtn_id}{'v' if kind == 'viewpoint' else ''}"
+    return os.path.join(config.out_dir(), f"{name}_{day}.html" if day else f"{name}.html")
 
 
 def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True, max_calls=None, log=log_print):
-    """1 座の展望図(山頂、展望地があれば展望地も)を作る。返り値: {"files": [パス], "stats": {...}, "notes": [文]}。
+    """1 座の展望図(山頂、展望地があれば展望地も)を作る。day を省くと翌日(<ID>.html)、渡すとその日(<ID>_<日付>.html)。返り値: {"files": [パス], "stats": {...}, "notes": [文]}。
     76 座に無い山は NotSupported。作れないときは PanoramaUnavailable(理由)。"""
     t_all = time.time()
     if not any(m["id"] == mtn.get("id") for m in core.MOUNTAINS):
         raise NotSupported("展望図は 76 座だけです")
+    given_day = day
     day = day or tomorrow()
     stats = {"overpass_calls": 0, "parts_cached": 0, "parts_rebuilt": 0, "parts_sec": 0.0, "tiles_fetched": 0,
              "tiles_needed": 0, "tiles_sec": 0.0, "tiles_failed": 0, "openmeteo_calls": 0, "openmeteo_weight": 0.0}
@@ -401,7 +404,7 @@ def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True
         if out_path and kind == "viewpoint":
             b, e = os.path.splitext(out_path)
             path = b + "v" + (e or ".html")
-        path = path or default_out_path(mtn["id"], kind)
+        path = path or default_out_path(mtn["id"], kind, given_day)
         where = mtn["name"] if kind == "summit" else f"{mtn['name']}・{v['label']}"
         title = f"{where}からの展望と雲({day})"
         intro = (f"<p>{html.escape(viewpoint.source_text(v))}。{day} の予報(Open-Meteo。気象庁 MSM、無い時間は ECMWF)。"
