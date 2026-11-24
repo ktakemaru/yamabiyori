@@ -450,3 +450,102 @@ class TestPanoramaDate(NoNetwork):
         code, out, seen = self.call(["--mountain", "m026", "--panorama-date", "2026-11-26"])
         self.assertEqual((code, seen), (2, {}))
         self.assertIn("--panorama か --panorama-estimate", out)
+
+
+class TestViewpointReason(NoNetwork):
+    """展望地の図を作らなかった理由(登録なし・低い・標高差が不明・同じ場所・取得の失敗・作成の失敗)。"""
+    SUMMIT = {"kind": "summit", "id": "m999", "name": "見本の山", "lat": 35.5, "lon": 138.5, "summit_point": True,
+              "nominal_ele_m": 2000.0, "source": "summit_gsi", "osm_used": False}
+
+    class Elev:
+        def __init__(self, diff):
+            self.diff = diff
+
+        def pair(self, *a):
+            return (None, None, None) if self.diff is None else (2000.0, 2000.0 + self.diff, 14)
+
+    def el(self, lat):
+        return {"type": "node", "id": 1, "lat": lat, "lon": 138.5, "tags": {"tourism": "viewpoint"}}
+
+    def test_reason_codes(self):
+        from panorama import run
+        for els, diff, code, word in (([], 0.0, run.VP_NO_REGISTRATION, "登録"),
+                                      ([self.el(35.499)], -56.5, run.VP_NOT_ELIGIBLE, "-56.5m"),
+                                      ([self.el(35.499)], None, run.VP_ELEV_UNKNOWN, "確かめられない"),
+                                      ([self.el(35.50001)], 0.0, run.VP_SAME_AS_SUMMIT, "兼ねる")):
+            got, text = run.viewpoint_skip_reason(self.SUMMIT, els, self.Elev(diff))
+            self.assertEqual(got, code)
+            self.assertIn(word, text)
+
+    def make(self, elements, why="取得", choose=None, fail_at=None):
+        """make_panorama を、通信と図の部分だけ作り物にして通す。fail_at: 失敗させる展望地の段階。"""
+        from panorama import run, weather
+        mtn = core.mountain_by_id("m057")
+        vp = {"kind": "viewpoint", "id": "m057", "name": mtn["name"], "lat": 36.2, "lon": 140.1, "label": "見本", "osm_used": True,
+              "source": "osm_viewpoint", "has_name": True, "dist_m": 90.0, "az_name": "南", "center_is_summit": True}
+
+        def tiles(viewers, stats, log=None, extra=False):
+            if extra and fail_at == "tiles":
+                raise run.PanoramaUnavailable("標高タイルが 1 枚取れない(見本)")
+            return None, None
+
+        def parts(v, *a):
+            if v["kind"] == "viewpoint" and fail_at == "parts":
+                raise ValueError("地形の見本の失敗")
+            return {"v": v}
+
+        def scenes(p, *a):
+            if p["v"]["kind"] == "viewpoint" and fail_at == "scenes":
+                raise ValueError("雲の見本の失敗")
+            return {}
+
+        def figure(p, *a, **kw):
+            if p["v"]["kind"] == "viewpoint" and fail_at == "figure":
+                raise ValueError("図の見本の失敗")
+            return {"size": 1, "open": "h08"}
+        with mock.patch.object(run, "build_context", lambda: ({}, "gsi")), \
+                mock.patch.object(run, "summit_viewer", lambda m, c: dict(self.SUMMIT)), \
+                mock.patch.object(run, "ensure_tiles", tiles), \
+                mock.patch.object(run, "osm_elements", lambda *a: (elements, why)), \
+                mock.patch.object(run, "choose_viewpoint",
+                                  lambda s, e, el: (vp if choose else None, s)), \
+                mock.patch.object(run, "load_or_compute_parts", parts), \
+                mock.patch.object(run, "scenes_for", scenes), mock.patch.object(run, "figure", figure), \
+                mock.patch.object(weather, "sunrise_from_main_cache", lambda *a: None):
+            return run, run.make_panorama(mtn, day=DAY, out_path=os.path.join(self.tmp, "m057.html"))
+
+    def test_fetch_failed(self):
+        run, res = self.make(None, "Overpass の応答 HTTP 504")
+        self.assertEqual(res["viewpoint"]["reason"], run.VP_FETCH_FAILED)
+        self.assertIn("HTTP 504", res["viewpoint"]["text"])
+        self.assertEqual([f["kind"] for f in res["files"]], ["summit"])
+
+    def test_drawn(self):
+        run, res = self.make([], choose=True)
+        self.assertEqual(res["viewpoint"], {"reason": run.VP_DRAWN, "text": None})
+        self.assertEqual([f["kind"] for f in res["files"]], ["summit", "viewpoint"])
+        self.assertFalse([x for x in run.summary_lines(res) if x.startswith("展望地の図")])
+
+    def test_failure_keeps_the_summit_figure(self):
+        for step in ("tiles", "parts", "scenes", "figure"):
+            run, res = self.make([], choose=True, fail_at=step)
+            self.assertEqual(res["viewpoint"]["reason"], run.VP_FIGURE_FAILED, step)
+            self.assertIn("見本", res["viewpoint"]["text"])
+            self.assertEqual([f["kind"] for f in res["files"]], ["summit"], step)
+            self.assertEqual(sum(x.startswith("展望地の図: なし(") for x in run.summary_lines(res)), 1)
+
+    def test_json_out_has_reason(self):
+        import mountain_weather_detail as detail
+        import panorama.run as pr
+        res = {"files": [{"path": "p.html", "kind": "summit", "size": 1, "open": "h08"}], "notes": ["n"], "day": DAY,
+               "viewpoint": {"reason": pr.VP_NO_REGISTRATION, "text": "登録が無い"}, "stats": {}}
+        p = os.path.join(self.tmp, "r.json")
+        with mock.patch.object(detail, "main_single_mountain", lambda m, r=None: r.update(x=1) or 0), \
+                mock.patch.object(pr, "make_panorama", return_value=res), \
+                mock.patch.object(pr, "summary_lines", return_value=[]), contextlib.redirect_stdout(io.StringIO()):
+            detail.main(["--mountain", "m001", "--panorama", "--json-out", p])
+        with open(p, encoding="utf-8") as fh:
+            d = json.load(fh)
+        self.assertEqual(d["x"], 1)
+        self.assertEqual(d["panorama"], {"date": DAY, "files": [{"path": "p.html", "kind": "summit"}],
+                                         "viewpoint": {"reason": "no_registration", "text": "登録が無い"}, "notes": ["n"]})

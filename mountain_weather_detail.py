@@ -2968,7 +2968,13 @@ def run_panorama_estimate(mtn: dict, is_custom: bool, day: str = None) -> int:
     return 0
 
 
-def run_panorama(mtn: dict, is_custom: bool, out_path: str = None, day: str = None) -> None:
+def panorama_report(res: dict) -> dict:
+    """--json-out に足す展望図の項目(--panorama を付けたときだけ)。"""
+    return {"date": res["day"], "files": [{k: f[k] for k in ("path", "kind") if k in f} for f in res["files"]],
+            "viewpoint": res.get("viewpoint"), "notes": list(res["notes"])}
+
+
+def run_panorama(mtn: dict, is_custom: bool, out_path: str = None, day: str = None, report: dict = None) -> None:
     """--panorama: 診断の出力のあとに展望図を書き、最後に「展望図: <パス>」を足す。失敗しても診断の結果・終了コードは変えない。"""
     if is_custom:
         print("展望図は 76 座だけです")
@@ -2978,7 +2984,11 @@ def run_panorama(mtn: dict, is_custom: bool, out_path: str = None, day: str = No
         res = pano.make_panorama(mtn, day=day, out_path=out_path, main_days=FORECAST_DAYS)
     except Exception as e:  # noqa: BLE001  展望図のどこで失敗しても、診断は止めない
         print(f"展望図は作れませんでした({e})")
+        if report is not None:
+            report["panorama"] = {"error": str(e)}
         return
+    if report is not None:
+        report["panorama"] = panorama_report(res)
     for line in pano.summary_lines(res):
         print(line)
 
@@ -3053,7 +3063,7 @@ def main(argv=None) -> int:
                       "地形(風上/風下)のデータはありません。座標・標高が山頂からずれていると標高補間の値もずれます。")
             code = main_single_mountain(mtn, report)
             if args.panorama:
-                run_panorama(mtn, custom_mtn is not None, args.panorama_out, panorama_day)
+                run_panorama(mtn, custom_mtn is not None, args.panorama_out, panorama_day, report)
             return code
         code = run_with_output_file(args.out, run_single) if args.out else run_single()
         if code == 0 and args.json_out:
