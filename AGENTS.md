@@ -21,6 +21,11 @@
 レポートを出すとき(HTML・可視化を頼まれたとき。公開・共有でなくても適用):
 6. **生成したレポートはローカル(`out/`)に保存し、場所を伝えて終える。** 人に見せる結果は HTML で出す。HTML は自分で書かず、`skills/yamabiyori/references/report_style.md` の手順(`--json-out` で数値を保存 → 天気図を取得して解説を書く → `scripts/render_report.py --data` で変換)に従う。必須要素の欠落はエラーになる。載せられなかった要素は理由を報告に含める。
 
+レポートを artifact として公開するとき(公開する機能がある環境だけ。2026-11-25 利用者の決定):
+- 既存の artifact と、山・モード・対象の日付の範囲が同じなら、更新する。
+- どれかが違うときは、新しく作る(例: 11/27 の表がある artifact に 11/26 の表を上書きしない)。
+- 更新するときは、消える内容を1行で伝えてから行う(例: 「前の artifact の 11/27 の表は無くなります」)。リンクで公開中のページは、確認してから行う。
+
 ## 最初に読むもの
 - このファイルと README.md の「Codexで試す」「3つのモード」節で足りる。`skills/yamabiyori/SKILL.md`(長い)は**スコア式・閾値・較正に関わる変更をするときだけ**読む。 レポート(HTML)を出すときは `skills/yamabiyori/references/report_style.md`(手順・必須要素)と `weather_map_reading.md` を読む。
 - 山・山域をすすめるとき(「家族向け」「デート向け」「初心者向け」など)は `skills/yamabiyori/references/recommend_guide.md` に従う。
