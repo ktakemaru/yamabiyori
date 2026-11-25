@@ -193,6 +193,33 @@ def choose_viewpoint(summit, elements, elev):
     return vp, summit
 
 
+# 展望地の図が作られたか、作られなかった理由(画面・--json-out に出す)。どれも実際に起きたことだけを書く
+VP_DRAWN = "drawn"                      # 展望地の図を作った
+VP_NO_REGISTRATION = "no_registration"  # 山頂から 300m 以内に登録が無い
+VP_NOT_ELIGIBLE = "not_eligible"        # 登録はあるが、低すぎる
+VP_ELEV_UNKNOWN = "elevation_unknown"   # 登録はあるが、標高差を確かめられない
+VP_SAME_AS_SUMMIT = "same_as_summit"    # 山頂とほぼ同じ場所(山頂の図が兼ねる)
+VP_FETCH_FAILED = "fetch_failed"        # 展望地のデータを取れなかった
+VP_FIGURE_FAILED = "figure_failed"      # 図の作成の途中で失敗した
+
+
+def viewpoint_skip_reason(summit, elements, elev):
+    """choose_viewpoint が展望地を選ばなかったときの理由(コード, 文)。summit は choose_viewpoint に渡す前のもの。"""
+    hits = viewpoint.within(summit, elements, viewpoint.VP_RADIUS_M)
+    cands = [viewpoint.vp_record(h, summit, elev) for h in hits]
+    if not cands:
+        return VP_NO_REGISTRATION, f"山頂から {viewpoint.VP_RADIUS_M:.0f}m 以内に展望地の登録(OpenStreetMap)が無い"
+    best, _ = viewpoint.choose(cands)
+    if viewpoint.is_same_place(best):
+        return VP_SAME_AS_SUMMIT, f"展望地の登録が山頂とほぼ同じ場所(山頂から {best['dist_m']:.0f}m)なので、山頂の図が兼ねる"
+    known = [v for v in cands if v.get("dem_diff_m") is not None]
+    if len(known) < len(cands):
+        return VP_ELEV_UNKNOWN, f"展望地の登録は {len(cands)} 件あるが、山頂との標高差を確かめられない"
+    diffs = "・".join(f"{v['dem_diff_m']:+.1f}m" for v in known)
+    return VP_NOT_ELIGIBLE, (f"展望地の登録は {len(cands)} 件あるが、山頂より {-viewpoint.VP_MIN_DIFF_M:.0f}m を超えて低い"
+                             f"(標高差 {diffs})")
+
+
 # ---------------------------------------------------------------------------
 # 3. 標高タイル
 # ---------------------------------------------------------------------------
@@ -340,16 +367,19 @@ def tomorrow():
     return (date.today() + timedelta(days=1)).isoformat()
 
 
-def default_out_path(mtn_id, kind="summit"):
-    return os.path.join(config.out_dir(), f"{mtn_id}{'v' if kind == 'viewpoint' else ''}.html")
+def default_out_path(mtn_id, kind="summit", day=None):
+    """day: 日付を指定して作ったときだけ渡す(名前に日付が入る)。"""
+    name = f"{mtn_id}{'v' if kind == 'viewpoint' else ''}"
+    return os.path.join(config.out_dir(), f"{name}_{day}.html" if day else f"{name}.html")
 
 
 def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True, max_calls=None, log=log_print):
-    """1 座の展望図(山頂、展望地があれば展望地も)を作る。返り値: {"files": [パス], "stats": {...}, "notes": [文]}。
+    """1 座の展望図(山頂、展望地があれば展望地も)を作る。day を省くと翌日(<ID>.html)、渡すとその日(<ID>_<日付>.html)。返り値: {"files": [パス], "stats": {...}, "notes": [文]}。
     76 座に無い山は NotSupported。作れないときは PanoramaUnavailable(理由)。"""
     t_all = time.time()
     if not any(m["id"] == mtn.get("id") for m in core.MOUNTAINS):
         raise NotSupported("展望図は 76 座だけです")
+    given_day = day
     day = day or tomorrow()
     stats = {"overpass_calls": 0, "parts_cached": 0, "parts_rebuilt": 0, "parts_sec": 0.0, "tiles_fetched": 0,
              "tiles_needed": 0, "tiles_sec": 0.0, "tiles_failed": 0, "openmeteo_calls": 0, "openmeteo_weight": 0.0}
@@ -367,12 +397,26 @@ def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True
     vp = None
     if elements is None:
         notes.append(f"展望地は調べられなかった({why})。山頂の図だけ")
+        vp_reason = (VP_FETCH_FAILED, f"展望地のデータを取れなかった({why})")
     else:
-        vp, summit = choose_viewpoint(summit, elements, LocalElev(z11, z14))
-    viewers = [summit] + ([vp] if vp else [])
+        elev, before = LocalElev(z11, z14), summit
+        vp, summit = choose_viewpoint(summit, elements, elev)
+        vp_reason = (VP_DRAWN, None) if vp else viewpoint_skip_reason(before, elements, elev)
+
+    def vp_failed(e):
+        """展望地の図だけが作れなかった。山頂の図は作る。"""
+        return VP_FIGURE_FAILED, f"展望地の図の作成の途中で失敗した({e})"
     if vp:
-        ensure_tiles(viewers, stats, log, extra=True)
-    parts_list = [(v, load_or_compute_parts(v, ctx, gsi_file, stats)) for v in viewers]
+        try:
+            ensure_tiles([summit, vp], stats, log, extra=True)
+        except Exception as e:  # noqa: BLE001  展望地の分の失敗で、山頂の図を止めない
+            vp, vp_reason = None, vp_failed(e)
+    parts_list = [(summit, load_or_compute_parts(summit, ctx, gsi_file, stats))]
+    if vp:
+        try:
+            parts_list.append((vp, load_or_compute_parts(vp, ctx, gsi_file, stats)))
+        except Exception as e:  # noqa: BLE001
+            vp_reason = vp_failed(e)
     # 予報
     states = weather.make_states(day, HOURS)
     default = weather.state_of(f"{day}T{DEFAULT_HOUR:02d}:00")
@@ -388,6 +432,12 @@ def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True
         except weather.WeatherUnavailable as e:
             weather_error = str(e)
             scenes_by[id(parts)] = {}
+        except Exception as e:  # noqa: BLE001
+            if v["kind"] != "viewpoint":
+                raise
+            vp_reason = vp_failed(e)
+    if vp_reason[0] == VP_FIGURE_FAILED:
+        parts_list = [(v, parts) for v, parts in parts_list if v["kind"] != "viewpoint"]
     if weather_error:
         notes.append(f"予報が取れなかったので「地形だけ」の図({weather_error})")
     stats["openmeteo_calls"] = weather.CTX.calls
@@ -401,7 +451,7 @@ def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True
         if out_path and kind == "viewpoint":
             b, e = os.path.splitext(out_path)
             path = b + "v" + (e or ".html")
-        path = path or default_out_path(mtn["id"], kind)
+        path = path or default_out_path(mtn["id"], kind, given_day)
         where = mtn["name"] if kind == "summit" else f"{mtn['name']}・{v['label']}"
         title = f"{where}からの展望と雲({day})"
         intro = (f"<p>{html.escape(viewpoint.source_text(v))}。{day} の予報(Open-Meteo。気象庁 MSM、無い時間は ECMWF)。"
@@ -409,12 +459,19 @@ def make_panorama(mtn, day=None, out_path=None, main_days=None, allow_fetch=True
         if not summit["summit_point"]:
             intro += f"<p>{html.escape(SUMMIT_ROUGH_TEXT)}。</p>"
         sunrise = weather.sunrise_from_main_cache(v["lat"], v["lon"], day)
-        info = figure(parts, scenes_by.get(id(parts)) or {}, states, default, path, title, intro, sunrise,
-                      seed_key=f"{mtn['id']}{'v' if kind == 'viewpoint' else ''}",
-                      viewer_is_fuji=(mtn["id"] == FUJI_ID and kind == "summit"), gsi_partial=gsi_partial)
+        try:
+            info = figure(parts, scenes_by.get(id(parts)) or {}, states, default, path, title, intro, sunrise,
+                          seed_key=f"{mtn['id']}{'v' if kind == 'viewpoint' else ''}",
+                          viewer_is_fuji=(mtn["id"] == FUJI_ID and kind == "summit"), gsi_partial=gsi_partial)
+        except Exception as e:  # noqa: BLE001
+            if kind != "viewpoint":
+                raise
+            vp_reason = vp_failed(e)
+            continue
         files.append({"path": path, "kind": kind, "size": info["size"], "open": info["open"]})
     stats["sec"] = round(time.time() - t_all, 1)
-    return {"files": files, "stats": stats, "notes": notes, "day": day}
+    return {"files": files, "stats": stats, "notes": notes, "day": day,
+            "viewpoint": {"reason": vp_reason[0], "text": vp_reason[1]}}
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +550,9 @@ def summary_lines(res):
     """診断の出力の最後に足す行(展望図: パス と、通信の量)。"""
     s = res["stats"]
     out = [f"展望図: {f['path']}" for f in res["files"]]
+    vp = res.get("viewpoint")
+    if vp and vp["reason"] != VP_DRAWN:
+        out.append(f"展望地の図: なし({vp['text']})")
     out.append(f"(展望図の通信: 標高タイル {s['tiles_fetched']} 枚・Open-Meteo {s['openmeteo_calls']} 回(重さ "
                f"{s['openmeteo_weight']:g})・Overpass {s['overpass_calls']} 回。かかった時間 {s['sec']:g} 秒"
                f"(うちタイル {s.get('tiles_sec', 0):g} 秒・図の地形の計算 {s.get('parts_sec', 0):g} 秒))")

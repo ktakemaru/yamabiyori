@@ -72,6 +72,7 @@
    - 確信度・風速・雲量などの範囲や最大・最小は、表(`--json-out` の値、時間別の表)から読み直して書く。
    - 「終日」「ほぼ無風」「快晴」などの丸めた言い方は、時間による変化(午後に雲が増える、昼に風が強まる)を隠さない。変化があるときは時刻と値を書く。
    - **`dates` で絞った日以外のこと(来週の強風など)は書かない。**
+   - **日没・日の出に触れるときは時刻を書く**(例: 「日没 16:26」。`sun_times` の値を写す。ページの先頭の数値にも「日の出/日没」が出る)。平らな地平線での目安で、山や尾根で隠れる分は含まない。
 5. **変換**:
    ```powershell
    ./venv/Scripts/python.exe -X utf8 scripts/render_report.py --data out/<山>.json --synoptic out/synoptic.json --commentary out/commentary.json --out out/<山>.html
@@ -80,7 +81,7 @@
    - 探索モードは既定で日別タブ7日・日ごと上位15座(`dates` を指定したときは、その日だけ)。`--days 0` で全日、`--top 0` で全座(列は常に全部載る)。
    - 解説・天気図が無いときは、その旨がページ上に表示される(黙って抜けない)。`fetch_synoptic.py` の `failed` はそのままページに出る。
    - **必須要素が足りないとエラーで止まる**(メッセージに従う)。
-   - **展望図を入れるとき(任意)**: 展望図を頼まれたときだけ、手順1を `--panorama` 付きで実行する(`mountain_weather_detail.py --mountain <山> --out … --json-out … --panorama`)。
+   - **展望図を入れるとき(任意)**: 展望図を頼まれたときだけ、手順1を `--panorama` 付きで実行する(`mountain_weather_detail.py --mountain <山> --out … --json-out … --panorama`)。図は翌日のもの。レポートの日付が翌日でないときは `--panorama-date YYYY-MM-DD` を足す(ファイル名は `<ID>_<日付>.html`・展望地は `<ID>v_<日付>.html`)。「展望地の図: なし(理由)」の行が出たら(`--json-out` では `panorama.viewpoint`)、答えと解説に理由を 1 行書く。
      出力の最後の「展望図: パス」の行が展望図の HTML(山頂の図。展望地がある山は、名前の後ろに `v` の付く展望地の図がもう1行)。その HTML を変換に渡す:
      ```powershell
      ./venv/Scripts/python.exe -X utf8 scripts/render_report.py --data out/<山>.json --synoptic out/synoptic.json --commentary out/commentary.json --embed-images --panorama-html out/panorama/<ID>.html --panorama-viewpoint-html out/panorama/<ID>v.html --out out/<山>.html

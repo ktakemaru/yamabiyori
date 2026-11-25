@@ -20,6 +20,7 @@ import report_data
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import render_report  # noqa: E402
+import report_baseline  # noqa: E402
 
 FIX = os.path.join(ROOT, "tests", "fixtures", "report")
 EXAMPLES = os.path.join(ROOT, "skills", "yamabiyori", "references", "report_examples")
@@ -854,6 +855,49 @@ class TestPanorama(unittest.TestCase):
         code, _, err = self._render(["--panorama-html", "no_such_panorama.html"])
         self.assertEqual(code, 2)
         self.assertIn("エラー", err)
+
+
+class TestSunTimes(unittest.TestCase):
+    """日の出・日没(計算値・平らな地平線での目安)。"""
+
+    def minutes(self, t):
+        return int(t[:2]) * 60 + int(t[3:])
+
+    def test_known_day(self):
+        import sun_times
+        rise, sunset = sun_times.sun_times(36.2253, 140.1069, "2026-11-26")     # 筑波山。保存済みの予報の値は 06:27・16:26
+        self.assertLessEqual(abs(self.minutes(rise) - (6 * 60 + 27)), 5)
+        self.assertLessEqual(abs(self.minutes(sunset) - (16 * 60 + 26)), 5)
+
+    def test_seasons(self):
+        import sun_times
+        _, w = sun_times.sun_times(36.2253, 140.1069, "2026-12-21")
+        r, s = sun_times.sun_times(36.2253, 140.1069, "2026-06-21")
+        self.assertTrue(4 * 60 + 10 <= self.minutes(r) <= 4 * 60 + 40)
+        self.assertTrue(18 * 60 + 50 <= self.minutes(s) <= 19 * 60 + 10)
+        self.assertLess(self.minutes(w), self.minutes(s))
+
+    def test_json_and_screen(self):
+        import sun_times
+        m = {"name": "筑波山", "elevation_m": 877, "lat": 36.2253, "lon": 140.1069}
+        days = detail.sun_times_by_day(m, ["2026-11-27", "2026-11-26"])
+        self.assertEqual([d["date"] for d in days], ["2026-11-26", "2026-11-27"])
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            detail.print_sun_times(m, days)
+        self.assertIn(f"日の出 {days[0]['sunrise']}  日没 {days[0]['sunset']}", out.getvalue())
+        self.assertIn("山や尾根", out.getvalue())
+        self.assertIn("山や尾根", sun_times.NOTE)
+
+    def test_report_shows_times_only_when_data_has_them(self):
+        data = load(os.path.join(FIX, "diagnosis.json"))
+        data.pop("sun_times", None)                              # 前の版の数値データ(日の出・日没が無い)
+        before = json.dumps(report_baseline.build_spec(data), ensure_ascii=False)
+        self.assertNotIn("日の出/日没", before)
+        data["sun_times"] = {"note": "目安です", "days": [{"date": d["date"], "label": d["label"], "sunrise": "06:27", "sunset": "16:26"}
+                                                       for d in data["days"]]}
+        after = json.dumps(report_baseline.build_spec(data), ensure_ascii=False)
+        self.assertIn("06:27 / 16:26", after)
+        self.assertIn("目安です", after)
 
 
 if __name__ == "__main__":
